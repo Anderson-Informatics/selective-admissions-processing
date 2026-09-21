@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EHS Admissions Automation — Routing FAQ</title>
+  <style>
+    :root {
+      --color-text: #1f2937;
+      --color-heading: #111827;
+      --color-link: #2563eb;
+      --color-border: #e5e7eb;
+      --color-bg-muted: #f9fafb;
+      --color-note: #eff6ff;
+      --color-warning: #fffbeb;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--color-text);
+      background: #fff;
+      max-width: 860px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      font-size: 0.95rem;
+    }
+
+    nav a, a { color: var(--color-link); }
+    nav a { text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+
+    h1, h2, h3, h4 {
+      color: var(--color-heading);
+      line-height: 1.25;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      border-bottom: 2px solid var(--color-border);
+      padding-bottom: 0.5rem;
+      margin-top: 0;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0.25rem;
+    }
+
+    h3 { font-size: 1.15rem; color: #374151; }
+    p, li { margin: 0.5rem 0; }
+    ul, ol { padding-left: 1.5rem; }
+    li { margin: 0.35rem 0; }
+    section { margin-bottom: 2.5rem; }
+
+    code {
+      font-family: var(--font-mono);
+      background: #f3f4f6;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: #f3f4f6;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    pre code { background: transparent; padding: 0; }
+
+    .note, .warning {
+      padding: 0.85rem 1rem;
+      border-left: 4px solid;
+      margin: 1rem 0;
+    }
+
+    .note { background: var(--color-note); border-color: #60a5fa; }
+    .warning { background: var(--color-warning); border-color: #f59e0b; }
+  </style>
+</head>
+<body>
+  <h1>EHS Admissions Automation — Routing FAQ</h1>
+
+  <nav>
+    <a href="spec.html">Technical Specification</a>
+    <a href="features.html">Product Features</a>
+    <a href="jobs_spec.html">Jobs Specification</a>
+  </nav>
+
+  <p>
+    This document records the routing concepts and decisions that guide the
+    configuration-driven routing system. It is intended to clarify the business
+    meaning of routing configuration before automated Submittable writes are enabled.
+  </p>
+
+  <section>
+    <h2>What is an Entry Action?</h2>
+
+    <p>
+      An <strong>Entry Action</strong> is an automatic side effect that occurs when
+      a submission is routed <strong>into</strong> a stage.
+    </p>
+
+    <p>Possible entry actions include:</p>
+    <ul>
+      <li>assigning one or more reviewers;</li>
+      <li>removing reviewers;</li>
+      <li>adding a Submittable label; and</li>
+      <li>removing a Submittable label.</li>
+    </ul>
+
+    <p>For example, entering a GPA stage could assign an out-of-district reviewer:</p>
+
+    <pre><code>{
+  "when": {
+    "all": [
+      {
+        "kind": "label",
+        "op": "hasLabel",
+        "labelId": "&lt;upload-required-label&gt;"
+      }
+    ]
+  },
+  "assignUserIds": ["&lt;Thomas Cairgle userId&gt;"],
+  "unassignUserIds": ["&lt;Nicholas Hanson userId&gt;"]
+}</code></pre>
+
+    <p>Entry actions are different from status labels:</p>
+    <ul>
+      <li>
+        <strong><code>statusLabels</code></strong> synchronizes a calculated stage
+        status such as <code>Needs One Review</code> to a Submittable label.
+      </li>
+      <li>
+        <strong><code>entryActions</code></strong> performs an action when the
+        submission enters the stage.
+      </li>
+    </ul>
+
+    <div class="note">
+      <strong>Essay Scoring decision:</strong> Essay Scoring has no entry actions.
+      The legacy process calculates essay review status and synchronizes essay
+      status labels, but it does not automatically assign a reviewer or perform
+      another side effect when a submission enters Essay Scoring.
+    </div>
+  </section>
+
+  <section>
+    <h2>What is the reviewCompletion ledger?</h2>
+
+    <p>
+      Each submission receives one ledger entry for every configured review stage:
+    </p>
+
+    <pre><code>{
+  "stageId": "&lt;stage-id&gt;",
+  "name": "Essay Scoring",
+  "order": 30,
+  "role": "work",
+  "required": true,
+  "status": "Needs One Review",
+  "complete": false
+}</code></pre>
+
+    <p>
+      The ledger is a materialized view of the submission's current routing state.
+      It is recalculated from mapped fields, labels, reviews, GPA records, HSPT
+      links, and stage configuration. It is not the source of truth for the raw
+      application or review data.
+    </p>
+  </section>
+
+  <section>
+    <h2>How is the next stage selected?</h2>
+
+    <p>Routing eventually follows this sequence:</p>
+    <ol>
+      <li>recalculate the submission's reviewCompletion ledger;</li>
+      <li>apply a matching outcome override, such as Decision Review → Declined;</li>
+      <li>otherwise find the lowest-order stage where <code>required</code> is true and <code>complete</code> is false;</li>
+      <li>only propose a move when the target stage's routing configuration is enabled; and</li>
+      <li>flag a move to a lower-order stage as a backward-routing warning.</li>
+    </ol>
+
+    <p>
+      Draft or disabled routing configuration can still calculate useful ledger
+      values for reporting, but it cannot cause an automated move.
+    </p>
+  </section>
+
+  <section>
+    <h2>What are the stage roles?</h2>
+
+    <ul>
+      <li><strong>Initial</strong> — the entry stage, such as New Application.</li>
+      <li><strong>Work</strong> — a normal review or processing stage.</li>
+      <li><strong>Hold</strong> — a valid waiting state, such as GPA Pending or NO EXAM.</li>
+      <li><strong>Final</strong> — an outcome stage that ordinary next-stage routing does not select.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>How is New Application completed?</h2>
+
+    <p>
+      New Application is complete once the initial form has been extracted and
+      mapped. The current implementation uses <code>Submission.isMapped</code> as
+      the completion signal.
+    </p>
+
+    <p>The intended statuses are:</p>
+    <ul>
+      <li><code>Mapped</code> — complete;</li>
+      <li><code>Awaiting Initial Mapping</code> — incomplete.</li>
+    </ul>
+
+    <p>
+      Once New Application is mapped, routing immediately evaluates the next
+      required incomplete stage. New Application has no entry actions or outcome rules.
+    </p>
+  </section>
+
+  <section>
+    <h2>How does Essay Scoring status work?</h2>
+
+    <p>Essay Scoring is required for every EHS 9th Grade submission.</p>
+
+    <ul>
+      <li>zero reviews → <code>Needs Two Reviews</code>;</li>
+      <li>one review → <code>Needs One Review</code>;</li>
+      <li>exactly two reviews with score spread at least 6 → <code>Needs Third Review</code>;</li>
+      <li>two reviews with spread below 6 → <code>Essay Scoring Complete</code>; and</li>
+      <li>three or more reviews → <code>Essay Scoring Complete</code>, regardless of spread.</li>
+    </ul>
+
+    <p>
+      These statuses may be synchronized to the corresponding Submittable essay
+      labels. No reviewer assignment or other Entry Action is required.
+    </p>
+  </section>
+
+  <section>
+    <h2>How do draft templates work?</h2>
+
+    <p>
+      Templates use symbolic stage names rather than hard-coded stageIds. When a
+      template is applied, the application resolves those names against the
+      selected project's actual stages.
+    </p>
+
+    <p>
+      Draft templates, including the current EHS templates, are persisted with
+      routing disabled. Their ledger conditions can still be inspected and tested,
+      but they cannot initiate automated moves until the configuration is reviewed
+      and enabled.
+    </p>
+
+    <div class="warning">
+      A missing stage reference is reported as a warning and must be corrected
+      before relying on the template for routing decisions.
+    </div>
+  </section>
+
+  <section>
+    <h2>What is the difference between preview and execution?</h2>
+
+    <p>
+      The routing preview evaluates the current data and configuration without
+      changing Submittable or the submission records. It shows proposed moves,
+      ledger details, diagnostics, and backward-routing warnings.
+    </p>
+
+    <p>
+      Execution will be a separate confirmation workflow. It will eventually use
+      persisted RoutingRun records, allow individual submissions to be excluded,
+      recheck stale stages, and only then perform Submittable writes.
+    </p>
+  </section>
+</body>
+</html>

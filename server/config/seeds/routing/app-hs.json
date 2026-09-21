@@ -1,0 +1,79 @@
+{
+  "name": "App-HS routing template",
+  "description": "Likely baseline for DIA, Davis, Crockett, and CMA application-high-school projects.",
+  "draft": false,
+  "stages": {
+    "Completion Review": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "statusRules": [
+          {
+            "name": "completion accepted",
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "Completion Review", "op": "eq", "value": 5 }] },
+            "status": "Completion Complete",
+            "complete": true
+          },
+          {
+            "name": "incomplete",
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "Completion Review", "op": "in", "value": [-1, -2, -3] }] },
+            "status": "Incomplete",
+            "complete": false
+          },
+          { "name": "default", "status": "Awaiting Completion Review", "complete": false }
+        ],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "Decision Review": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "statusRules": [{ "name": "default", "status": "Awaiting Decision Review", "complete": false }],
+        "outcomeRules": [
+          {
+            "name": "accept",
+            "enabled": true,
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "Decision Review", "op": "eq", "value": 10 }] },
+            "targetStageName": "Accepted"
+          },
+          {
+            "name": "decline",
+            "enabled": true,
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "Decision Review", "op": "eq", "value": -5 }] },
+            "targetStageName": "Declined"
+          }
+        ],
+        "entryActions": []
+      }
+    },
+    "Accepted": {
+      "role": "final",
+      "routing": {
+        "enabled": false,
+        "statusRules": [{ "name": "final", "status": "Accepted", "complete": true }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "Declined": {
+      "role": "final",
+      "routing": {
+        "enabled": false,
+        "statusRules": [{ "name": "final", "status": "Declined", "complete": true }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "Withdrawn Application": {
+      "role": "final",
+      "routing": {
+        "enabled": false,
+        "statusRules": [{ "name": "final", "status": "Withdrawn", "complete": true }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    }
+  }
+}

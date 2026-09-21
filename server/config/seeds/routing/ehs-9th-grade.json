@@ -1,0 +1,191 @@
+{
+  "name": "EHS 9th Grade routing template",
+  "description": "Draft configuration for the 9th Grade Exam project. Review stage IDs, label IDs, reviewer IDs, and form field mappings before enabling routing.",
+  "draft": true,
+  "stages": {
+    "New Application": {
+      "role": "initial",
+      "routing": {
+        "enabled": false,
+        "statusRules": [
+          { "name": "mapped", "when": { "all": [{ "kind": "mappedInitialForm", "op": "eq", "value": true }] }, "status": "Mapped", "complete": true },
+          { "name": "default", "status": "Awaiting Initial Mapping", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "IEP/ 504 Completion": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": {
+          "all": [
+            { "kind": "field", "name": "IEPorNPSPor504", "op": "in", "value": ["IEP", "IEP or NPSP", "No; IEP", "504", "No; 504"] },
+            { "any": [{ "kind": "cycleRound", "op": "ne", "value": "round-1" }, { "kind": "field", "name": "DPSCD", "op": "ne", "value": "Yes" }] }
+          ]
+        },
+        "statusRules": [
+          { "name": "complete", "when": { "all": [{ "kind": "reviewField", "stageName": "IEP/ 504 Completion", "field": "CompleteIEP504", "op": "eq", "value": "Yes" }] }, "status": "Completion Review Complete", "complete": true },
+          { "name": "default", "status": "Awaiting IEP/504 Completion Review", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "IEP Review": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": {
+          "all": [
+            { "kind": "field", "name": "IEPorNPSPor504", "op": "in", "value": ["IEP", "IEP or NPSP", "No; IEP"] },
+            { "any": [{ "kind": "cycleRound", "op": "ne", "value": "round-1" }, { "kind": "field", "name": "DPSCD", "op": "ne", "value": "Yes" }] }
+          ]
+        },
+        "statusRules": [
+          { "name": "complete", "when": { "all": [{ "kind": "reviewField", "stageName": "IEP Review", "field": "CompleteIEP", "op": "eq", "value": "Yes" }, { "kind": "reviewField", "stageName": "IEP Review", "field": "Accommodations", "op": "notNull" }] }, "status": "IEP Review Complete", "complete": true },
+          { "name": "default", "status": "Awaiting IEP Review", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "504 Review": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": {
+          "all": [
+            { "kind": "field", "name": "IEPorNPSPor504", "op": "in", "value": ["504", "No; 504"] },
+            { "any": [{ "kind": "cycleRound", "op": "ne", "value": "round-1" }, { "kind": "field", "name": "DPSCD", "op": "ne", "value": "Yes" }] }
+          ]
+        },
+        "statusRules": [
+          { "name": "complete", "when": { "all": [{ "kind": "reviewField", "stageName": "504 Review", "field": "Complete504", "op": "eq", "value": "Yes" }, { "kind": "reviewField", "stageName": "504 Review", "field": "Accommodations", "op": "notNull" }] }, "status": "504 Review Complete", "complete": true },
+          { "name": "default", "status": "Awaiting 504 Review", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "MLL Review": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [{ "kind": "label", "op": "hasLabel", "labelId": "<MLL label id>" }] },
+        "statusRules": [
+          { "name": "complete", "when": { "all": [{ "kind": "reviewField", "stageName": "MLL Review", "field": "MLLAccommodations", "op": "notNull" }] }, "status": "MLL Review Complete", "complete": true },
+          { "name": "default", "status": "Awaiting MLL Review", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "Essay Scoring": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [] },
+        "allowedStatuses": ["Needs Two Reviews", "Needs One Review", "Needs Third Review", "Essay Scoring Complete"],
+        "statusRules": [
+          { "name": "needs third", "when": { "all": [{ "kind": "reviewCount", "stageNames": ["Essay Scoring"], "op": "eq", "value": 2 }, { "kind": "reviewSpread", "stageName": "Essay Scoring", "op": "gte", "value": 6 }] }, "status": "Needs Third Review", "complete": false },
+          { "name": "complete", "when": { "all": [{ "kind": "reviewCount", "stageNames": ["Essay Scoring"], "op": "gte", "value": 2 }] }, "status": "Essay Scoring Complete", "complete": true },
+          { "name": "one", "when": { "all": [{ "kind": "reviewCount", "stageNames": ["Essay Scoring"], "op": "eq", "value": 1 }] }, "status": "Needs One Review", "complete": false },
+          { "name": "default", "status": "Needs Two Reviews", "complete": false }
+        ],
+        "statusLabels": {
+          "Needs Two Reviews": "b91ece6e-bec6-4743-bf3e-45efc4bb8557",
+          "Needs One Review": "d09406d0-594c-4ea8-816d-a093b3011b58",
+          "Needs Third Review": "f3540ef0-457e-4bdf-a5e6-0e2cd21f90e5",
+          "Essay Scoring Complete": "b5d35820-a223-40e0-9617-f7b75f648d62"
+        },
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "GPA Completion": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["Incomplete", "Partial", "DPSCD Partial"] }] },
+        "statusRules": [
+          { "name": "unsure", "when": { "all": [{ "kind": "reviewScore", "stageName": "GPA Completion", "op": "eq", "value": 2 }] }, "status": "Awaiting Final GPA Completion Review", "complete": false },
+          { "name": "eligible", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Completion", "field": "RequirementsSatisfied", "op": "eq", "value": "Yes" }] }, "status": "GPA Requirements Satisfied", "complete": true },
+          { "name": "ineligible", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Completion", "field": "RequirementsSatisfied", "op": "eq", "value": "No" }] }, "status": "GPA Requirements Not Satisfied", "complete": true },
+          { "name": "default", "status": "Awaiting GPA Completion Review", "complete": false }
+        ],
+        "outcomeRules": [],
+        "entryActions": [],
+        "exitActions": [
+          { "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Completion", "field": "RequirementsSatisfied", "op": "eq", "value": "No" }] }, "setFields": { "GPABonusEligible": "No" }, "openForEditing": { "subjectTemplate": "GPA information needed", "messageTemplate": "Please review the GPA issue: {{Issues}} {{IssuesOther}}", "variables": ["Issues", "IssuesOther"] } },
+          { "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Completion", "field": "RequirementsSatisfied", "op": "eq", "value": "Yes" }] }, "setFields": { "GPABonusEligible": "Yes" } }
+        ]
+      }
+    },
+    "Incomplete GPA": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [{ "kind": "reviewField", "stageName": "GPA Completion", "field": "RequirementsSatisfied", "op": "eq", "value": "No" }] },
+        "statusRules": [
+          { "name": "resolved", "when": { "all": [{ "kind": "reviewField", "stageName": "Incomplete GPA", "field": "RequirementsSatisfied", "op": "eq", "value": "Yes" }] }, "status": "GPA Resolution Complete", "complete": true },
+          { "name": "default", "status": "Awaiting GPA Resolution", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "GPA Pending - DPSCD and Opt-In Schools": {
+      "role": "hold",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "any": [
+          { "all": [{ "kind": "field", "name": "DPSCD", "op": "eq", "value": "Yes" }, { "kind": "label", "op": "lacksLabel", "labelId": "<Partial OOD label id>" }, { "kind": "gpaRecord", "source": "dpscd", "exists": false }] },
+          { "all": [{ "kind": "field", "name": "DPSCD", "op": "eq", "value": "No" }, { "kind": "label", "op": "hasLabel", "labelId": "<Opt-In label id>" }, { "kind": "label", "op": "lacksLabel", "labelId": "<UPLOAD REQUIRED label id>" }, { "kind": "gpaRecord", "source": "optIn", "exists": false }] }
+        ] },
+        "statusRules": [{ "name": "waiting", "status": "Awaiting External GPA Data", "complete": false }],
+        "outcomeRules": [], "entryActions": [],
+        "exitActions": [
+          { "setFields": { "GPABonusEligible": "Yes" }, "addLabelIds": ["<GPA Bonus Eligible label id>"] }
+        ]
+      }
+    },
+    "GPA Recording": {
+      "role": "work",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["Incomplete", "Partial", "DPSCD Partial"] }] },
+        "statusRules": [
+          { "name": "valid GPA", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Recording", "field": "CumulativeGPA", "op": "gte", "value": 0 }, { "kind": "reviewField", "stageName": "GPA Recording", "field": "CumulativeGPA", "op": "lte", "value": 4.3 }, { "kind": "reviewField", "stageName": "GPA Recording", "field": "AbleToRecord", "op": "eq", "value": "Yes" }] }, "status": "GPA Recording Complete", "complete": true },
+          { "name": "invalid response", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Recording", "field": "AbleToRecord", "op": "eq", "value": "No" }] }, "status": "GPA Value Requires Review", "complete": false },
+          { "name": "default", "status": "Needs GPA Recording", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "NO EXAM": {
+      "role": "hold",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [{ "kind": "pipelinePrerequisitesComplete" }, { "kind": "hsptLinked", "exists": false }] },
+        "statusRules": [{ "name": "waiting", "status": "Awaiting Exam", "complete": false }],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "Ready for Placement": {
+      "role": "hold",
+      "routing": {
+        "enabled": false,
+        "requiredWhen": { "all": [{ "kind": "pipelinePrerequisitesComplete" }, { "kind": "hsptLinked", "exists": true }] },
+        "statusRules": [
+          { "name": "enrollment submitted", "when": { "all": [{ "kind": "reviewField", "stageName": "Enrollment", "field": "enrollmentStatus", "op": "eq", "value": "Submitted" }] }, "status": "Enrollment Submitted", "complete": true },
+          { "name": "default", "status": "Ready for Placement", "complete": false }
+        ],
+        "outcomeRules": [], "entryActions": [], "exitActions": []
+      }
+    },
+    "CT Accepted": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "enrollment submitted", "when": { "all": [{ "kind": "reviewField", "stageName": "Enrollment", "field": "enrollmentStatus", "op": "eq", "value": "Submitted" }] }, "status": "Enrollment Submitted", "complete": true }, { "name": "default", "status": "Accepted", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "MLK Accepted": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Accepted", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "MG Accepted": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Accepted", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "RHS Accepted": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Accepted", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "SE Accepted": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Accepted", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "Declined": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Declined", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "Primary Waitlist": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Primary Waitlist", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "Secondary Waitlist": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Secondary Waitlist", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } },
+    "Withdrawn Application": { "role": "final", "routing": { "enabled": false, "statusRules": [{ "name": "default", "status": "Withdrawn", "complete": true }], "outcomeRules": [], "entryActions": [], "exitActions": [] } }
+  }
+}

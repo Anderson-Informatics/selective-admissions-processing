@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EHS Admissions Automation — Technical Specification</title>
+  <style>
+    :root {
+      --color-text: #1f2937;
+      --color-heading: #111827;
+      --color-link: #2563eb;
+      --color-border: #e5e7eb;
+      --color-bg-muted: #f9fafb;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--color-text);
+      background: #fff;
+      max-width: 860px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+
+    nav {
+      margin: 1.5rem 0;
+      font-size: 0.95rem;
+    }
+
+    nav a {
+      color: var(--color-link);
+      text-decoration: none;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    a {
+      color: var(--color-link);
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--color-heading);
+      line-height: 1.25;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      border-bottom: 2px solid var(--color-border);
+      padding-bottom: 0.5rem;
+      margin-top: 0;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0.25rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      color: #374151;
+    }
+
+    p, li {
+      margin: 0.5rem 0;
+    }
+
+    ul, ol {
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin: 0.35rem 0;
+    }
+
+    section {
+      margin-bottom: 2.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--color-border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--color-bg-muted);
+      font-weight: 600;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      background: #f3f4f6;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: #f3f4f6;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    blockquote {
+      margin: 1rem 0;
+      padding-left: 1rem;
+      border-left: 3px solid var(--color-border);
+      color: #4b5563;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        margin: 1.5rem auto;
+        padding: 0 1rem;
+      }
+      h1 { font-size: 1.65rem; }
+      h2 { font-size: 1.3rem; }
+      table { font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+<nav><a href="features.html">← Product Features</a></nav>
+<h1 id="ehs-admissions-automation-technical-specification">EHS Admissions Automation — Technical Specification</h1>
+<p>A web application for DPSCD admissions staff to trigger, monitor, and
+manage the entire Examination High Schools (EHS) / Application High
+Schools (AHS) admissions data pipeline.</p>
+<h2 id="purpose-background">1. Purpose &amp; Background</h2>
+<p>The current pipeline is a collection of Python scripts that pull data
+from Submittable, normalize it, run business rules, write scores back to
+Submittable, and upload rosters to MongoDB lookup tools. The scripts are
+powerful but hard to maintain: configuration is hard-coded, errors are
+printed to the console, and each cycle requires a developer to edit
+source files.</p>
+<p>This spec defines a successor application built on <strong>Nuxt 4 +
+Nuxt UI v4 + Mongoose/MongoDB</strong>, deployed on
+<strong>Netlify</strong>. It replaces the monolithic Python class with a
+configuration-driven, domain-driven system where admissions staff can
+trigger jobs, review data-quality issues, monitor progress, and prepare
+final placement data with minimal engineering support year over
+year.</p>
+<h2 id="goals">2. Goals</h2>
+<ol type="1">
+<li><strong>Triggerable processing steps</strong> — run data extraction,
+compilation, routing, scoring, and roster uploads as discrete, trackable
+jobs from a web UI.</li>
+<li><strong>Data quality monitoring</strong> — surface common errors and
+inconsistencies such as out-of-range DOBs, bad student numbers, parent/
+student name swaps, duplicates, missing documents, and incomplete review
+stages.</li>
+<li><strong>High-level dashboard</strong> — show counts, completion
+rates, stage progress, exam registrations, scoring status, and
+validation issues by school and cycle.</li>
+<li><strong>Scoring &amp; placement prep</strong> — compile the scoring
+file, update Submittable internal forms, and produce clean input for the
+placement algorithm (to be added later).</li>
+<li><strong>Year-over-year configurability</strong> — make form
+mappings, review stages, validation rules, scoring weights, and
+school/label definitions configurable per cycle without code
+changes.</li>
+</ol>
+<h2 id="users-authentication">3. Users &amp; Authentication</h2>
+<p>There is a single access level: <strong>logged in or not</strong>.
+All authenticated users can trigger jobs, view the dashboard, drill into
+submissions, manage configuration, and export data. Unauthenticated
+users cannot access any application features.</p>
+<p>The actual admissions reviews happen inside Submittable. This
+application surfaces data-quality issues and makes it easy to identify
+and jump to the relevant submission in Submittable.</p>
+<h3 id="authentication-approach">Authentication Approach</h3>
+<ul>
+<li><strong>Phase 1 (starter)</strong>: email and password
+authentication. Credentials are stored in the <code>.env</code> file as
+a simple comma-separated or JSON list; no user database or complex
+workflow is required to start.</li>
+<li><strong>Phase 2 (future)</strong>: replace the <code>.env</code>
+login with MSAL-based SSO once the Azure app is configured to accept
+it.</li>
+</ul>
+<h2 id="tech-stack">4. Tech Stack</h2>
+<table>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 36%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Choice</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Framework</td>
+<td>Nuxt 4.2+</td>
+<td>Latest stable Nuxt, Nitro server.</td>
+</tr>
+<tr>
+<td>UI Library</td>
+<td>Nuxt UI v4</td>
+<td><code>@nuxt/ui</code>, Tailwind CSS 4 based.</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>TypeScript</td>
+<td>Shared types across app and server.</td>
+</tr>
+<tr>
+<td>ORM</td>
+<td>Mongoose</td>
+<td>MongoDB schemas and queries.</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>MongoDB Atlas / existing cluster</td>
+<td>Re-uses existing lookup-tool and app DBs.</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td>Netlify</td>
+<td>Nitro preset <code>netlify</code>; background functions for long
+jobs.</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>Vitest + nuxt/test-utils</td>
+<td>Unit tests for rules, API tests for routes.</td>
+</tr>
+<tr>
+<td>Logging</td>
+<td><code>consola</code> / <code>pino</code></td>
+<td>Structured server logs.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="architecture-overview">5. Architecture Overview</h2>
+<p>The application is organized as a <strong>Nuxt 4 monorepo-style
+project</strong> with a Vue frontend, Nitro server routes, and Mongoose
+models. The monolithic Python <code>Submittable</code> class is
+decomposed into focused domain services plus a job runner.</p>
+<h3 id="server-side-services">Server-side Services</h3>
+<ul>
+<li><code>submittable/</code> — typed HTTP client, auth, pagination,
+retry logic, and bulk operations.</li>
+<li><code>extraction/</code> — metadata sync, form response extraction,
+field mapping.</li>
+<li><code>validation/</code> — rule engine that produces
+<code>ValidationIssue</code> records.</li>
+<li><code>routing/</code> — Application-HS and DSA stage-routing
+logic.</li>
+<li><code>scoring/</code> — HSPT, GPA, essay, DPSCD bonus, Marygrove
+bonus/catchment scoring.</li>
+<li><code>roster/</code> — lookup-tool upserts for <code>ehs</code> and
+<code>app</code> collections.</li>
+<li><code>catchment/</code> — geocoding and MongoDB
+<code>$geoIntersects</code> queries.</li>
+<li><code>notifications/</code> — webhook/Teams alerts and audit
+logs.</li>
+<li><code>jobs/</code> — job runner and background-function
+handlers.</li>
+</ul>
+<h3 id="frontend">Frontend</h3>
+<ul>
+<li>Dashboard layout with summary cards, tables, and drill-down
+panels.</li>
+<li>Job runner panel to trigger, monitor, and re-run jobs.</li>
+<li>Configuration editors for cycles, schools, form mappings, review
+stages, validation rules, and scoring config.</li>
+<li>Submission detail view with raw fields, extracted fields, labels,
+validation issues, scores, and routing history.</li>
+</ul>
+<h2 id="data-model">6. Data Model</h2>
+<p>Core MongoDB collections:</p>
+<ul>
+<li><code>Cycle</code> — admissions year, active flag, date ranges,
+score weights.</li>
+<li><code>School</code> — name, type, Submittable
+<code>projectId</code>, <code>initialFormId</code>, review stage
+definitions, catchment info.</li>
+<li><code>ReviewStage</code> — <code>stageId</code>,
+<code>projectId</code>, <code>formId</code>, order,
+<code>requiredForProgress</code>, year.</li>
+<li><code>FormDefinition</code> — <code>formId</code>,
+<code>name</code>, <code>formType</code>, version, year,
+<code>fieldMappings[]</code>.</li>
+<li><code>Submission</code> — <code>submissionId</code>,
+<code>submissionIdInt</code>, cycle, project, school, status, stage,
+<code>labelIds</code>, assignments, raw entry, extracted fields,
+<code>hsptResultId</code>, <code>hsptMatchType</code>.</li>
+<li><code>FormResponse</code> — per-form response documents linked to
+submissions.</li>
+<li><code>ValidationIssue</code> — issue type, field, message, severity,
+status, resolution tracking.</li>
+<li><code>Job</code> — type, payload, status, progress, total, logs,
+timestamps, error.</li>
+<li><code>HSPTResult</code> — raw STS test record for a single student,
+computed scaled scores, <code>resultId</code>, <code>optCd</code>,
+<code>linkedSubmissionId</code>, <code>matchType</code>,
+<code>matchScore</code>, <code>status</code>, cycle, and source
+file.</li>
+<li><code>GpaRecord</code> — per-submission GPA data by source:
+<code>dpscd</code> (student number, <code>quartersAvailable</code>,
+<code>cumulativeGpa</code>, status, extras) and <code>optIn</code>
+(names, DOB, enrollment terms flag, <code>cumulativeGpa</code>, school
+name), plus provenance (job/upload id, timestamps).</li>
+<li><code>GpaUpload</code> — staged GPA import holding raw
+<code>records</code> (DPSCD JSON payload) or base64 <code>files</code>
+(Opt-In XLSX), status lifecycle, preview/result, job references, TTL
+expiry.</li>
+<li><code>ScoreRecord</code> — exam, GPA, essay, bonuses,
+<code>totalAppScore</code>, <code>totalMgScore</code>.</li>
+<li><code>PlacementScenario</code> — per-scenario inputs: name, cycle,
+capacities, cut scores, minimum GPA/exam thresholds.</li>
+<li><code>PlacementResult</code> — assignment, choice rank, and scenario
+for each applicant.</li>
+<li><code>AuditLog</code> — who triggered what and when.</li>
+</ul>
+<h2 id="configuration-driven-year-over-year-support">7.
+Configuration-Driven Year-over-Year Support</h2>
+<p>The previous system embeds form UUIDs, field labels, stage IDs,
+school names, and score weights in code. The new system stores these in
+MongoDB and exposes them in admin UIs.</p>
+<ol type="1">
+<li><strong>Cycles</strong> — clone the previous cycle to create a new
+one; most settings copy forward.</li>
+<li><strong>Schools &amp; Review Stages</strong> — map each cycle’s
+Submittable <code>projectId</code> and <code>stageId</code> by name;
+store resolved UUIDs.</li>
+<li><strong>Form Definitions</strong> — import a form from Submittable
+and map its labels to canonical fields. New fields are flagged and must
+be mapped before extraction.</li>
+<li><strong>Validation Rules</strong> — stored as documents; toggle per
+cycle.</li>
+<li><strong>Scoring Config</strong> — age cut-offs, GPA point table,
+weights, and bonus values live in
+<code>Cycle</code>/<code>ScoringConfig</code>.</li>
+<li><strong>Label Mappings</strong> — school-choice labels, exam labels,
+and MontMG labels are configured per cycle.</li>
+<li><strong>Seed files</strong> — optional checked-in JSON/YAML under
+<code>server/config/seeds/</code> for bootstrapping fresh environments.
+The database is the runtime source of truth.</li>
+</ol>
+<h2 id="job-runner-processing-pipeline">8. Job Runner &amp; Processing
+Pipeline</h2>
+<p>Each major legacy script step becomes a discrete, triggerable job.
+Jobs are stored in the <code>Job</code> collection and report status,
+progress, and logs.</p>
+<table>
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 64%" />
+</colgroup>
+<thead>
+<tr>
+<th>Job</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>extractMetadata</code></td>
+<td>Sync projects, forms, labels, users, review stages from
+Submittable.</td>
+</tr>
+<tr>
+<td><code>extractSubmissions</code></td>
+<td>Pull submissions for selected projects and upsert
+<code>Submission</code> docs.</td>
+</tr>
+<tr>
+<td><code>extractFormResponses</code></td>
+<td>Pull entries for a form and store <code>FormResponse</code>
+docs.</td>
+</tr>
+<tr>
+<td><code>mapFields</code></td>
+<td>Apply <code>FormDefinition.fieldMappings</code> to populate
+<code>Submission.extractedFields</code>.</td>
+</tr>
+<tr>
+<td><code>runValidation</code></td>
+<td>Execute validation rules and create/resolve
+<code>ValidationIssue</code> records.</td>
+</tr>
+<tr>
+<td><code>compileApplications</code></td>
+<td>Combine AHS applications across the five schools.</td>
+</tr>
+<tr>
+<td><code>extractReviews</code></td>
+<td>Pull completion, decision, and DSA decision review forms.</td>
+</tr>
+<tr>
+<td><code>runAppHsRouting</code></td>
+<td>Move Application-HS submissions based on completion/decision
+scores.</td>
+</tr>
+<tr>
+<td><code>runDsaRouting</code></td>
+<td>Move DSA submissions based on initial/audition/decision scores.</td>
+</tr>
+<tr>
+<td><code>compileDsaAuditions</code></td>
+<td>Aggregate the seven DSA audition forms per applicant.</td>
+</tr>
+<tr>
+<td><code>dpscdGpaImport</code></td>
+<td>Import DPSCD GPA records posted as a JSON payload; match to
+submissions and upsert <code>GpaRecord.dpscd</code>.</td>
+</tr>
+<tr>
+<td><code>optinGpaPreview</code></td>
+<td>Parse uploaded Opt-In XLSX files, match rows by
+<code>submissionIdInt</code>, flag label/match issues.</td>
+</tr>
+<tr>
+<td><code>optinGpaCommit</code></td>
+<td>Upsert confirmed Opt-In GPA rows into
+<code>GpaRecord.optIn</code>.</td>
+</tr>
+<tr>
+<td><code>compileScores</code></td>
+<td>Combine HSPT, GPA, essay, DPSCD bonus, Marygrove
+bonus/catchment.</td>
+</tr>
+<tr>
+<td><code>updateInternalForms</code></td>
+<td>Write computed scores back to Submittable internal forms.</td>
+</tr>
+<tr>
+<td><code>compileRosters</code></td>
+<td>Upsert exam/lookup rosters to MongoDB collections.</td>
+</tr>
+<tr>
+<td><code>runPlacement</code></td>
+<td>Placeholder for the future placement algorithm.</td>
+</tr>
+<tr>
+<td><code>exportCsv</code></td>
+<td>Generate CSVs for staff or downstream systems.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="execution">Execution</h3>
+<ul>
+<li>Fast API calls (reads, job creation) use standard Nitro routes.</li>
+<li>Long-running jobs run as <strong>Netlify background
+functions</strong> to avoid timeout limits.</li>
+<li>Jobs are idempotent and resumable: progress is persisted after each
+batch.</li>
+<li>The UI polls <code>Job</code> documents for status updates.</li>
+</ul>
+<h2 id="data-extraction-form-mapping">9. Data Extraction &amp; Form
+Mapping</h2>
+<p>The legacy <code>get_form_data</code> contains a giant hard-coded
+dictionary mapping Submittable field labels to column names. The new
+system replaces that with dynamic
+<code>FormDefinition.fieldMappings</code>:</p>
+<ul>
+<li>Import a form schema from Submittable.</li>
+<li>Each field is stored with its label, type, and options.</li>
+<li>Staff map Submittable labels to canonical fields
+(<code>FirstName</code>, <code>DOB</code>,
+<code>FirstChoiceSchool</code>, etc.).</li>
+<li>Extraction runs the mappings and stores the normalized result.</li>
+<li>Unmapped fields are flagged and block extraction until
+resolved.</li>
+</ul>
+<h2 id="validation-data-quality">10. Validation &amp; Data Quality</h2>
+<p>The validation engine runs configurable rules against submissions and
+produces <code>ValidationIssue</code> records.</p>
+<p>Planned rules:</p>
+<ul>
+<li>DOB out of range for the selected grade and cycle year.</li>
+<li>Student number format issues (non-numeric, wrong length, leading
+zeros).</li>
+<li>Parent/ student name swap (first/last match parent fields).</li>
+<li>Duplicate applicants by <code>FILADOB</code>, full name, or
+first+last.</li>
+<li>Missing required documents (IEP, 504, transcripts, report cards)
+based on applicant flags.</li>
+<li>Label inconsistency (school choice labels not matching form
+values).</li>
+<li>Incomplete review stages.</li>
+<li>Geocoding or catchment failures.</li>
+</ul>
+<p>Issues are shown in a dashboard with filters, severity, and
+drill-down to the submission.</p>
+<h2 id="hspt-upload-matching">11. HSPT Upload &amp; Matching</h2>
+<p>HSPT results arrive from STS as raw CSV files (one per test center or
+administration). The application ingests these files, normalizes the
+columns, computes scaled scores, and links each test record to the
+corresponding application.</p>
+<h3 id="data-storage-recommendation">Data Storage Recommendation</h3>
+<p>The previous workflow used a 4-digit <code>ResultID</code> assigned
+by STS and maintained a separate “merge” dataset that linked a
+<code>submissionId</code> to the test record. Because the same
+<code>ResultID</code> range can appear in multiple STS files (e.g., each
+file starts at 1000), the new application should not rely on
+<code>ResultID</code> alone as a global key. Instead:</p>
+<ul>
+<li>Each imported STS row is stored as an <code>HSPTResult</code>
+document with a unique database identifier.</li>
+<li><code>ResultID</code>, <code>HPID</code>, test center/batch, and
+cycle are kept as source identifiers.</li>
+<li>The link to an application is stored directly on the
+<code>HSPTResult</code> (<code>linkedSubmissionId</code>) and mirrored
+on the <code>Submission</code> (<code>hsptResultId</code>,
+<code>hsptMatchType</code>).</li>
+<li>This makes the <code>HSPTResult</code> collection itself the merge
+dataset; no separate merge file is required.</li>
+</ul>
+<h3 id="score-conversion">Score Conversion</h3>
+<p>The raw STS files contain sub-scores such as <code>RDRS</code>,
+<code>MTRS</code>, <code>LNRS</code>, and <code>OPRS</code>. The
+application computes scaled scores using the same formulas used
+historically:</p>
+<ul>
+<li>Reading = <code>RDRS / 62 * 11.25</code></li>
+<li>Math = <code>MTRS / 64 * 15</code></li>
+<li>Language = <code>LNRS / 60 * 11.25</code></li>
+<li>Science = <code>OPRS / 40 * 7.5</code></li>
+<li>Overall = Reading + Math + Language + Science</li>
+</ul>
+<p>These values are stored on the <code>HSPTResult</code> and used by
+the scoring compilation job.</p>
+<h3 id="upload-process">Upload Process</h3>
+<ol type="1">
+<li>Select the active cycle and test administration.</li>
+<li>Upload one or more raw STS CSV files.</li>
+<li>The system parses each row, computes scaled scores, and creates
+<code>HSPTResult</code> records.</li>
+<li>Existing records for the same cycle + <code>ResultID</code> +
+<code>HPID</code> + test center are overwritten on re-upload to support
+corrections.</li>
+</ol>
+<h3 id="matching-process">Matching Process</h3>
+<p>The system attempts to link each <code>HSPTResult</code> to a
+<code>Submission</code> in three stages:</p>
+<ol type="1">
+<li><strong>OptCd exact match</strong> — For DPSCD students, match
+<code>HSPTResult.OptCd</code> to <code>Submission.StudentNumber</code>;
+for non-DPSCD students, match <code>HSPTResult.OptCd</code> to
+<code>Submission.submissionIdInt</code>. If a match is found, mark it as
+matched with type <code>OptCd</code>.</li>
+<li><strong>Fuzzy match</strong> — For unmatched records, compare
+<code>First</code>, <code>Last</code>, and <code>Birth</code> against
+all unlinked submissions. A match score is computed from string
+similarity on names and exact date-of-birth equality. The top
+candidate(s) are shown in the match review table with match type such as
+<code>Name+DOB</code>, <code>Name only</code>, or
+<code>DOB only</code>.</li>
+<li><strong>Manual review &amp; link</strong> — A match review page
+displays side-by-side data: HSPT record (name, DOB, OptCd, scores) and
+candidate submission (name, student number or submission ID, DOB, school
+choices). Each row shows the match score, match type, and Accept /
+Reject actions. Rejecting a fuzzy match leaves the record unlinked;
+accepting records the link and updates the <code>Submission</code>.
+Users can also unlink a previously accepted match.</li>
+</ol>
+<h3 id="hspt-results-search-manual-linking">HSPT Results Search &amp;
+Manual Linking</h3>
+<p>A dedicated HSPT Results page lists all imported test records. Users
+can:</p>
+<ul>
+<li>Search by first name, last name, or date of birth.</li>
+<li>See the linked status of each record.</li>
+<li>Open a “Link application” action on an unlinked record, which opens
+a searchable dropdown of all unlinked submissions (searched by
+<code>FullName</code>).</li>
+<li>Select the correct submission to create the link.</li>
+</ul>
+<h3 id="integration-with-scoring">Integration with Scoring</h3>
+<p>The score compilation job uses the linked <code>HSPTResult</code> to
+populate <code>Exam_Score</code> and the Reading, Math, Language, and
+Science sub-scores for each applicant. Records without a linked
+submission are excluded from scoring until matched.</p>
+<h2 id="gpa-data-ingestion">12. GPA Data Ingestion</h2>
+<p>Two additional GPA sources supplement the GPA recorded through
+review forms. Both feed the score compilation job, which resolves a
+single <code>CumulativeGPA</code> per applicant.</p>
+<h3 id="submission-labels">Submission Labels</h3>
+<p>Opt-In students are identified by the presence of the
+“Opt-In” label on their Submittable submission. Submission extraction
+stores each submission’s <code>labelIds</code> (from the v4
+<code>/submissions</code> list) on the <code>Submission</code>
+document, and the GPA tooling resolves the Opt-In label id from the
+synced <code>Metadata</code> label catalog (case-insensitive
+<code>opt-in</code>/<code>opt in</code>/<code>optin</code> name match).
+Cycles extracted before labels were captured are backfilled lazily from
+Submittable when an Opt-In import runs.</p>
+<h3 id="dpscd-gpa-import-api">DPSCD GPA Import (API)</h3>
+<p>DPSCD GPA data is delivered to <code>POST /api/gpa/dpscd</code> as a
+JSON body: <code>{ cycleId, records: [...] }</code> (a bare top-level
+array is also accepted). The sender may emit strict JSON or
+Python-style repr output (single quotes,
+<code>None</code>/<code>True</code>/<code>False</code>/<code>nan</code>);
+the endpoint normalizes both before staging.</p>
+<ul>
+<li>The endpoint validates the envelope, stores the raw records on a
+<code>GpaUpload</code> staging document (<code>source:
+'dpscd'</code>), queues a <code>dpscd_gpa_import</code> background job,
+and returns <code>{ uploadId, jobId }</code>. <code>GET
+/api/gpa/dpscd/{uploadId}</code> returns upload + job status for
+polling.</li>
+<li>The job matches each record to a <code>Submission</code> within the
+cycle by <code>submissionId</code> GUID, then
+<code>submissionIdInt</code>, then <code>StudentNumber</code>. Payloads
+may span multiple years/projects; records that do not match a
+submission in the cycle are counted as unmatched, not fatal.</li>
+<li>Integer-semantic fields (<code>STUDENT_NUMBER</code>,
+<code>submissionIdInt</code>, <code>Quarters Available</code>,
+<code>Latest_GRADE_LEVEL</code>, <code>Middle School Number</code>,
+<code>Accepting High School Number</code>) are coerced to integers;
+<code>gpa_cumulative</code> remains a decimal. All remaining payload
+fields are preserved under <code>dpscd.extra</code>.</li>
+<li>Results are upserted into <code>GpaRecord.dpscd</code> keyed
+<code>(cycleId, submissionId)</code> — the last import wins and
+provenance (<code>importJobId</code>, <code>importedAt</code>) is
+stamped. The job result reports processed/matched/updated/unmatched
+counts plus per-record warnings and errors, and is visible in the Jobs
+log.</li>
+</ul>
+<h3 id="opt-in-gpa-upload-ui">Opt-In GPA Upload (UI)</h3>
+<p>Out-of-district opt-in schools return per-school XLSX files
+containing a <code>SCHOOL NAME:</code> banner row and columns for
+<code>SubmissionID</code> (the integer id), student name/DOB,
+“Enrolled … at least 3 semesters/4 trimesters? (Yes/No)”, “how many
+terms”, and “Cumulative Middle School GPA”.</p>
+<ul>
+<li>The GPA page provides a staged upload flow identical to HSPT: select
+one or more <code>.xlsx</code> files → a preview job parses each file,
+extracts the school name, matches rows to submissions by
+<code>submissionIdInt</code>, and reports per-row status
+(<code>matched</code>, <code>missing_optin_label</code>,
+<code>unmatched</code>, <code>invalid_gpa</code>,
+<code>not_enrolled</code>) plus the count of Opt-In-labeled submissions
+absent from the files.</li>
+<li>The preview is read-only; corrections are made by fixing the file
+and re-uploading. Rows whose submission lacks the Opt-In label are
+imported but flagged as warnings.</li>
+<li>Confirming queues a commit job that upserts
+<code>GpaRecord.optIn</code> for matched rows only — only submissions
+whose <code>submissionIdInt</code> appears in the uploaded files are
+modified.</li>
+</ul>
+<h3 id="cumulative-gpa-resolution-score-compilation-scope">Cumulative
+GPA Resolution (score compilation scope)</h3>
+<p>When <code>compileScores</code> runs, the effective GPA is selected
+by priority:</p>
+<ol type="1">
+<li><code>CumulativeGPA</code> recorded on the GPA Recording review
+form.</li>
+<li><code>GpaRecord.dpscd.cumulativeGpa</code> when
+<code>quartersAvailable &gt;= 6</code>.</li>
+<li><code>GpaRecord.optIn.cumulativeGpa</code> when the student was
+enrolled at least 3 semesters/4 trimesters (Yes,
+case-insensitive).</li>
+<li>The partial GPA review form
+(<code>PartialGPA</code>/<code>Semesters</code>).</li>
+</ol>
+<h2 id="dashboard-reporting">13. Dashboard &amp; Reporting</h2>
+<p>The dashboard gives admissions staff a real-time view of the
+pipeline.</p>
+<ul>
+<li>Summary cards: total applications, applications by school, by stage,
+validation issues, completed reviews, exam registrations, scoring
+completion.</li>
+<li>Tables: submissions, validation issues, jobs, review stage
+completion.</li>
+<li>Filters: cycle, school, stage, status, severity.</li>
+<li>Submission detail: raw and extracted fields, labels, assignments,
+validation issues, scores, routing history, audit log.</li>
+<li>CSV export: one-click downloads for any visible dataset.</li>
+</ul>
+<h2 id="scoring-file-compilation">14. Scoring File Compilation</h2>
+<p>The scoring job replaces <code>compile_internal_form</code>:</p>
+<ol type="1">
+<li>Load the cycle’s scoring config.</li>
+<li>Merge linked <code>HSPTResult</code> scaled scores (Reading, Math,
+Language, Science, Overall) for each applicant.</li>
+<li>Merge essay scores.</li>
+<li>Merge GPA composite (GPA, multiplier, GPA score, GPA bonus).</li>
+<li>Apply DPSCD bonus and Marygrove bonus/catchment.</li>
+<li>Compute <code>Total_App_Score</code> and
+<code>Total_MG_Score</code>.</li>
+<li>Persist in <code>ScoreRecord</code>.</li>
+<li>Write back to Submittable internal forms
+(<code>updateInternalForms</code>).</li>
+<li>Compute percentile ranks for total, GPA, essay, exam, and exam
+subcomponent scores.</li>
+<li>Export the scored dataset for use by the placement algorithm and
+external reports.</li>
+</ol>
+<h2 id="placement-algorithm-scenario-management">15. Placement Algorithm
+&amp; Scenario Management</h2>
+<p>The placement algorithm assigns each applicant to the best available
+Exam High School based on ranked school choices, total application
+score, per-school capacity, and per-school cut scores. The algorithm
+uses a multi-pass sorting process:</p>
+<ol type="1">
+<li>Applicants are sorted by total application score in descending
+order.</li>
+<li>The process runs multiple passes, alternating between the four main
+Exam High Schools and The School at Marygrove.</li>
+<li>On each pass, a higher ranked choice is considered (First through
+Fifth).</li>
+<li>A student is assigned to a school when:
+<ul>
+<li>It is the highest remaining ranked choice that still has available
+capacity,</li>
+<li>The student’s total score meets or exceeds the school’s cut
+score,</li>
+<li>Any school-specific minimum GPA or exam score requirements are
+satisfied.</li>
+</ul></li>
+<li>Capacity is decremented as seats are filled.</li>
+<li>The output includes the assigned school, the choice rank that
+produced the assignment (First through Fifth, or None if unassigned),
+and summary statistics.</li>
+</ol>
+<p>Admissions staff define placement scenarios by entering the key
+variables for each school:</p>
+<ul>
+<li><strong>Capacity</strong> — number of available seats per
+school.</li>
+<li><strong>Cut score</strong> — minimum total score required for
+assignment to a school.</li>
+<li><strong>Minimum GPA / exam score</strong> — optional additional
+thresholds for specific schools.</li>
+</ul>
+<p>The app lets staff create and name multiple scenarios, run the
+algorithm against the compiled scoring file, compare summary tables, and
+export the resulting placement list. The compiled score records feed the
+placement algorithm, and the results are persisted for review.
+Percentile calculations and applicant results communications can be
+generated from the placement output if needed.</p>
+<h2 id="catchment-geocoding">16. Catchment &amp; Geocoding</h2>
+<ul>
+<li>Address geocoding uses the Here API (API key stored as an
+environment variable).</li>
+<li>Catchment determination uses MongoDB <code>$geoIntersects</code>
+against a <code>catchment</code> GeoJSON collection.</li>
+<li>The legacy Azure Data API fallback for Marygrove is replaced by the
+direct MongoDB query.</li>
+<li>Results are stored on the submission or
+<code>ScoreRecord</code>.</li>
+</ul>
+<h2 id="authorization-audit-logging">17. Authorization &amp; Audit
+Logging</h2>
+<ul>
+<li>Authentication is binary: logged-in users have full access;
+logged-out users have none.</li>
+<li>Audit logs record who triggered jobs and configuration changes.</li>
+</ul>
+<h2 id="security-secrets">18. Security &amp; Secrets</h2>
+<p>All credentials and secrets are environment variables:</p>
+<ul>
+<li>Submittable API key / Basic auth token</li>
+<li>MongoDB connection strings</li>
+<li>Here geocoding API key</li>
+<li>Microsoft Power Automate / Teams webhook URLs and signatures</li>
+<li>Starter auth email/password list (stored in <code>.env</code> until
+MSAL SSO is configured)</li>
+</ul>
+<p>No secrets are hard-coded in source. Development uses
+<code>.env</code> files that are never committed.</p>
+<h2 id="deployment">19. Deployment</h2>
+<ul>
+<li>Nuxt <code>nitro.preset: 'netlify'</code>.</li>
+<li>Background functions configured for long jobs.</li>
+<li>Deploy previews for pull requests.</li>
+<li>Environment variables configured in Netlify dashboard.</li>
+<li>MongoDB accessible from Netlify functions via allow-listed IPs or
+VPC peering as required.</li>
+</ul>
+<h2 id="testing">20. Testing</h2>
+<ul>
+<li><strong>Unit tests</strong> (Vitest): age calculation, HSPT scoring,
+GPA point table, routing logic, duplicate detection, validation
+rules.</li>
+<li><strong>API tests</strong> (nuxt/test-utils): job creation, metadata
+sync, CSV export.</li>
+<li><strong>Smoke tests</strong>: run <code>extractMetadata</code> +
+<code>runValidation</code> against a Submittable sandbox and compare
+scoring output to known Python CSV output.</li>
+</ul>
+<h2 id="project-roadmap">21. Project Roadmap</h2>
+<ol type="1">
+<li>Bootstrap Nuxt 4 + Nuxt UI v4 + Mongoose project.</li>
+<li>Build <code>Cycle</code>, <code>School</code>,
+<code>FormDefinition</code>, <code>ReviewStage</code> admin CRUD.</li>
+<li>Implement Submittable API client and <code>extractMetadata</code>
+job.</li>
+<li>Build the form-field mapping UI.</li>
+<li>Implement <code>extractSubmissions</code>, <code>mapFields</code>,
+and <code>runValidation</code>.</li>
+<li>Add dashboard and job runner UI.</li>
+<li>Port scoring, routing, DSA audition compilation, and roster
+jobs.</li>
+<li>Add tests and deploy to Netlify.</li>
+</ol>
+<h2 id="open-questions-risks">22. Open Questions &amp; Risks</h2>
+<ul>
+<li>MSAL SSO details (tenant, app registration, scopes) need to be
+confirmed for Phase 2.</li>
+<li>Existing MongoDB collections have ad-hoc shapes; a migration/import
+step may be needed.</li>
+<li>Submittable API rate limits and serverless timeouts require careful
+batching and retry logic.</li>
+<li>Placement scenarios must clearly show how changing capacity or cut
+scores affects assignments so staff can compare options before
+finalizing.</li>
+<li>Results communication workflow (percentile-based messaging) will be
+added after core placement is stable.</li>
+<li>Netlify background function implementation pattern (handler naming,
+<code>context.waitUntil</code>, or separate builders) must be validated
+against the chosen Netlify plan.</li>
+</ul>
+<h2 id="reference-legacy-code">23. Reference Legacy Code</h2>
+<p>The new system is derived from the legacy scripts:</p>
+<ul>
+<li><code>Submittable_v4.py</code> — the consolidated
+<code>Submittable</code> class containing API, extraction, scoring,
+routing, and export logic.</li>
+<li><code>Submittable_Functions_v4.py</code> — the older module-level
+predecessor; most of its functionality was migrated into the
+<code>Submittable</code> class.</li>
+<li><code>EHS_Automated.py</code> — the 2024-25 driver script that
+orchestrates extraction, routing, and CSV export for Application High
+Schools.</li>
+<li><code>Sorting_Hat_2024.R</code> — the multi-pass school assignment
+algorithm that uses ranked choices, total scores, capacity, and cut
+scores.</li>
+<li><code>Placement_Processing.R</code> — the orchestration script that
+runs placement scenarios, computes score percentiles, and prepares
+results communications.</li>
+<li><code>HSPT Lookup/to_JS_Conversion.R</code> — parses raw STS CSV
+files and computes scaled HSPT scores.</li>
+<li><code>HSPT Lookup/HSPT_Results.csv</code> — the previous processed
+HSPT results lookup table.</li>
+<li><code>HSPT Lookup/index.html</code> — the previous read-only HSPT
+search interface.</li>
+</ul>
+<p>These scripts are treated as the source-of-truth for business rules
+during the port but are not edited.</p>
+<nav><a href="features.html">← Product Features</a></nav>
+</body>
+</html>

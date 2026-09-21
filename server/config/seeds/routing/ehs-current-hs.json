@@ -1,0 +1,13 @@
+{
+  "name": "EHS Current High School routing template",
+  "description": "Conservative draft for Current High School Students. Review stage names and GPA/review fields before enabling routing.",
+  "draft": true,
+  "stages": {
+    "New Application": { "role": "initial", "routing": { "enabled": false, "statusRules": [{ "name": "mapped", "status": "Mapped", "complete": true }], "outcomeRules": [], "entryActions": [] } },
+    "Essay Scoring": { "role": "work", "routing": { "enabled": false, "requiredWhen": { "all": [] }, "statusRules": [{ "name": "default", "status": "Needs Essay Review", "complete": false }], "outcomeRules": [], "entryActions": [] } },
+    "GPA Pending - DPSCD and Opt-In Schools": { "role": "hold", "routing": { "enabled": false, "statusRules": [{ "name": "waiting", "status": "Awaiting External GPA Data", "complete": false }], "outcomeRules": [], "entryActions": [] } },
+    "GPA Recording": { "role": "work", "routing": { "enabled": false, "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["DPSCD Partial", "Partial"] }] }, "statusRules": [{ "name": "default", "status": "Needs GPA Recording", "complete": false }], "outcomeRules": [], "entryActions": [] } },
+    "NO EXAM": { "role": "hold", "routing": { "enabled": false, "requiredWhen": { "all": [{ "kind": "pipelinePrerequisitesComplete" }, { "kind": "hsptLinked", "exists": false }] }, "statusRules": [{ "name": "waiting", "status": "Awaiting Exam", "complete": false }], "outcomeRules": [], "entryActions": [] } },
+    "Ready for Placement": { "role": "work", "routing": { "enabled": false, "requiredWhen": { "all": [{ "kind": "pipelinePrerequisitesComplete" }, { "kind": "hsptLinked", "exists": true }] }, "statusRules": [{ "name": "ready", "status": "Ready for Placement", "complete": false }], "outcomeRules": [], "entryActions": [] } }
+  }
+}

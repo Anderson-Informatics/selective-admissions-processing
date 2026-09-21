@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EHS Admissions Automation — Product Features</title>
+  <style>
+    :root {
+      --color-text: #1f2937;
+      --color-heading: #111827;
+      --color-link: #2563eb;
+      --color-border: #e5e7eb;
+      --color-bg-muted: #f9fafb;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--color-text);
+      background: #fff;
+      max-width: 860px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+
+    nav {
+      margin: 1.5rem 0;
+      font-size: 0.95rem;
+    }
+
+    nav a {
+      color: var(--color-link);
+      text-decoration: none;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    a {
+      color: var(--color-link);
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--color-heading);
+      line-height: 1.25;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      border-bottom: 2px solid var(--color-border);
+      padding-bottom: 0.5rem;
+      margin-top: 0;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0.25rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      color: #374151;
+    }
+
+    p, li {
+      margin: 0.5rem 0;
+    }
+
+    ul, ol {
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin: 0.35rem 0;
+    }
+
+    section {
+      margin-bottom: 2.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--color-border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--color-bg-muted);
+      font-weight: 600;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      background: #f3f4f6;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: #f3f4f6;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    blockquote {
+      margin: 1rem 0;
+      padding-left: 1rem;
+      border-left: 3px solid var(--color-border);
+      color: #4b5563;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        margin: 1.5rem auto;
+        padding: 0 1rem;
+      }
+      h1 { font-size: 1.65rem; }
+      h2 { font-size: 1.3rem; }
+      table { font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="spec.html">← Technical Specification</a>
+</nav>
+
+<h1>EHS Admissions Automation — Product Features</h1>
+<p>This document lists the core product features derived from the technical specification. The features are ordered in a sensible implementation sequence.</p>
+
+<section>
+  <h2>1. Login</h2>
+  <p>Staff sign in to access the application. The initial release uses a simple email and password list stored in environment configuration; this will later be replaced with single sign-on once the Azure app is configured.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Open the application.</li>
+    <li>Enter an authorized email and password.</li>
+    <li>Click Sign In.</li>
+    <li>Land on the dashboard.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Email and password inputs.</li>
+    <li>Sign In button.</li>
+    <li>Error message for invalid credentials.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>2. Cycle Management</h2>
+  <p>Create and manage admissions cycles. A new cycle can be bootstrapped by cloning the previous year so most settings carry forward.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Open the Cycles page.</li>
+    <li>Click New Cycle or Clone Previous Cycle.</li>
+    <li>Set the year, date ranges, and scoring weights.</li>
+    <li>Activate the cycle.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Cycle list with status (active/inactive).</li>
+    <li>Clone and edit buttons.</li>
+    <li>Cycle editor form.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>3. School & Review Stage Configuration</h2>
+  <p>Map each school and its review pipeline to the corresponding projects and stages in Submittable for the active cycle.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Select the active cycle.</li>
+    <li>View imported projects and stages.</li>
+    <li>Map each school to its project and each review stage to its stage name.</li>
+    <li>Save the configuration.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>School list with project mappings.</li>
+    <li>Review stage mapping table.</li>
+    <li>Searchable selects and save controls.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>4. Form Import & Field Mapping</h2>
+  <p>Import form schemas from Submittable and map each form field label to a canonical application field. New or changed fields are flagged so staff can map them before extraction runs.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Open the Form Definitions page.</li>
+    <li>Import or refresh a form.</li>
+    <li>Review the list of fields.</li>
+    <li>Map each label to a canonical field name.</li>
+    <li>Resolve any unmapped-field warnings and save.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Form list with import/refresh actions.</li>
+    <li>Field mapping table.</li>
+    <li>Unmapped-field alert banner.</li>
+    <li>Save and cancel buttons.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>5. Job Runner</h2>
+  <p>A central place to trigger, monitor, and re-run every processing job. Each job reports its status, progress, and logs.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Go to the Jobs page.</li>
+    <li>Select a job type and the target cycle.</li>
+    <li>Configure any optional scope (schools, forms).</li>
+    <li>Click Run and watch the status update.</li>
+    <li>View logs and re-run if needed.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Job list with status badges.</li>
+    <li>Progress bars and record counts.</li>
+    <li>Run and re-run buttons.</li>
+    <li>Expandable log viewer.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>6. Data Extraction</h2>
+  <p>Sync metadata and pull application submissions from Submittable into the app, then normalize form responses using the stored field mappings.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Run Metadata Sync to refresh projects, forms, labels, users, and stages.</li>
+    <li>Run Submission Extraction for the active cycle and selected schools.</li>
+    <li>Run Form Response Mapping to apply field mappings.</li>
+    <li>Confirm record counts and completion status.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Cycle and school selectors.</li>
+    <li>Extraction job panel with progress indicators.</li>
+    <li>Record count summaries.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>7. Data Summary Dashboard</h2>
+  <p>A high-level overview of the active admissions cycle, showing key metrics and completion rates across schools and review stages.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Open the Dashboard.</li>
+    <li>Select the active cycle.</li>
+    <li>Review summary cards and tables.</li>
+    <li>Click any metric to drill into the relevant list.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Summary cards for applications, issues, reviews, exams, and scoring.</li>
+    <li>Data tables with sorting and filtering.</li>
+    <li>Cycle selector and filter bar.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>8. Submission Detail View</h2>
+  <p>Inspect a single applicant's complete record: raw and normalized form data, labels, validation issues, scores, and routing history. A direct link opens the submission in Submittable for review.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Click a submission from the dashboard or issue list.</li>
+    <li>Review the detail tabs.</li>
+    <li>Click Open in Submittable to review or correct the record there.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Detail page or slide-over panel.</li>
+    <li>Tabs for fields, issues, scores, and history.</li>
+    <li>External link to Submittable.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>9. Validation & Issue Triage</h2>
+  <p>Run configurable validation rules to detect data-quality problems such as out-of-range dates of birth, bad student numbers, duplicate applicants, missing documents, label mismatches, incomplete review stages, and geocoding failures. Staff can review each issue and jump to Submittable to fix it.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Run Validation for the active cycle.</li>
+    <li>Open the Validation Issues page.</li>
+    <li>Filter by school, stage, severity, or issue type.</li>
+    <li>Click an issue to view the submission detail.</li>
+    <li>Open the record in Submittable and resolve the underlying problem.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Validation job trigger.</li>
+    <li>Issue table with filters and severity badges.</li>
+    <li>Issue detail panel.</li>
+    <li>Open in Submittable link.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>10. Routing Automation</h2>
+  <p>Automatically move Application-HS and DSA submissions to the appropriate review stage based on completion scores, decision scores, or audition outcomes.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Run the Application-HS Routing job for the active cycle.</li>
+    <li>Run the DSA Audition Compilation & Routing job.</li>
+    <li>Review the summary of stage changes.</li>
+    <li>Investigate any submissions that could not be routed.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Routing job triggers for App-HS and DSA.</li>
+    <li>Stage-change summary table.</li>
+    <li>Routing log viewer.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>11. HSPT Upload & Matching</h2>
+  <p>Upload raw HSPT results from STS, match each test record to the correct application by ID code, and resolve any remaining records with fuzzy name/DOB matching or manual linking.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Open the HSPT Upload page and select the cycle/test administration.</li>
+    <li>Upload one or more raw STS CSV files.</li>
+    <li>Wait for the system to parse the files and compute scaled scores.</li>
+    <li>Review the match review table: records matched by OptCd, fuzzy candidates, and unmatched rows.</li>
+    <li>For each fuzzy or unmatched record, compare the HSPT and application data, then accept or reject the suggested match.</li>
+    <li>Use the HSPT Results page to search by name or date of birth and manually link any unmatched record to an unlinked submission.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>File upload control for raw STS CSVs.</li>
+    <li>Match review table with HSPT data, candidate application data, match score, match type, and Accept/Reject actions.</li>
+    <li>Filters for matched, fuzzy, unmatched, and manually linked records.</li>
+    <li>HSPT Results search page with name/DOB search and linked status.</li>
+    <li>"Link application" button opening a searchable dropdown of unlinked submissions by full name.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>12. GPA Data Ingestion</h2>
+  <p>Bring in GPA data from two outside sources — district GPA records sent to the app by the DPSCD data feed, and XLSX files returned by out-of-district opt-in schools — so a student's cumulative GPA is available for scoring even when it was never recorded on a review form.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>DPSCD GPA records are pushed to the app automatically; staff watch the import job on the Jobs page and review matched/unmatched counts.</li>
+    <li>Open the GPA page and select the cycle.</li>
+    <li>Upload one or more Opt-In school XLSX files.</li>
+    <li>Review the preview table: matched students, warnings for rows missing the Opt-In label, and any unmatched rows.</li>
+    <li>Confirm the import — only students included in the files are updated.</li>
+    <li>See the imported GPA records listed on the GPA page.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>GPA page with cycle selector and Opt-In file upload.</li>
+    <li>Preview table showing each file row's match and label status before anything is saved.</li>
+    <li>Imported GPA records table showing student, school, cumulative GPA, and enrollment terms.</li>
+    <li>Job log entries with matched/unmatched counts for both imports.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>13. Score Compilation</h2>
+  <p>Combine exam, GPA, essay, and bonus scores into total application scores, then write the computed scores back to the internal forms in Submittable. Percentile ranks for total, GPA, essay, and exam scores are also computed.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Run the Score Compilation job after reviews, exams, and GPA data are recorded.</li>
+    <li>Review the computed totals and percentiles for accuracy.</li>
+    <li>Run Update Submittable Internal Forms to push scores back.</li>
+    <li>Confirm the write-back summary.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Score compilation job trigger.</li>
+    <li>Score summary table with total score cards.</li>
+    <li>Percentile columns for application and exam components.</li>
+    <li>Write-back status and confirmation.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>14. Catchment & Address Lookup</h2>
+  <p>Geocode applicant addresses and determine catchment status for relevant schools so bonuses and assignments can be applied correctly.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Run the Catchment job for the active cycle or a single submission.</li>
+    <li>View the catchment result on the submission.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Catchment status badge on submission detail.</li>
+    <li>Catchment job trigger and summary.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>15. Roster Upload</h2>
+  <p>Update the lookup-tool rosters used by exam and application staff with the current set of applicants, exam registrations, and accommodations.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Run the Roster Upload job for the active cycle.</li>
+    <li>Review the record counts and confirmation.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Roster upload job trigger.</li>
+    <li>Record count summary and status.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>16. CSV Export</h2>
+  <p>Download any visible dataset as a CSV for use in external tools, reports, or downstream processes.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Navigate to a table (submissions, issues, jobs, scores, placements).</li>
+    <li>Apply desired filters.</li>
+    <li>Click Export CSV.</li>
+    <li>Download the file.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Export button on tables and lists.</li>
+    <li>Filter bar controlling exported rows.</li>
+    <li>Download notification or dialog.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>17. Placement Scenarios</h2>
+  <p>Run the school-assignment algorithm using ranked applicant choices, total scores, and user-defined capacity and cut-score values. Staff can create multiple scenarios, compare summary results, and export final placement lists.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Open the Placement Scenarios page.</li>
+    <li>Create a new scenario and name it.</li>
+    <li>Enter the capacity and cut score for each school (and optional minimum GPA/exam thresholds).</li>
+    <li>Run the placement job against the compiled scoring file.</li>
+    <li>Review the per-school summary and the individual assignments.</li>
+    <li>Adjust inputs and re-run, or export the scenario results.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Scenario list with active/finalized status.</li>
+    <li>Capacity and cut-score input form per school.</li>
+    <li>Placement summary table showing seats, cut scores, placed counts, and choice distribution.</li>
+    <li>Individual placement table with assigned school and choice rank.</li>
+    <li>Export buttons for placement list and summary.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>18. Placement Results & Percentiles</h2>
+  <p>Generate percentile-based results summaries for placed and unplaced applicants, and prepare communications that explain how an applicant scored relative to the overall pool. Results are sent through Submittable.</p>
+  <h3>User Flow</h3>
+  <ol>
+    <li>Select a finalized placement scenario.</li>
+    <li>Generate the percentile report for total score, GPA, essay, exam, and exam subcomponents.</li>
+    <li>Preview the applicant-facing results message.</li>
+    <li>Send the messages through Submittable.</li>
+  </ol>
+  <h3>UI Overview</h3>
+  <ul>
+    <li>Percentile report preview.</li>
+    <li>Message preview panel with merge fields.</li>
+    <li>Send confirmation and status summary.</li>
+  </ul>
+</section>
+
+<nav>
+  <a href="spec.html">← Technical Specification</a>
+</nav>
+
+</body>
+</html>

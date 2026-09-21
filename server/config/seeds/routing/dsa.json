@@ -1,0 +1,159 @@
+{
+  "name": "DSA routing template",
+  "description": "Likely baseline for DSA initial review, audition-area stages, and DSA decision.",
+  "draft": true,
+  "stages": {
+    "DSA Initial Review": {
+      "role": "initial",
+      "routing": {
+        "enabled": true,
+        "statusRules": [
+          {
+            "name": "initial review passed",
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "DSA Initial Review", "op": "eq", "value": 5 }] },
+            "status": "Initial Review Complete",
+            "complete": true
+          },
+          {
+            "name": "initial review declined",
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "DSA Initial Review", "op": "eq", "value": -1 }] },
+            "status": "Declined",
+            "complete": true
+          },
+          { "name": "default", "status": "Awaiting Initial Review", "complete": false }
+        ],
+        "outcomeRules": [
+          {
+            "name": "decline",
+            "enabled": true,
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "DSA Initial Review", "op": "eq", "value": -1 }] },
+            "targetStageName": "Declined"
+          }
+        ],
+        "entryActions": []
+      }
+    },
+    "DSA-Dance": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Dance" }] },
+        "statusRules": [
+          {
+            "name": "audition complete",
+            "when": { "all": [{ "kind": "reviewCount", "stageNames": ["DSA-Dance"], "op": "gte", "value": 2 }] },
+            "status": "Audition Review Complete",
+            "complete": true
+          },
+          { "name": "default", "status": "Awaiting Audition Review", "complete": false }
+        ],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Literary": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Literary Arts" }] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Audition Review", "complete": false }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Art": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Visual Art" }] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Audition Review", "complete": false }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Instrumental": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Instrumental Music" }] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Audition Review", "complete": false }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Theatre": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Drama/Theater" }] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Audition Review", "complete": false }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Multimedia": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Multimedia Production" }] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Audition Review", "complete": false }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Vocal": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "all": [{ "kind": "field", "name": "AuditionArea", "op": "eq", "value": "Vocal Music" }] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Audition Review", "complete": false }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "DSA-Decision": {
+      "role": "work",
+      "routing": {
+        "enabled": true,
+        "requiredWhen": { "any": [
+          { "all": [{ "kind": "reviewCount", "stageNames": ["DSA-Dance", "DSA-Literary", "DSA-Art"], "op": "gte", "value": 2 }] },
+          { "all": [{ "kind": "reviewCount", "stageNames": ["DSA-Instrumental", "DSA-Theatre", "DSA-Multimedia", "DSA-Vocal"], "op": "gte", "value": 1 }] }
+        ] },
+        "statusRules": [{ "name": "default", "status": "Awaiting Decision Review", "complete": false }],
+        "outcomeRules": [
+          {
+            "name": "accept",
+            "enabled": true,
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "DSA-Decision", "op": "eq", "value": 10 }] },
+            "targetStageName": "DSA-Achievers!"
+          },
+          {
+            "name": "decline",
+            "enabled": true,
+            "when": { "all": [{ "kind": "reviewScore", "stageName": "DSA-Decision", "op": "eq", "value": -5 }] },
+            "targetStageName": "Declined"
+          }
+        ],
+        "entryActions": []
+      }
+    },
+    "DSA-Achievers!": {
+      "role": "final",
+      "routing": {
+        "enabled": false,
+        "statusRules": [{ "name": "final", "status": "DSA Achiever", "complete": true }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    },
+    "Declined": {
+      "role": "final",
+      "routing": {
+        "enabled": false,
+        "statusRules": [{ "name": "final", "status": "Declined", "complete": true }],
+        "outcomeRules": [],
+        "entryActions": []
+      }
+    }
+  }
+}

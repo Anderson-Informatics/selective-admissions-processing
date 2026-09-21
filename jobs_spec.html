@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EHS Admissions Automation — Jobs Specification</title>
+  <style>
+    :root {
+      --color-text: #1f2937;
+      --color-heading: #111827;
+      --color-link: #2563eb;
+      --color-border: #e5e7eb;
+      --color-bg-muted: #f9fafb;
+      --color-note: #eff6ff;
+      --color-warning: #fffbeb;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--color-text);
+      background: #fff;
+      max-width: 960px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      font-size: 0.95rem;
+    }
+
+    nav a, a {
+      color: var(--color-link);
+    }
+
+    nav a {
+      text-decoration: none;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--color-heading);
+      line-height: 1.25;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      border-bottom: 2px solid var(--color-border);
+      padding-bottom: 0.5rem;
+      margin-top: 0;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0.25rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      color: #374151;
+    }
+
+    h4 {
+      font-size: 1rem;
+    }
+
+    p, li {
+      margin: 0.5rem 0;
+    }
+
+    ul, ol {
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin: 0.35rem 0;
+    }
+
+    section {
+      margin-bottom: 3rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--color-border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--color-bg-muted);
+      font-weight: 600;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      background: #f3f4f6;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: #f3f4f6;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    .note, .warning {
+      margin: 1rem 0;
+      padding: 0.75rem 1rem;
+      border-left: 3px solid var(--color-link);
+    }
+
+    .note {
+      background: var(--color-note);
+    }
+
+    .warning {
+      background: var(--color-warning);
+      border-left-color: #d97706;
+    }
+
+    .toc {
+      background: var(--color-bg-muted);
+      border: 1px solid var(--color-border);
+      border-radius: 0.375rem;
+      padding: 1rem 1.25rem;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        margin: 1.5rem auto;
+        padding: 0 1rem;
+      }
+      h1 { font-size: 1.65rem; }
+      h2 { font-size: 1.3rem; }
+      table { font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="spec.html">← Technical Specification</a>
+  <a href="features.html">Product Features</a>
+</nav>
+
+<h1>EHS Admissions Automation — Jobs Specification</h1>
+<p>This document describes the processing jobs that are currently implemented and runnable. It explains what each job does, which Submittable endpoints it calls, and which MongoDB collections and documents it reads or changes.</p>
+
+<div class="warning">
+  <strong>Implementation status:</strong> <code>metadata_sync</code>, <code>submission_extraction</code>, and <code>form_response_mapping</code> are functional. <code>score_compilation</code> is visible in the Jobs UI but its handler is not implemented and currently fails when run.
+</div>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#shared-lifecycle">Shared Job Lifecycle</a></li>
+    <li><a href="#metadata-sync"><code>metadata_sync</code></a></li>
+    <li><a href="#submission-extraction"><code>submission_extraction</code></a></li>
+    <li><a href="#form-response-mapping"><code>form_response_mapping</code></a></li>
+    <li><a href="#pipeline-order">Recommended Pipeline Order</a></li>
+  </ol>
+</div>
+
+<section id="shared-lifecycle">
+  <h2>1. Shared Job Lifecycle</h2>
+
+  <h3>Creation</h3>
+  <p>The Jobs page sends an authenticated request to the application:</p>
+  <pre><code>POST /api/jobs
+
+{
+  "type": "metadata_sync | submission_extraction | form_response_mapping",
+  "cycleId": "selected-cycle-id",
+  "payload": {}
+}</code></pre>
+  <p>The application creates a document in the <code>jobs</code> collection with <code>status: "pending"</code>, the selected cycle, the authenticated user's email, and initial queued progress.</p>
+
+  <h3>Dispatch and execution</h3>
+  <ol>
+    <li>In production, the API requests the internal Netlify <code>dispatch-jobs</code> function after creating the job.</li>
+    <li>The dispatcher leases pending jobs, respecting the configured concurrency limit.</li>
+    <li>The worker claims a leased job, changes its status to <code>running</code>, records <code>startedAt</code>, and increments <code>attempts</code>.</li>
+    <li>The registered handler executes and periodically persists progress.</li>
+    <li>On success, the job becomes <code>completed</code> and receives its result and <code>completedAt</code>.</li>
+    <li>On failure, the error message is stored. Expired or failed work may be retried up to the configured maximum, which defaults to three attempts.</li>
+  </ol>
+
+  <h3>Shared job document updates</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>How it is used</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>status</code></td><td><code>pending</code>, <code>waiting</code>, <code>running</code>, <code>completed</code>, or <code>failed</code>.</td></tr>
+      <tr><td><code>cycleId</code></td><td>Limits job processing to the selected admissions cycle.</td></tr>
+      <tr><td><code>createdBy</code></td><td>Email address of the authenticated user who queued the job.</td></tr>
+      <tr><td><code>progress</code></td><td>Current phase, counts, percentage, and human-readable message.</td></tr>
+      <tr><td><code>result</code></td><td>Job-specific completion counts and summaries.</td></tr>
+      <tr><td><code>error</code></td><td>The most recent failure message.</td></tr>
+      <tr><td><code>attempts</code> and <code>leaseExpiresAt</code></td><td>Control worker ownership and retries.</td></tr>
+      <tr><td><code>startedAt</code> and <code>completedAt</code></td><td>Record execution timing.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="metadata-sync">
+  <h2>2. <code>metadata_sync</code></h2>
+
+  <h3>Purpose</h3>
+  <p>Downloads the organization's current Submittable projects, form definitions, labels, and team members. It stores this information in MongoDB so application configuration, review-stage configuration, field mapping, extraction, and response mapping can operate from local metadata.</p>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>A selected admissions cycle.</li>
+    <li>A valid Submittable API key.</li>
+    <li>A configured Submittable base URL, or the default v4 API URL.</li>
+  </ul>
+
+  <h3>Execution flow</h3>
+  <ol>
+    <li>Mark the job as fetching metadata.</li>
+    <li>Fetch projects, the form list, labels, and team members concurrently.</li>
+    <li>Remove duplicate objects from each response by its Submittable identifier.</li>
+    <li>Fetch the complete schema for every form, with at most three schema requests running concurrently.</li>
+    <li>Build MongoDB upsert operations for projects, full form schemas, labels, and team members.</li>
+    <li>Write the metadata operations in batches of 1,000.</li>
+    <li>Mark the job complete and save counts by metadata type.</li>
+  </ol>
+
+  <h3>Submittable endpoints</h3>
+  <p>All requests use HTTP <code>GET</code>, JSON responses, and Basic authorization. The default base URL is <code>https://submittable-api.submittable.com/v4</code>.</p>
+  <table>
+    <thead>
+      <tr><th>Endpoint</th><th>Pagination</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET /projects?size=50</code></td><td>Continues with <code>continuationToken</code> until absent.</td><td>Retrieve projects, initial-form references, and review-stage definitions.</td></tr>
+      <tr><td><code>GET /forms?size=500</code></td><td>Continues with <code>continuationToken</code> until absent.</td><td>Retrieve the organization's form IDs and names.</td></tr>
+      <tr><td><code>GET /forms/{formId}</code></td><td>One request per unique form ID; concurrency is limited to three.</td><td>Retrieve each form's fields, field types, required flags, and option labels.</td></tr>
+      <tr><td><code>GET /labels?size=500</code></td><td>Continues with <code>continuationToken</code> until absent.</td><td>Retrieve organization labels.</td></tr>
+      <tr><td><code>GET /organizations/team</code></td><td>Single request.</td><td>Retrieve team member IDs, names, and email addresses.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>MongoDB access</h3>
+  <table>
+    <thead>
+      <tr><th>Collection/model</th><th>Access</th><th>Documents and fields</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>jobs</code> / Job</td><td>Read and update</td><td>Updates status, progress, result, error, attempts, leases, and timestamps.</td></tr>
+      <tr><td><code>metadatas</code> / Metadata</td><td>Upsert</td><td>Stores project, form, label, and team documents.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Metadata upsert behavior</h3>
+  <p>Each object is matched by:</p>
+  <pre><code>{
+  "type": "project | form | label | team",
+  "externalId": "Submittable identifier"
+}</code></pre>
+  <p>The job sets:</p>
+  <ul>
+    <li><code>cycleId</code> to the selected cycle.</li>
+    <li><code>name</code> to the object's display name.</li>
+    <li><code>data</code> to the normalized Submittable response.</li>
+    <li><code>syncedAt</code> to the current synchronization time.</li>
+  </ul>
+  <p>Existing matching documents are updated; missing documents are inserted. The uniqueness rule is <code>type + externalId</code>, not <code>cycleId + type + externalId</code>. Consequently, synchronizing the same Submittable object for a later cycle updates the existing metadata document and its <code>cycleId</code>.</p>
+
+  <h3>Stored data by metadata type</h3>
+  <table>
+    <thead>
+      <tr><th>Type</th><th>Key contents</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>project</code></td><td>Project ID, name, initial form ID, and review stages.</td></tr>
+      <tr><td><code>form</code></td><td>Form ID, name, fields, field types, required flags, and option IDs/labels.</td></tr>
+      <tr><td><code>label</code></td><td>Label ID and name.</td></tr>
+      <tr><td><code>team</code></td><td>User ID, email, first name, and last name.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Progress and result</h3>
+  <p>Typical phases include <code>fetching</code>, <code>fetching_forms</code>, <code>writing</code>, and <code>completed</code>. The result has this shape:</p>
+  <pre><code>{
+  "projects": 12,
+  "forms": 48,
+  "labels": 30,
+  "team": 8
+}</code></pre>
+
+  <h3>What this job does not do</h3>
+  <ul>
+    <li>It does not download form responses or submissions.</li>
+    <li>It does not create application or review-stage configuration records.</li>
+    <li>It does not create field mappings.</li>
+    <li>It does not delete local metadata that has disappeared from Submittable.</li>
+    <li>It does not update Submittable.</li>
+  </ul>
+</section>
+
+<section id="submission-extraction">
+  <h2>3. <code>submission_extraction</code></h2>
+
+  <h3>Purpose</h3>
+  <p>Downloads raw Submittable entries for forms that have at least one configured canonical field mapping. It stores one local FormEntry document per Submittable entry and builds or updates a consolidated Submission document for each Submittable submission.</p>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>Metadata Sync has retrieved the relevant form schemas.</li>
+    <li>Submittable projects have been mapped to local applications for the selected cycle.</li>
+    <li>Initial forms and review-stage forms are associated with those applications.</li>
+    <li>At least one field on a form has a nonempty canonical field mapping.</li>
+  </ul>
+
+  <h3>Parent and child job design</h3>
+  <p>The initial <code>submission_extraction</code> document is a parent job:</p>
+  <ol>
+    <li>Find distinct form IDs with nonempty field mappings for the selected cycle.</li>
+    <li>Read local form metadata to obtain each form's display name.</li>
+    <li>Create one <code>submission_extraction_form</code> child job for every mapped form.</li>
+    <li>Change the parent to <code>waiting</code> while child jobs run.</li>
+    <li>Aggregate child status and entry counts back into the parent result.</li>
+  </ol>
+  <p>This design allows large forms to be processed independently and retried without rerunning every form.</p>
+
+  <h3>Submittable endpoint</h3>
+  <table>
+    <thead>
+      <tr><th>Endpoint</th><th>Pagination</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET /entries/forms/{formId}?size=500</code></td><td>Continues with <code>continuationToken</code> until absent.</td><td>Retrieve raw entries for one mapped form.</td></tr>
+    </tbody>
+  </table>
+  <p>Each child job calls this endpoint for its assigned form. Every response page is processed before the next page is fetched, so the complete response set is not retained in memory.</p>
+
+  <h3>MongoDB access</h3>
+  <table>
+    <thead>
+      <tr><th>Collection/model</th><th>Access</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>jobs</code> / Job</td><td>Read, insert, and update</td><td>Reads existing children, creates per-form child jobs, and updates parent/child progress and results.</td></tr>
+      <tr><td><code>fieldmappings</code> / FieldMapping</td><td>Read</td><td>Finds distinct form IDs having at least one nonempty mapping for the cycle.</td></tr>
+      <tr><td><code>metadatas</code> / Metadata</td><td>Read</td><td>Gets names for mapped forms.</td></tr>
+      <tr><td><code>applications</code> / Application</td><td>Read</td><td>Builds a lookup from Submittable <code>projectId</code> to local <code>applicationId</code>.</td></tr>
+      <tr><td><code>reviewstages</code> / ReviewStage</td><td>Read</td><td>Builds lookups from <code>formId + projectId</code> to stage name and from <code>formId + stageId</code> to application/stage metadata.</td></tr>
+      <tr><td><code>formentries</code> / FormEntry</td><td>Upsert</td><td>Stores raw Submittable initial form entries.</td></tr>
+      <tr><td><code>reviews</code> / Review</td><td>Upsert</td><td>Stores raw Submittable review form entries, linked by submission ID and configured stage.</td></tr>
+      <tr><td><code>submissions</code> / Submission</td><td>Upsert</td><td>Creates or refreshes the submission-level record and associates entry/stage IDs.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Application and stage resolution</h3>
+  <p>Before downloading a form, each child reads the selected cycle's applications and review stages to build:</p>
+  <pre><code>projectId → applicationId
+formId + projectId → review stage name
+formId + stageId → review stage metadata (applicationId, name, order, requiredForProgress)
+applicationId + stageId → review stage name</code></pre>
+  <p>Initial entries are matched by <code>projectId</code>. Review entries have no <code>projectId</code>, so they are matched by the unique configured <code>formId + stageId</code> pair for the cycle; reviews that cannot be resolved are skipped and included in the child's <code>skippedEntries</code> count.</p>
+
+  <h3>Initial FormEntry upsert</h3>
+  <p>Each Submittable initial entry is matched by its globally unique <code>entryId</code>. The job inserts or replaces the current values of:</p>
+  <ul>
+    <li><code>cycleId</code>, <code>applicationId</code>, and <code>projectId</code></li>
+    <li><code>submissionId</code>, <code>entryId</code>, and <code>formId</code></li>
+    <li><code>formType</code> and <code>status</code></li>
+    <li><code>completedAt</code>, <code>createdAt</code>, and <code>createdBy</code></li>
+    <li>Raw <code>fieldData</code></li>
+  </ul>
+  <p>Extraction deliberately resets:</p>
+  <pre><code>{
+  "mappedData": {},
+  "isMapped": false
+}</code></pre>
+  <p>This marks the raw entry as needing a new Form Response Mapping run.</p>
+
+  <h3>Review upsert</h3>
+  <p>Review entries (<code>formType: "review"</code>) are written to the <code>reviews</code> collection instead of <code>formentries</code>. They are matched by <code>entryId</code> and store the parent <code>submissionId</code>, the review <code>stageId</code>, resolved application and stage metadata, reviewer/score/assignment metadata, status, timestamps, and raw <code>fieldData</code>. Their <code>mappedData</code> and <code>isMapped</code> flags are also reset so the Form Response Mapping job normalizes their answers.</p>
+
+  <h3>Submission upsert</h3>
+  <p>For each entry, the job also upserts a Submission document matched by <code>submissionId</code>. It sets the cycle, application, project, status, source timestamps, and creator. It also uses set semantics to add:</p>
+  <ul>
+    <li>The entry's <code>entryId</code> to <code>entryIds</code>.</li>
+    <li>The configured stage name to <code>stageNames</code>, when one is available.</li>
+  </ul>
+  <p>Extraction resets the submission's normalized state:</p>
+  <pre><code>{
+  "mappedFields": {},
+  "isMapped": false
+}</code></pre>
+  <p>A subsequent Form Response Mapping job must rebuild those normalized fields.</p>
+
+  <h3>Current stage refresh</h3>
+  <p>After all pages of a form have been processed, the child collects the unique <code>projectId</code> values seen in the initial entries. For each project it calls <code>GET /submissions?projectId=&lt;id&gt;&amp;size=500</code> (paginated with <code>continuationToken</code>) and reads the current <code>stageId</code> from every returned submission. It then bulk-updates the matching local <code>submissions</code> documents with:</p>
+  <ul>
+    <li><code>currentStageId</code> — the current Submittable stage ID.</li>
+    <li><code>currentStageName</code> — the configured review-stage name resolved via <code>applicationId + stageId</code>, if available.</li>
+    <li><code>labelIds</code> — the label IDs currently applied to the submission, used to identify Opt-In students.</li>
+  </ul>
+  <p>Submissions whose current stage is not a configured review stage keep only <code>currentStageId</code>; the dashboard groups these as <em>Unknown stage</em>. Submissions that have not yet had a current stage refreshed appear as <em>Not started</em>.</p>
+
+  <h3>Batching and idempotency</h3>
+  <ul>
+    <li>Submittable returns up to 500 entries per page.</li>
+    <li>Each page is converted into FormEntry, Review, and Submission bulk upserts.</li>
+    <li>Re-extracting an existing <code>entryId</code> or <code>submissionId</code> updates the existing document rather than creating a duplicate.</li>
+    <li>Existing <code>entryIds</code> and <code>stageNames</code> are deduplicated with set semantics.</li>
+  </ul>
+
+  <h3>Progress and result</h3>
+  <p>Each child reports pages and cumulative saved/skipped counts. A child result has this shape:</p>
+  <pre><code>{
+  "formId": "Submittable form ID",
+  "pages": 12,
+  "entries": 5731,
+  "skippedEntries": 4,
+  "submissionsStaged": 5731
+}</code></pre>
+  <p>The parent result summarizes all child jobs:</p>
+  <pre><code>{
+  "forms": [
+    {
+      "formId": "...",
+      "formName": "Initial Application",
+      "childJobId": "...",
+      "status": "completed",
+      "entries": 5731
+    }
+  ],
+  "entries": 5731
+}</code></pre>
+
+  <h3>What this job does not do</h3>
+  <ul>
+    <li>It does not extract forms that have no configured canonical mappings.</li>
+    <li>It does not map raw field values to canonical field names.</li>
+    <li>It does not validate applicants, calculate scores, or route submissions.</li>
+    <li>It does not delete local entries that were deleted or removed in Submittable.</li>
+    <li>It does not write anything back to Submittable.</li>
+  </ul>
+</section>
+
+<section id="form-response-mapping">
+  <h2>4. <code>form_response_mapping</code></h2>
+
+  <h3>Purpose</h3>
+  <p>Transforms previously extracted raw FormEntry and Review data into normalized canonical fields such as <code>FirstName</code>, <code>LastName</code>, <code>DOB</code>, and <code>StudentNumber</code>. It writes normalized values onto each FormEntry and Review, and combines all applicable initial entries into one normalized record on each Submission.</p>
+
+  <pre><code>Existing FormEntry.fieldData + Review.fieldData
+          +
+Configured FieldMapping documents
+          +
+Cached Submittable form schemas
+          ↓
+FormEntry.mappedData + Review.mappedData
+          ↓
+Submission.mappedFields (from FormEntry only)</code></pre>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>Submission Extraction has populated FormEntry and Submission documents.</li>
+    <li>Forms have nonempty canonical field mappings for the selected cycle.</li>
+    <li>Mapped forms are associated with configured applications or review stages.</li>
+    <li>Metadata Sync has normally cached the relevant form schemas.</li>
+  </ul>
+
+  <h3>Execution flow</h3>
+  <ol>
+    <li>Find all mapped form IDs for the selected cycle.</li>
+    <li>Read applications and review stages to determine which applications contain those mapped forms.</li>
+    <li>Load all nonempty field mappings for the mapped forms.</li>
+    <li>Load cached form schemas and build option ID-to-label lookups.</li>
+    <li>Fetch a form schema from Submittable only when it is missing locally.</li>
+    <li>Count eligible FormEntry documents.</li>
+    <li>Stream entries from oldest to newest, map every configured field, and update entries in batches of 500.</li>
+    <li>Combine mapped values by <code>submissionId</code>.</li>
+    <li>Update Submission documents in batches of 500.</li>
+    <li>Store completion counts in the job result.</li>
+  </ol>
+
+  <h3>Submittable endpoints</h3>
+  <div class="note">
+    In the normal case this job makes no Submittable request. It operates on raw entries and form schemas already stored in MongoDB.
+  </div>
+  <table>
+    <thead>
+      <tr><th>Endpoint</th><th>When called</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET /forms/{formId}</code></td><td>Only when a mapped form has no locally cached schema containing fields.</td><td>Retrieve field definitions and option labels needed for normalization.</td></tr>
+    </tbody>
+  </table>
+  <p>This job does not call <code>GET /entries/forms/{formId}</code>; raw entries must already have been downloaded by Submission Extraction.</p>
+
+  <h3>MongoDB access</h3>
+  <table>
+    <thead>
+      <tr><th>Collection/model</th><th>Access</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>jobs</code> / Job</td><td>Read and update</td><td>Updates lifecycle, progress, result, errors, attempts, and timestamps.</td></tr>
+      <tr><td><code>fieldmappings</code> / FieldMapping</td><td>Read</td><td>Finds mapped forms and resolves <code>formId + fieldId</code> to a canonical field name.</td></tr>
+      <tr><td><code>applications</code> / Application</td><td>Read</td><td>Includes applications whose initial forms are mapped.</td></tr>
+      <tr><td><code>reviewstages</code> / ReviewStage</td><td>Read</td><td>Includes applications having mapped review-stage forms.</td></tr>
+      <tr><td><code>metadatas</code> / Metadata</td><td>Read</td><td>Loads cached form fields and option labels.</td></tr>
+      <tr><td><code>formentries</code> / FormEntry</td><td>Read and update</td><td>Reads raw <code>fieldData</code>; writes <code>mappedData</code> and <code>isMapped</code>.</td></tr>
+      <tr><td><code>reviews</code> / Review</td><td>Read and update</td><td>Reads raw review <code>fieldData</code>; writes <code>mappedData</code> and <code>isMapped</code>.</td></tr>
+      <tr><td><code>submissions</code> / Submission</td><td>Update</td><td>Writes combined <code>mappedFields</code> and <code>isMapped</code> from initial FormEntry data.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Documents selected</h3>
+  <p>The job processes FormEntry documents matching:</p>
+  <pre><code>{
+  "cycleId": "selected cycle",
+  "formId": { "$in": ["mapped form IDs"] },
+  "applicationId": { "$in": ["applications with mapped forms"] }
+}</code></pre>
+  <p>Entries are streamed in ascending <code>createdAt</code> and <code>_id</code> order. MongoDB may use disk for the sort when necessary, and the FormEntry schema defines an index on <code>cycleId + createdAt + _id</code>.</p>
+
+  <h3>Field conversion rules</h3>
+
+  <h4>Ordinary fields</h4>
+  <p>An ordinary field uses its <code>value</code>. For example, a mapping from <code>field-123</code> to <code>FirstName</code> converts:</p>
+  <pre><code>{
+  "formFieldId": "field-123",
+  "fieldType": "text",
+  "value": "Jordan"
+}
+
+into
+
+{
+  "FirstName": "Jordan"
+}</code></pre>
+
+  <h4>Name fields</h4>
+  <p>Name components are mapped independently using synthetic mapping IDs:</p>
+  <pre><code>formFieldId:firstName
+formFieldId:lastName</code></pre>
+
+  <h4>Address fields</h4>
+  <p>Address components are mapped independently:</p>
+  <ul>
+    <li><code>address1</code></li>
+    <li><code>address2</code></li>
+    <li><code>city</code></li>
+    <li><code>region</code></li>
+    <li><code>postalCode</code></li>
+    <li><code>country</code></li>
+  </ul>
+
+  <h4>Select and checkbox fields</h4>
+  <p>Submittable option IDs are replaced with their human-readable form-schema labels. Multiple selections are joined with <code>; </code>.</p>
+
+  <h4>File fields</h4>
+  <p>File objects are reduced to file names. Multiple files are joined with <code>; </code>.</p>
+
+  <h3>FormEntry updates</h3>
+  <p>For each eligible FormEntry, the job sets:</p>
+  <pre><code>{
+  "mappedData": {
+    "FirstName": "Jordan",
+    "LastName": "Smith",
+    "DOB": "2012-05-14"
+  },
+  "isMapped": true
+}</code></pre>
+  <p>The raw <code>fieldData</code> is not changed. Entry updates are accumulated and written in batches of 500.</p>
+
+  <h3>Submission updates and precedence</h3>
+  <p>Mapped entry values are grouped by <code>submissionId</code>. Initial-form and review-form values are combined into a single <code>mappedFields</code> object.</p>
+  <p>Because entries are processed oldest to newest, a later entry overwrites an earlier value when both map to the same canonical name. The final operation sets the complete reconstructed object:</p>
+  <pre><code>{
+  "$set": {
+    "mappedFields": { "...": "combined normalized values" },
+    "isMapped": true
+  }
+}</code></pre>
+  <p>The job therefore replaces the previous <code>mappedFields</code> object with values rebuilt from all eligible entries in the current run.</p>
+
+  <h3>Progress and result</h3>
+  <p>Typical phases are <code>loading</code>, <code>mapping_entries</code>, <code>writing_submissions</code>, and <code>completed</code>. Entry mapping accounts for the first 90 percent of progress; submission writes account for the final 10 percent.</p>
+  <pre><code>{
+  "formEntries": 15234,
+  "reviews": 3892,
+  "submissions": 5210,
+  "applicationsWithMappings": 8
+}</code></pre>
+
+  <h3>What this job does not do</h3>
+  <ul>
+    <li>It does not download new entries or submissions from Submittable.</li>
+    <li>It does not create FormEntry or Submission documents.</li>
+    <li>It does not change raw <code>fieldData</code>.</li>
+    <li>It does not modify field mappings, applications, review stages, or cached metadata.</li>
+    <li>A fallback schema fetched from Submittable is used in memory and is not persisted by this job.</li>
+    <li>It does not currently execute the optional FieldMapping <code>transform</code> value.</li>
+    <li>It does not validate data, calculate scores, route submissions, or update Submittable.</li>
+  </ul>
+</section>
+
+<section id="dpscd-gpa-import">
+  <h2>5. <code>dpscd_gpa_import</code></h2>
+
+  <h3>Purpose</h3>
+  <p>Imports DPSCD cumulative GPA records delivered to the API as a JSON body. The job matches each record to a local submission in the cycle and upserts the <code>dpscd</code> subdocument on the applicant's <code>GpaRecord</code>.</p>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>A selected admissions cycle with extracted submissions.</li>
+    <li>A staged <code>GpaUpload</code> document created by <code>POST /api/gpa/dpscd</code> holding the raw <code>records</code> array.</li>
+  </ul>
+
+  <h3>Trigger and payload</h3>
+  <p>This job is not started from the generic Jobs page. The endpoint authenticates the caller, validates and stores the payload, then creates the job:</p>
+  <pre><code>POST /api/gpa/dpscd
+
+{
+  "cycleId": "selected-cycle-id",
+  "records": [ { "submissionId": "...", "submissionIdInt": "...", "STUDENT_NUMBER": 21165451.0, "Quarters Available": 11.0, "gpa_cumulative": 3.0, ... } ]
+}</code></pre>
+  <p>A bare top-level array of records is also accepted. Strict JSON is parsed first; if that fails the body is normalized from Python-style repr output (single quotes, <code>None</code>/<code>True</code>/<code>False</code>/<code>nan</code>) before parsing. The caller polls <code>GET /api/gpa/dpscd/{uploadId}</code> for status.</p>
+
+  <h3>Execution flow</h3>
+  <ol>
+    <li>Load the staged <code>GpaUpload</code> referenced by the job payload.</li>
+    <li>Normalize each record's keys and coerce integer-semantic floats (<code>STUDENT_NUMBER</code>, <code>submissionIdInt</code>, <code>Quarters Available</code>, <code>Latest_GRADE_LEVEL</code>, <code>Middle School Number</code>, <code>Accepting High School Number</code>) to integers; <code>gpa_cumulative</code> remains a decimal.</li>
+    <li>Match each record to a submission in the cycle by <code>submissionId</code>, then <code>submissionIdInt</code>, then <code>StudentNumber</code>.</li>
+    <li>Validate values; out-of-range or mismatched fields become warnings, unmatched records become errors, neither is fatal.</li>
+    <li>Bulk-upsert <code>GpaRecord</code> documents keyed <code>(cycleId, submissionId)</code>, setting only the <code>dpscd</code> subdocument plus provenance (<code>importJobId</code>, <code>importedAt</code>).</li>
+    <li>Mark the staged upload <code>completed</code> or <code>failed</code> and store the result summary.</li>
+  </ol>
+
+  <h3>MongoDB access</h3>
+  <table>
+    <thead>
+      <tr><th>Collection/model</th><th>Access</th><th>Documents and fields</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>gpauploads</code> / GpaUpload</td><td>Read and update</td><td>Staged records, status, result, error.</td></tr>
+      <tr><td><code>submissions</code> / Submission</td><td>Read</td><td>Match keys (<code>submissionId</code>, <code>submissionIdInt</code>, <code>mappedFields.StudentNumber</code>).</td></tr>
+      <tr><td><code>gparecords</code> / GpaRecord</td><td>Upsert</td><td>Sets <code>dpscd</code> subdocument and provenance.</td></tr>
+      <tr><td><code>jobs</code> / Job</td><td>Read and update</td><td>Status, progress, result, error.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Progress and result</h3>
+  <p>Phases include <code>normalizing</code>, <code>matching</code>, <code>writing</code>, and <code>completed</code>. The result has this shape:</p>
+  <pre><code>{
+  "processed": 1000,
+  "matched": 380,
+  "updated": 380,
+  "unmatched": 620,
+  "warnings": [ "..." ],
+  "errors": [ "..." ]
+}</code></pre>
+
+  <h3>What this job does not do</h3>
+  <ul>
+    <li>It does not fetch data from Submittable or DPSCD; the payload must be posted to the API first.</li>
+    <li>It does not write scores or select the effective GPA — that happens in score compilation.</li>
+    <li>It does not modify submissions or the <code>optIn</code> subdocument on existing records.</li>
+    <li>Unmatched records (other years, other projects) are reported but not imported.</li>
+  </ul>
+</section>
+
+<section id="optin-gpa-preview">
+  <h2>6. <code>optin_gpa_preview</code></h2>
+
+  <h3>Purpose</h3>
+  <p>Parses uploaded Opt-In XLSX files (one per out-of-district school), matches each row to a submission by <code>submissionIdInt</code>, and reports per-row status so staff can review the import before anything is written.</p>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>A selected admissions cycle with extracted submissions.</li>
+    <li>A staged <code>GpaUpload</code> (<code>source: 'opt_in'</code>, <code>status: 'previewing'</code>) created by the GPA page upload.</li>
+  </ul>
+
+  <h3>Trigger and payload</h3>
+  <pre><code>POST /api/gpa/optin/uploads   (multipart: cycleId + one or more .xlsx files)</code></pre>
+
+  <h3>Execution flow</h3>
+  <ol>
+    <li>Load the staged upload and decode each base64 file.</li>
+    <li>Parse each workbook: extract the school name from the <code>SCHOOL NAME:</code> banner row, locate the header row, and read the student rows.</li>
+    <li>Ensure submissions carry <code>labelIds</code>; backfill them from Submittable for the cycle's projects when missing.</li>
+    <li>Resolve the Opt-In label id from the synced label metadata (case-insensitive <code>opt-in</code>/<code>opt in</code>/<code>optin</code> match).</li>
+    <li>Match each row to a submission by <code>submissionIdInt</code> and classify it: <code>matched</code>, <code>missing_optin_label</code>, <code>unmatched</code>, <code>invalid_gpa</code>, or <code>not_enrolled</code>.</li>
+    <li>Count Opt-In-labeled submissions absent from all files (<code>optInMissingFromFile</code>).</li>
+    <li>Store the preview on the upload document and set its status to <code>ready</code>.</li>
+  </ol>
+
+  <h3>MongoDB access</h3>
+  <table>
+    <thead>
+      <tr><th>Collection/model</th><th>Access</th><th>Documents and fields</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>gpauploads</code> / GpaUpload</td><td>Read and update</td><td>Staged files, status, preview, error.</td></tr>
+      <tr><td><code>submissions</code> / Submission</td><td>Read and update</td><td>Match keys and <code>labelIds</code> backfill.</td></tr>
+      <tr><td><code>metadatas</code> / Metadata</td><td>Read</td><td>Label catalog used to resolve the Opt-In label id.</td></tr>
+      <tr><td><code>jobs</code> / Job</td><td>Read and update</td><td>Status, progress, result, error.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Submittable endpoints</h3>
+  <table>
+    <thead>
+      <tr><th>Endpoint</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET /submissions?projectId=…&amp;size=500</code></td><td>Backfill <code>labelIds</code> for the cycle's submissions when they are missing.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Progress and result</h3>
+  <pre><code>{
+  "files": 3,
+  "processed": 87,
+  "matched": 80,
+  "missingOptInLabel": 4,
+  "unmatched": 3,
+  "invalidGpa": 0,
+  "notEnrolled": 6,
+  "optInMissingFromFile": 12,
+  "rows": [ { "file": "...", "row": 5, "submissionIdInt": 52137704, "status": "matched", "warnings": [] } ]
+}</code></pre>
+
+  <h3>What this job does not do</h3>
+  <ul>
+    <li>It does not write any GPA data; it only stages and describes the import.</li>
+    <li>It does not modify Opt-In labels in Submittable.</li>
+  </ul>
+</section>
+
+<section id="optin-gpa-commit">
+  <h2>7. <code>optin_gpa_commit</code></h2>
+
+  <h3>Purpose</h3>
+  <p>Applies a confirmed Opt-In upload: upserts the <code>optIn</code> subdocument on <code>GpaRecord</code> for each matched file row. Only submissions whose <code>submissionIdInt</code> appears in the uploaded files are modified.</p>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>A staged <code>GpaUpload</code> in <code>confirming</code> status, transitioned by <code>POST /api/gpa/optin/uploads/{id}/confirm</code>.</li>
+  </ul>
+
+  <h3>Execution flow</h3>
+  <ol>
+    <li>Load the staged upload and re-parse each XLSX file.</li>
+    <li>Match rows to submissions by <code>submissionIdInt</code>; skip unmatched rows.</li>
+    <li>Normalize enrollment answers (Yes/No, case-insensitive) and GPA values.</li>
+    <li>Bulk-upsert <code>GpaRecord.optIn</code> for matched rows, flagging rows whose submission lacks the Opt-In label as warnings (they are still imported).</li>
+    <li>Mark the upload <code>completed</code>, clear stored file payloads, and save the result summary.</li>
+  </ol>
+
+  <h3>Progress and result</h3>
+  <pre><code>{
+  "processed": 87,
+  "updated": 80,
+  "skippedUnmatched": 3,
+  "missingOptInLabel": 4,
+  "warnings": [ "..." ],
+  "errors": []
+}</code></pre>
+
+  <h3>What this job does not do</h3>
+  <ul>
+    <li>It does not touch submissions that are not present in the uploaded files.</li>
+    <li>It does not select the effective GPA or write scores — that happens in score compilation.</li>
+    <li>It does not modify the <code>dpscd</code> subdocument on existing records.</li>
+  </ul>
+</section>
+
+<section id="pipeline-order">
+  <h2>8. Recommended Pipeline Order</h2>
+  <ol>
+    <li><strong>Metadata Sync</strong> — download current Submittable projects, forms, labels, and team members.</li>
+    <li><strong>Application configuration</strong> — map Submittable projects and review stages to the selected cycle.</li>
+    <li><strong>Field mapping</strong> — assign canonical names to fields on initial and review forms.</li>
+    <li><strong>Submission Extraction</strong> — download raw entries and build local FormEntry and Submission documents.</li>
+    <li><strong>Form Response Mapping</strong> — normalize raw values and build each submission's consolidated mapped fields.</li>
+    <li><strong>Validation</strong> — run data-quality rules and create/resolve validation issues.</li>
+    <li><strong>Catchment lookup</strong> — geocode addresses and determine catchment zones.</li>
+    <li><strong>GPA data ingestion</strong> — import the DPSCD GPA payload via the API endpoint and stage/confirm Opt-In XLSX uploads from the GPA page.</li>
+    <li><strong>Scoring and routing</strong> — planned but not currently implemented.</li>
+  </ol>
+  <p>Submission Extraction resets mapping state, so Form Response Mapping should be rerun after every extraction that updates entries for the cycle.</p>
+</section>
+
+<nav>
+  <a href="spec.html">← Technical Specification</a>
+  <a href="features.html">Product Features</a>
+</nav>
+
+</body>
+</html>
