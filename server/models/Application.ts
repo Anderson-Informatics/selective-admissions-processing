@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose'
+import type { DashboardConfig } from '../utils/dashboardConfig'
 
 export interface Application {
   cycleId: string
@@ -7,6 +8,7 @@ export interface Application {
   projectId: string
   initialFormId?: string
   active: boolean
+  dashboard?: DashboardConfig
   createdAt?: Date
   updatedAt?: Date
 }
@@ -17,7 +19,8 @@ const applicationSchema = new Schema<Application>({
   type: { type: String, default: 'exam' },
   projectId: { type: String, required: true },
   initialFormId: String,
-  active: { type: Boolean, default: true }
+  active: { type: Boolean, default: true },
+  dashboard: { type: Schema.Types.Mixed }
 }, { timestamps: true })
 
 applicationSchema.index({ cycleId: 1, projectId: 1 }, { unique: true })

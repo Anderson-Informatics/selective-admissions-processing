@@ -32,6 +32,9 @@ export interface Submission {
   currentStageName?: string
   labelIds?: string[]
   reviewCompletion: ReviewCompletionEntry[]
+  gpaStatus?: string
+  gpaDpscd?: boolean
+  gpaOptIn?: boolean
   hsptResultId?: string
   hsptMatchType?: string
   geocode?: {
@@ -84,6 +87,9 @@ const submissionSchema = new Schema<Submission>({
     }],
     default: []
   },
+  gpaStatus: { type: String, index: true },
+  gpaDpscd: { type: Boolean },
+  gpaOptIn: { type: Boolean },
   hsptResultId: { type: String, index: true, sparse: true },
   hsptMatchType: { type: String, index: true },
   geocode: {

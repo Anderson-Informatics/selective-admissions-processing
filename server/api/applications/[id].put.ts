@@ -2,6 +2,7 @@
 import { ApplicationModel } from '~~/server/models/Application'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
 import { routingConfigSchema, reviewStageRoleSchema, defaultRoutingConfig, collectReferencedStageIds } from '~~/server/utils/routingConfig'
+import { dashboardConfigSchema } from '~~/server/utils/dashboardConfig'
 import { recordConfigAudit } from '~~/server/utils/configAudit'
 
 export default defineEventHandler(async (event) => {
@@ -37,6 +38,13 @@ export default defineEventHandler(async (event) => {
   if (body.type !== undefined) application.type = body.type
   if (body.initialFormId !== undefined) application.initialFormId = body.initialFormId
   if (body.active !== undefined) application.active = body.active === true
+  if (body.dashboard !== undefined) {
+    const parsed = dashboardConfigSchema.safeParse(body.dashboard)
+    if (!parsed.success) {
+      throw createError({ statusCode: 400, statusMessage: `Invalid dashboard configuration: ${parsed.error.message}` })
+    }
+    application.dashboard = parsed.data
+  }
 
   let stages: any[] | undefined
   if (Array.isArray(body.stages)) {

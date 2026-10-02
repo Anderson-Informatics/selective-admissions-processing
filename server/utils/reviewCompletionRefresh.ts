@@ -6,7 +6,7 @@ import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import { normalizeRoutingConfig } from './routingConfig'
-import { computeReviewCompletion, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
+import { computeReviewCompletion, deriveGpaStatus, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
 
 export interface RefreshProgress {
   (update: { phase?: string, processed?: number, total?: number, percent?: number, message?: string }): Promise<void>
@@ -75,7 +75,13 @@ export function buildReviewCompletionForSubmission(
   const prerequisitesComplete = preliminary.reviewCompletion
     .filter(entry => (entry.role === 'work' || entry.role === 'initial') && !/ready for placement/i.test(entry.name))
     .every(entry => !entry.required || entry.complete)
-  return computeReviewCompletion(routingStages, { ...context, prerequisitesComplete })
+  const completion = computeReviewCompletion(routingStages, { ...context, prerequisitesComplete })
+  return {
+    ...completion,
+    gpaStatus: deriveGpaStatus(context),
+    gpaDpscd: Boolean(gpa?.dpscd),
+    gpaOptIn: Boolean(gpa?.optIn)
+  }
 }
 
 export async function refreshReviewCompletion(options: RefreshOptions): Promise<RefreshResult> {
@@ -140,6 +146,9 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
             update: {
               $set: {
                 reviewCompletion: completion.reviewCompletion,
+                gpaStatus: completion.gpaStatus,
+                gpaDpscd: completion.gpaDpscd,
+                gpaOptIn: completion.gpaOptIn,
                 ...(submissionDate ? { submissionDate: new Date(String(submissionDate)) } : {}),
                 roundKey: round.key,
                 roundName: round.name,

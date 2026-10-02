@@ -1,3 +1,5 @@
+import { waitForSubmittableRequestSlot } from './submittableRateLimit'
+
 export interface SubmittableReviewStage {
   reviewStageId: string
   stageName: string
@@ -100,12 +102,28 @@ function getAuthHeader(apiKey?: string): string {
   return `Basic ${btoa(`${key}:`)}`
 }
 
+const maxRateLimitRetries = 3
+
+function getRetryAfterMs(response: Response): number | undefined {
+  const retryAfter = response.headers.get('Retry-After')
+  if (!retryAfter) return undefined
+
+  const seconds = Number(retryAfter)
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+
+  const retryAt = Date.parse(retryAfter)
+  return Number.isFinite(retryAt) ? Math.max(0, retryAt - Date.now()) : undefined
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
 export async function submittableRequest<T>(path: string, options: RequestInit = {}, clientConfig?: SubmittableClientConfig): Promise<T> {
   const runtimeConfig = clientConfig ? undefined : useRuntimeConfig()
   const baseUrl = clientConfig?.baseUrl || runtimeConfig?.submittableBaseUrl || 'https://submittable-api.submittable.com/v4'
   const url = `${baseUrl}${path}`
-
-  const response = await fetch(url, {
+  const requestOptions: RequestInit = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -113,14 +131,27 @@ export async function submittableRequest<T>(path: string, options: RequestInit =
       'Authorization': getAuthHeader(clientConfig?.apiKey),
       ...options.headers
     }
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`Submittable API error ${response.status}: ${response.statusText} ${text.slice(0, 200)}`)
   }
 
-  return response.json() as Promise<T>
+  for (let attempt = 0; ; attempt += 1) {
+    await waitForSubmittableRequestSlot()
+    const response = await fetch(url, requestOptions)
+
+    if (response.status === 429 && attempt < maxRateLimitRetries) {
+      const retryAfterMs = getRetryAfterMs(response)
+      const backoffMs = Math.min(500 * (2 ** attempt), 8000) + Math.random() * 250
+      await response.body?.cancel()
+      await sleep(retryAfterMs ?? backoffMs)
+      continue
+    }
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(`Submittable API error ${response.status}: ${response.statusText} ${text.slice(0, 200)}`)
+    }
+
+    return response.json() as Promise<T>
+  }
 }
 
 export async function fetchProjects(clientConfig?: SubmittableClientConfig): Promise<SubmittableProject[]> {
