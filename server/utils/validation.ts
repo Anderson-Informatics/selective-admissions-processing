@@ -236,7 +236,7 @@ function checkParentStudentNameSwap(submission: Submission): ValidationIssueInpu
   const firstName = nameTokens(mapped.FirstName)
   const lastName = nameTokens(mapped.LastName)
   if (!fullName.length || !firstName.length || !lastName.length) return []
-  if (containsTokens(fullName, [...firstName, ...lastName])) return []
+  if (containsNames(fullName, [firstName, lastName])) return []
 
   const parentName = ([
     ['ParentFirstName', 'ParentLastName'],
@@ -245,7 +245,7 @@ function checkParentStudentNameSwap(submission: Submission): ValidationIssueInpu
     const parentFirst = nameTokens(mapped[first])
     const parentLast = nameTokens(mapped[last])
     return parentFirst.length > 0 && parentLast.length > 0
-      && containsTokens(fullName, [...parentFirst, ...parentLast])
+      && containsNames(fullName, [parentFirst, parentLast])
   })
   return [{
     type: 'parent_student_name_swap',
@@ -347,14 +347,18 @@ function nameTokens(value: unknown): string[] {
   return String(value ?? '').toLowerCase().match(/[a-z0-9]+/g) || []
 }
 
-function containsTokens(name: string[], parts: string[]): boolean {
-  const remaining = [...name]
-  return parts.every((part) => {
-    const index = remaining.indexOf(part)
-    if (index < 0) return false
-    remaining.splice(index, 1)
-    return true
-  })
+function containsNames(fullName: string[], names: string[][]): boolean {
+  if (!names.length) return true
+  const target = names[0]!.join('')
+  for (let start = 0; start < fullName.length; start++) {
+    let value = ''
+    for (let end = start; end < fullName.length; end++) {
+      value += fullName[end]
+      if (value === target && containsNames([...fullName.slice(0, start), ...fullName.slice(end + 1)], names.slice(1))) return true
+      if (value.length >= target.length) break
+    }
+  }
+  return false
 }
 
 function normalizeDate(value: string): string {

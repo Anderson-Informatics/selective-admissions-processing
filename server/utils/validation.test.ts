@@ -139,7 +139,10 @@ describe('DPSCD student ID validation', () => {
 describe('student full-name validation', () => {
   it.each([
     { FullName: 'MAYA LEE SMITH', FirstName: 'Maya', LastName: 'Smith', ParentFirstName: 'Maya', ParentLastName: 'Smith' },
-    { FullName: 'Ann-Marie O’Neil', FirstName: 'Ann Marie', LastName: 'O Neil' }
+    { FullName: 'Ann-Marie O’Neil', FirstName: 'Ann Marie', LastName: 'O Neil' },
+    { FullName: 'D Angelo Smith', FirstName: 'D\'Angelo', LastName: 'Smith' },
+    { FullName: 'D’Angelo ONeil', FirstName: 'DAngelo', LastName: 'O\'Neil' },
+    { FullName: 'AnneMarie ONeil', FirstName: 'Anne-Marie', LastName: 'O Neil' }
   ])('does not flag a consistent student name', async (fields) => {
     submissions = [submission(fields)]
     await runValidationForCycle('cycle-1')
@@ -159,6 +162,18 @@ describe('student full-name validation', () => {
     submissions = [submission({ FullName: 'Lee', FirstName: 'Lee', LastName: 'Lee' })]
     await runValidationForCycle('cycle-1')
     expect(openIssues('parent_student_name_swap')).toHaveLength(1)
+  })
+
+  it('auto-resolves an existing punctuation-only name issue on rerun', async () => {
+    submissions = [submission({ FullName: 'D’Angelo ONeil', FirstName: 'DAngelo', LastName: 'O\'Neil' })]
+    issues = [{
+      cycleId: 'cycle-1', applicationId: 'app-1', submissionId: 'sub-1', type: 'parent_student_name_swap',
+      field: 'FullName', severity: 'warning', message: 'Full name does not contain the student first and last names',
+      status: 'open', createdAt: new Date('2026-10-14'), updatedAt: new Date('2026-10-14')
+    }]
+    await runValidationForCycle('cycle-1')
+    expect(openIssues('parent_student_name_swap')).toEqual([])
+    expect(issues[0]).toMatchObject({ status: 'resolved', resolution: 'auto' })
   })
 
   it.each(['Parent', 'Guardian'])('identifies a probable %s name inserted in FullName', async (relation) => {
