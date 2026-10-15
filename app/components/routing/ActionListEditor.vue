@@ -4,10 +4,13 @@ import type { SelectItem } from '@nuxt/ui'
 import ConditionGroupEditor from './ConditionGroupEditor.vue'
 import ReferenceSelect from './ReferenceSelect.vue'
 
-const props = defineProps<{ modelValue: any[], references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[] }, title: string }>()
+const props = defineProps<{ modelValue: any[], references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> }, title: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: any[]] }>()
 function add() {
-  emit('update:modelValue', [...props.modelValue, { when: { all: [] }, addLabelIds: [], removeLabelIds: [], assignUserIds: [], unassignUserIds: [] }])
+  emit('update:modelValue', [...props.modelValue, { when: { operator: 'and', conditions: [] }, addLabelIds: [], removeLabelIds: [], assignUserIds: [], unassignUserIds: [] }])
+}
+function updateAction(index: number, patch: Record<string, unknown>) {
+  emit('update:modelValue', props.modelValue.map((action, i) => i === index ? { ...action, ...patch } : action))
 }
 function remove(index: number) {
   emit('update:modelValue', props.modelValue.filter((_, itemIndex) => itemIndex !== index))
@@ -50,33 +53,38 @@ function remove(index: number) {
         />
       </div>
       <ConditionGroupEditor
-        v-model="action.when"
+        :model-value="action.when"
         :references="references"
         title="When"
+        @update:model-value="updateAction(index, { when: $event })"
       />
       <ReferenceSelect
-        v-model="action.addLabelIds"
+        :model-value="action.addLabelIds"
         :items="references.labels"
         multiple
         placeholder="Add labels"
+        @update:model-value="updateAction(index, { addLabelIds: $event })"
       />
       <ReferenceSelect
-        v-model="action.removeLabelIds"
+        :model-value="action.removeLabelIds"
         :items="references.labels"
         multiple
         placeholder="Remove labels"
+        @update:model-value="updateAction(index, { removeLabelIds: $event })"
       />
       <ReferenceSelect
-        v-model="action.assignUserIds"
+        :model-value="action.assignUserIds"
         :items="references.users"
         multiple
         placeholder="Assign users"
+        @update:model-value="updateAction(index, { assignUserIds: $event })"
       />
       <ReferenceSelect
-        v-model="action.unassignUserIds"
+        :model-value="action.unassignUserIds"
         :items="references.users"
         multiple
         placeholder="Unassign users"
+        @update:model-value="updateAction(index, { unassignUserIds: $event })"
       />
     </div>
   </div>

@@ -1,5 +1,6 @@
 import { ApplicationModel } from '~~/server/models/Application'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
+import { normalizeRoutingConfig } from '~~/server/utils/routingConfig'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
@@ -19,5 +20,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Application not found' })
   }
 
-  return { ...application, stages }
+  return {
+    ...application,
+    stages: stages.map(stage => ({
+      ...stage,
+      routing: normalizeRoutingConfig(stage.routing),
+      routingDraft: stage.routingDraft ? normalizeRoutingConfig(stage.routingDraft) : undefined
+    }))
+  }
 })

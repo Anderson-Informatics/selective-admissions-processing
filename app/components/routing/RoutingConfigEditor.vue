@@ -9,7 +9,7 @@ import StatusRulesEditor from './StatusRulesEditor.vue'
 
 const props = defineProps<{
   modelValue: any
-  references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[] }
+  references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> }
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: any] }>()
 const config = computed(() => props.modelValue || { enabled: false, statusRules: [], outcomeRules: [], entryActions: [], exitActions: [] })
@@ -39,7 +39,7 @@ function removeStatusLabel(status: string) {
           Routing enabled
         </p>
         <p class="text-sm text-muted">
-          Draft configuration can be edited and published separately from execution.
+          Allow this stage’s published routing rules to be used for stage-move decisions.
         </p>
       </div>
       <UCheckbox
@@ -55,9 +55,12 @@ function removeStatusLabel(status: string) {
       <summary class="cursor-pointer font-medium">
         Required When
       </summary>
-      <div class="pt-4">
+      <div class="pt-4 space-y-3">
+        <p class="text-sm text-muted">
+          The conditions that make this stage required for a submission.
+        </p>
         <ConditionGroupEditor
-          :model-value="config.requiredWhen || { all: [] }"
+          :model-value="config.requiredWhen || { operator: 'and', conditions: [] }"
           :references="references"
           title="Stage is required when"
           @update:model-value="update({ requiredWhen: $event })"
@@ -69,7 +72,10 @@ function removeStatusLabel(status: string) {
       <summary class="cursor-pointer font-medium">
         Status Rules
       </summary>
-      <div class="pt-4">
+      <div class="pt-4 space-y-3">
+        <p class="text-sm text-muted">
+          Set this stage’s status using the first matching rule. Statuses are updated for submissions during the review completion refresh job.
+        </p>
         <StatusRulesEditor
           :model-value="config.statusRules || []"
           :references="references"
@@ -84,6 +90,9 @@ function removeStatusLabel(status: string) {
         Status Labels
       </summary>
       <div class="pt-4 space-y-2">
+        <p class="text-sm text-muted">
+          Associate a stage status with a submission label.
+        </p>
         <p
           v-if="!statusItems.length"
           class="text-sm text-muted"
@@ -101,7 +110,7 @@ function removeStatusLabel(status: string) {
             @update:model-value="(value: unknown) => updateStatusLabel(String(value), String(item.labelId), item.status)"
           />
           <ReferenceSelect
-            :model-value="item.labelId"
+            :model-value="String(item.labelId || '')"
             :items="references.labels"
             placeholder="Label"
             @update:model-value="(value: unknown) => updateStatusLabel(item.status, String(value), item.status)"
@@ -129,7 +138,10 @@ function removeStatusLabel(status: string) {
       <summary class="cursor-pointer font-medium">
         Outcome Rules
       </summary>
-      <div class="pt-4">
+      <div class="pt-4 space-y-3">
+        <p class="text-sm text-muted">
+          Choose a destination stage when a rule matches. Otherwise, the submission moves to its next required, incomplete stage if an eligible stage is available.
+        </p>
         <OutcomeRulesEditor
           :model-value="config.outcomeRules || []"
           :references="references"
@@ -142,7 +154,10 @@ function removeStatusLabel(status: string) {
       <summary class="cursor-pointer font-medium">
         Entry Actions
       </summary>
-      <div class="pt-4">
+      <div class="pt-4 space-y-3">
+        <p class="text-sm text-muted">
+          Set up conditional actions for when a submission enters this stage.
+        </p>
         <ActionListEditor
           :model-value="config.entryActions || []"
           :references="references"
@@ -156,7 +171,10 @@ function removeStatusLabel(status: string) {
       <summary class="cursor-pointer font-medium">
         Exit Actions
       </summary>
-      <div class="pt-4">
+      <div class="pt-4 space-y-3">
+        <p class="text-sm text-muted">
+          Set up conditional actions for when a submission leaves this stage.
+        </p>
         <ActionListEditor
           :model-value="config.exitActions || []"
           :references="references"

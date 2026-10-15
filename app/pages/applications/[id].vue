@@ -28,7 +28,7 @@ interface ReviewStage {
 }
 interface Application { _id: string, cycleId: string, name: string, type: string, projectId: string, initialFormId?: string, active: boolean, stages: ReviewStage[] }
 interface Template { key: string, name: string, description?: string, draft?: boolean }
-interface References { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[] }
+interface References { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> }
 
 const route = useRoute()
 const router = useRouter()
@@ -40,7 +40,9 @@ const selectedStageIndex = ref<number | null>(null)
 const selectedTemplate = ref('')
 const templateWarnings = ref<string[]>([])
 const draftState = ref<'saved' | 'saving' | 'error'>('saved')
-let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+const autosaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const draftSaves = new Map<string, Promise<void>>()
+const failedDraftIds = new Set<string>()
 
 const emptyRouting = (): RoutingConfig => ({ enabled: false, statusRules: [], outcomeRules: [], entryActions: [], exitActions: [] })
 const { data: application, status, refresh } = await useFetch<Application>(`/api/applications/${route.params.id}`)
@@ -79,41 +81,71 @@ function selectStage(index: number) {
   selectedStageIndex.value = index
 }
 
-function scheduleDraftSave() {
-  if (selectedStageIndex.value == null) return
-  if (autosaveTimer) clearTimeout(autosaveTimer)
+async function saveDraft(stage: ReviewStage) {
+  const previous = draftSaves.get(stage.stageId)
+  const save = (async () => {
+    if (previous) await previous.catch(() => {})
+    await $fetch(`/api/applications/${application.value?._id}/stages/${stage.stageId}`, {
+      method: 'PATCH',
+      body: { routing: stage.routingDraft || emptyRouting() }
+    })
+  })()
+  draftSaves.set(stage.stageId, save)
+  try {
+    await save
+    failedDraftIds.delete(stage.stageId)
+    draftState.value = 'saved'
+  } catch (error) {
+    failedDraftIds.add(stage.stageId)
+    draftState.value = 'error'
+    throw error
+  } finally {
+    if (draftSaves.get(stage.stageId) === save) draftSaves.delete(stage.stageId)
+  }
+}
+
+function scheduleDraftSave(stage: ReviewStage) {
+  const timer = autosaveTimers.get(stage.stageId)
+  if (timer) clearTimeout(timer)
   draftState.value = 'saving'
-  autosaveTimer = setTimeout(async () => {
-    const stage = selectedStage.value
-    if (!stage) return
-    try {
-      await $fetch(`/api/applications/${application.value?._id}/stages/${stage.stageId}`, {
-        method: 'PATCH',
-        body: { routing: stage.routingDraft || emptyRouting() }
-      })
-      draftState.value = 'saved'
-    } catch {
-      draftState.value = 'error'
-    }
-  }, 500)
+  autosaveTimers.set(stage.stageId, setTimeout(() => {
+    autosaveTimers.delete(stage.stageId)
+    void saveDraft(stage).catch(() => {})
+  }, 500))
+}
+
+async function flushDraftSaves() {
+  const pending = [...autosaveTimers.keys()]
+  for (const id of pending) {
+    const timer = autosaveTimers.get(id)
+    if (timer) clearTimeout(timer)
+    autosaveTimers.delete(id)
+  }
+  await Promise.all(pending.map((id) => {
+    const stage = state.stages.find(item => item.stageId === id)
+    return stage ? saveDraft(stage) : Promise.resolve()
+  }))
+  await Promise.all(draftSaves.values())
+  if (failedDraftIds.size) throw new Error('Draft save failed; routing was not published')
 }
 
 function updateDraft(value: RoutingConfig) {
   const stage = selectedStage.value
   if (!stage) return
   stage.routingDraft = value
-  scheduleDraftSave()
+  scheduleDraftSave(stage)
 }
 
 async function publishDraft() {
   if (!application.value) return
   publishing.value = true
   try {
+    await flushDraftSaves()
     const result = await $fetch<{ stages: ReviewStage[] }>(`/api/applications/${application.value._id}/routing-publish`, { method: 'POST' })
     state.stages = result.stages.map(stage => ({ ...stage, routingDraft: stage.routingDraft || stage.routing }))
     toast.add({ title: 'Routing configuration published', color: 'success' })
   } catch (error: unknown) {
-    const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Failed to publish routing configuration'
+    const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || (error instanceof Error ? error.message : 'Failed to publish routing configuration')
     toast.add({ title: message, color: 'error' })
   } finally {
     publishing.value = false
@@ -122,9 +154,14 @@ async function publishDraft() {
 
 async function discardDraft() {
   if (!application.value || !confirm('Discard all routing draft changes?')) return
+  for (const timer of autosaveTimers.values()) clearTimeout(timer)
+  autosaveTimers.clear()
+  await Promise.allSettled(draftSaves.values())
   await $fetch(`/api/applications/${application.value._id}/routing-discard`, { method: 'POST' })
   await refresh()
   state.stages = (application.value?.stages || []).map(stage => ({ ...stage, routingDraft: stage.routingDraft || stage.routing }))
+  failedDraftIds.clear()
+  draftState.value = 'saved'
   toast.add({ title: 'Routing draft discarded', color: 'success' })
 }
 
@@ -132,6 +169,7 @@ async function saveApplicationMetadata() {
   if (!application.value) return
   loading.value = true
   try {
+    await flushDraftSaves()
     await apiRequest(`/api/applications/${application.value._id}`, {
       method: 'PUT',
       body: { name: state.name, type: state.type, active: state.active, projectId: application.value.projectId, initialFormId: application.value.initialFormId, stages: state.stages }
@@ -151,6 +189,7 @@ async function applyTemplate() {
   if (!template || !confirm(`Apply ${template.name} to the routing draft?`)) return
   loading.value = true
   try {
+    await flushDraftSaves()
     const result = await $fetch<{ warnings: string[], template: { name: string, draft: boolean }, stages: ReviewStage[] }>(`/api/applications/${application.value._id}/template`, { method: 'POST', body: { templateKey: selectedTemplate.value } })
     state.stages = result.stages.map(stage => ({ ...stage, routingDraft: stage.routingDraft || stage.routing }))
     templateWarnings.value = result.warnings
@@ -298,7 +337,7 @@ async function applyTemplate() {
           <RoutingConfigEditor
             v-if="selectedStage"
             :model-value="selectedStage.routingDraft || emptyRouting()"
-            :references="references || { stages: [], fields: [], rounds: [], labels: [], users: [] }"
+            :references="references || { stages: [], fields: [], rounds: [], labels: [], users: [], reviewFields: [] }"
             @update:model-value="updateDraft"
           />
           <p

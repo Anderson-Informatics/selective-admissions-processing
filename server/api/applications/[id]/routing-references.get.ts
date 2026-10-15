@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const [cycle, stages, mappings, labels, team, forms] = await Promise.all([
     CycleModel.findById(application.cycleId).lean(),
     ReviewStageModel.find({ applicationId }).sort({ order: 1 }).lean(),
-    FieldMappingModel.find({ cycleId: application.cycleId }).select('formId canonicalName').lean(),
+    FieldMappingModel.find({ cycleId: application.cycleId }).select('formId fieldId label canonicalName').lean(),
     MetadataModel.find({ type: 'label' }).sort({ name: 1 }).lean(),
     MetadataModel.find({ type: 'team' }).sort({ name: 1 }).lean(),
     MetadataModel.find({ type: 'form' }).lean()
@@ -26,8 +26,14 @@ export default defineEventHandler(async (event) => {
   const canonicalFields = [...new Set(mappings.filter(mapping => formIds.has(mapping.formId)).map(mapping => mapping.canonicalName).filter(Boolean))].sort()
   const reviewFields = stages.map((stage) => {
     const form = forms.find(item => item.externalId === stage.formId)
-    const fieldLabels = (form?.data?.fields || []).map((field: { label?: string }) => field.label).filter(Boolean)
-    return { stageId: stage.stageId, stageName: stage.name, fields: [...new Set(fieldLabels)].sort() }
+    const formLabels = new Map<string, string>((form?.data?.fields || []).map((field: { formFieldId: string, label?: string }) => [field.formFieldId, field.label || '']))
+    const fields = mappings.filter(mapping => mapping.formId === stage.formId && mapping.canonicalName)
+    const unique = new Map(fields.map((mapping) => {
+      const [fieldId, subField] = mapping.fieldId.split(':')
+      const questionText = [formLabels.get(fieldId || ''), subField].filter(Boolean).join(' - ') || mapping.label
+      return [mapping.canonicalName, { value: mapping.canonicalName, label: mapping.canonicalName, questionText }]
+    }))
+    return { stageId: stage.stageId, stageName: stage.name, fields: [...unique.values()].sort((a, b) => a.label.localeCompare(b.label)) }
   })
 
   return {

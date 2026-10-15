@@ -1,3 +1,4 @@
+import { normalizeConditionGroup } from '../../shared/routingConditions'
 import type { ConditionGroup, RoutingConfig } from './routingConfig'
 
 export type ReviewStageRole = 'initial' | 'work' | 'hold' | 'final'
@@ -82,7 +83,6 @@ export interface RoutingDecision {
 }
 
 type ConditionValue = Record<string, unknown>
-type ConditionGroupValue = ConditionGroup & { all?: unknown[], any?: unknown[] }
 
 type StatusRule = {
   name: string
@@ -229,12 +229,11 @@ export function evaluateCondition(condition: unknown, context: RoutingContext): 
 
 export function evaluateConditionGroup(group: unknown, context: RoutingContext): boolean {
   if (!group) return true
-  const value = group as ConditionGroupValue
-  const all: unknown[] = Array.isArray(value.all) ? value.all : []
-  const any: unknown[] = Array.isArray(value.any) ? value.any : []
-  const allPass = all.every((item: unknown) => 'kind' in asRecord(item) ? evaluateCondition(item, context) : evaluateConditionGroup(item, context))
-  const anyPass = any.length === 0 || any.some((item: unknown) => 'kind' in asRecord(item) ? evaluateCondition(item, context) : evaluateConditionGroup(item, context))
-  return allPass && anyPass
+  const value = normalizeConditionGroup(group) as { operator: 'and' | 'or', conditions: unknown[] }
+  const conditions = Array.isArray(value.conditions) ? value.conditions : []
+  const evaluate = (item: unknown) => 'kind' in asRecord(item) ? evaluateCondition(item, context) : evaluateConditionGroup(item, context)
+  if (!conditions.length) return true
+  return value.operator === 'or' ? conditions.some(evaluate) : conditions.every(evaluate)
 }
 
 function getStatus(stage: RoutingStage, context: RoutingContext): { status: string, complete: boolean } {

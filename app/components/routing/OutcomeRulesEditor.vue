@@ -4,10 +4,13 @@ import type { SelectItem } from '@nuxt/ui'
 import ConditionGroupEditor from './ConditionGroupEditor.vue'
 import ReferenceSelect from './ReferenceSelect.vue'
 
-const props = defineProps<{ modelValue: any[], references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[] } }>()
+const props = defineProps<{ modelValue: any[], references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> } }>()
 const emit = defineEmits<{ 'update:modelValue': [value: any[]] }>()
 function add() {
-  emit('update:modelValue', [...props.modelValue, { name: 'New outcome rule', enabled: true, when: { all: [] } }])
+  emit('update:modelValue', [...props.modelValue, { name: 'New outcome rule', enabled: true, when: { operator: 'and', conditions: [] } }])
+}
+function updateRule(index: number, patch: Record<string, unknown>) {
+  emit('update:modelValue', props.modelValue.map((rule, i) => i === index ? { ...rule, ...patch } : rule))
 }
 function remove(index: number) {
   emit('update:modelValue', props.modelValue.filter((_, itemIndex) => itemIndex !== index))
@@ -46,13 +49,15 @@ function move(index: number, direction: number) {
     >
       <div class="flex items-center gap-2">
         <UInput
-          v-model="rule.name"
+          :model-value="rule.name"
           placeholder="Rule name"
           class="flex-1"
+          @update:model-value="updateRule(index, { name: $event })"
         />
         <UCheckbox
-          v-model="rule.enabled"
+          :model-value="rule.enabled"
           label="Enabled"
+          @update:model-value="updateRule(index, { enabled: $event })"
         />
         <UButton
           icon="i-lucide-chevron-up"
@@ -79,14 +84,16 @@ function move(index: number, direction: number) {
         />
       </div>
       <ReferenceSelect
-        v-model="rule.moveToStageId"
+        :model-value="rule.moveToStageId"
         :items="references.stages"
         placeholder="Target stage"
+        @update:model-value="updateRule(index, { moveToStageId: $event })"
       />
       <ConditionGroupEditor
-        v-model="rule.when"
+        :model-value="rule.when"
         :references="references"
         title="When"
+        @update:model-value="updateRule(index, { when: $event })"
       />
     </div>
   </div>

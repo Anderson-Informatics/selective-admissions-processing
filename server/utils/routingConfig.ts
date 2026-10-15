@@ -1,13 +1,17 @@
 import { z } from 'zod'
+import { normalizeConditionGroup } from '../../shared/routingConditions'
 
 export const reviewStageRoleSchema = z.enum(['initial', 'work', 'hold', 'final'])
 
 // The recursive schema requires a broad intermediate type before inference.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const conditionGroupSchema: z.ZodType<any> = z.lazy(() => z.object({
-  all: z.array(z.union([conditionSchema, conditionGroupSchema])).default([]),
-  any: z.array(z.union([conditionSchema, conditionGroupSchema])).optional()
-}).strict())
+const conditionGroupSchema: z.ZodType<any> = z.lazy(() => z.preprocess(
+  normalizeConditionGroup,
+  z.object({
+    operator: z.enum(['and', 'or']),
+    conditions: z.array(z.union([conditionSchema, conditionGroupSchema]))
+  }).strict()
+))
 
 const conditionSchema = z.object({
   kind: z.enum([
