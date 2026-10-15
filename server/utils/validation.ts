@@ -1,7 +1,5 @@
 import type { AnyBulkWriteOperation } from 'mongoose'
 import type { JobProgress } from '../models/Job'
-import { ReviewModel } from '../models/Review'
-import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel, type Submission } from '../models/Submission'
 import { ValidationIssueModel, type ValidationIssue } from '../models/ValidationIssue'
 
@@ -13,14 +11,9 @@ export interface ValidationIssueInput {
 }
 
 export interface ValidationContext {
-  cycleId: string
   referenceDate: Date
-  allSubmissions: Submission[]
   fullNameGroups: Map<string, Submission[]>
   firstLastDobGroups: Map<string, Submission[]>
-  completedStagesBySubmission: Map<string, Set<string>>
-  requiredStagesByApplication: Map<string, { stageId: string, stageName: string }[]>
-  reviewStageByApplicationAndStage: Map<string, { stageName: string, requiredForProgress: boolean }>
 }
 
 export type ProgressFn = (progress: Partial<JobProgress>) => Promise<void>
@@ -31,7 +24,6 @@ const RULES: { id: string, run: (submission: Submission, context: ValidationCont
   { id: 'parent_student_name_swap', run: checkParentStudentNameSwap },
   { id: 'duplicate_applicant', run: checkDuplicateApplicant },
   { id: 'missing_required_documents', run: checkMissingRequiredDocuments },
-  { id: 'incomplete_review_stage', run: checkIncompleteReviewStage },
   { id: 'geocoding_failed', run: checkGeocoding }
 ]
 
@@ -44,11 +36,9 @@ export async function runValidationForCycle(cycleId: string, setProgress?: Progr
     percent: 0
   })
 
-  const [submissions, reviewStages, reviews] = await Promise.all([
-    SubmissionModel.find({ cycleId }).select('submissionId applicationId status mappedFields currentStageId currentStageName entryIds geocode').lean(),
-    ReviewStageModel.find({ cycleId }).select('applicationId stageId stageName requiredForProgress').lean(),
-    ReviewModel.find({ cycleId, status: 'complete' }).select('submissionId stageId').lean()
-  ])
+  const submissions = await SubmissionModel.find({ cycleId })
+    .select('submissionId applicationId status mappedFields geocode')
+    .lean()
 
   const referenceDate = new Date()
 
@@ -77,38 +67,10 @@ export async function runValidationForCycle(cycleId: string, setProgress?: Progr
     }
   }
 
-  const completedStagesBySubmission = new Map<string, Set<string>>()
-  for (const review of reviews) {
-    const set = completedStagesBySubmission.get(review.submissionId) || new Set<string>()
-    set.add(review.stageId)
-    completedStagesBySubmission.set(review.submissionId, set)
-  }
-
-  const requiredStagesByApplication = new Map<string, { stageId: string, stageName: string }[]>()
-  const reviewStageByApplicationAndStage = new Map<string, { stageName: string, requiredForProgress: boolean }>()
-  for (const stage of reviewStages) {
-    if (stage.role !== 'final') {
-      const list = requiredStagesByApplication.get(String(stage.applicationId)) || []
-      list.push({ stageId: stage.stageId, stageName: stage.name })
-      requiredStagesByApplication.set(String(stage.applicationId), list)
-    }
-    if (stage.applicationId && stage.stageId) {
-      reviewStageByApplicationAndStage.set(`${String(stage.applicationId)}|${stage.stageId}`, {
-        stageName: stage.name,
-        requiredForProgress: stage.role !== 'final'
-      })
-    }
-  }
-
   const context: ValidationContext = {
-    cycleId,
     referenceDate,
-    allSubmissions: activeSubmissions,
     fullNameGroups,
-    firstLastDobGroups,
-    completedStagesBySubmission,
-    requiredStagesByApplication,
-    reviewStageByApplicationAndStage
+    firstLastDobGroups
   }
 
   await setProgress?.({
@@ -152,7 +114,10 @@ export async function runValidationForCycle(cycleId: string, setProgress?: Progr
         if (seen.has(key)) continue
         seen.add(key)
 
-        if (overrideKeys.has(issueKey(submission.submissionId, issue.type, issue.field))) continue
+        if (
+          overrideKeys.has(issueKey(submission.submissionId, issue.type, issue.field))
+          || (issue.type === 'parent_student_name_swap' && overrideKeys.has(issueKey(submission.submissionId, issue.type, 'FirstName')))
+        ) continue
 
         operations.push({
           updateOne: {
@@ -223,7 +188,7 @@ function checkDobOutOfRange(submission: Submission, context: ValidationContext):
   if (!date) {
     return [{ type: 'dob_out_of_range', severity: 'error', field: 'DOB', message: `Date of birth is not a valid date: ${raw}` }]
   }
-  if (date > new Date()) {
+  if (date > context.referenceDate) {
     return [{ type: 'dob_out_of_range', severity: 'error', field: 'DOB', message: 'Date of birth is in the future' }]
   }
 
@@ -245,41 +210,51 @@ function checkDobOutOfRange(submission: Submission, context: ValidationContext):
 
 function checkStudentNumber(submission: Submission): ValidationIssueInput[] {
   const mapped = submission.mappedFields || {}
-  const isDpscd = ['yes', 'true', '1'].includes(String(mapped.DPSCD || '').toLowerCase())
-  const studentNumber = String(mapped.StudentNumber || '').trim()
+  const isDpscd = isYes(mapped.DPSCD)
+  const studentNumber = String(mapped.StudentNumber ?? '').trim()
 
   if (!isDpscd) return []
 
-  const issues: ValidationIssueInput[] = []
   if (!studentNumber) {
-    issues.push({ type: 'student_number_invalid', severity: 'error', field: 'StudentNumber', message: 'DPSCD applicant is missing a student number' })
-    return issues
+    return [{ type: 'student_number_invalid', severity: 'error', field: 'StudentNumber', message: 'DPSCD applicant is missing a student number' }]
   }
 
-  const digitsOnly = /^\d+$/.test(studentNumber)
-  if (!digitsOnly) {
-    issues.push({ type: 'student_number_invalid', severity: 'error', field: 'StudentNumber', message: 'Student number must be numeric' })
-  } else if (studentNumber.startsWith('0')) {
-    issues.push({ type: 'student_number_invalid', severity: 'warning', field: 'StudentNumber', message: 'Student number starts with a leading zero' })
+  if (!/^\d+$/.test(studentNumber)) {
+    return [{ type: 'student_number_invalid', severity: 'error', field: 'StudentNumber', message: 'DPSCD student number must contain only digits' }]
   }
 
-  if (digitsOnly && studentNumber.length !== 7) {
-    issues.push({ type: 'student_number_length', severity: 'warning', field: 'StudentNumber', message: `Student number has ${studentNumber.length} digits; expected 7` })
+  if (![5, 8].includes(studentNumber.length)) {
+    return [{ type: 'student_number_length', severity: 'warning', field: 'StudentNumber', message: `DPSCD student number has ${studentNumber.length} digits; expected 5 or 8` }]
   }
 
-  return issues
+  return []
 }
 
 function checkParentStudentNameSwap(submission: Submission): ValidationIssueInput[] {
   const mapped = submission.mappedFields || {}
-  const firstName = String(mapped.FirstName || '').trim().toLowerCase()
-  const parentFirstName = String(mapped.ParentFirstName || '').trim().toLowerCase()
+  const fullName = nameTokens(mapped.FullName)
+  const firstName = nameTokens(mapped.FirstName)
+  const lastName = nameTokens(mapped.LastName)
+  if (!fullName.length || !firstName.length || !lastName.length) return []
+  if (containsTokens(fullName, [...firstName, ...lastName])) return []
 
-  if (firstName && parentFirstName && firstName === parentFirstName) {
-    return [{ type: 'parent_student_name_swap', severity: 'warning', field: 'FirstName', message: 'Applicant first name matches parent first name; fields may be swapped' }]
-  }
-
-  return []
+  const parentName = ([
+    ['ParentFirstName', 'ParentLastName'],
+    ['GuardianFirstName', 'GuardianLastName']
+  ] as const).some(([first, last]) => {
+    const parentFirst = nameTokens(mapped[first])
+    const parentLast = nameTokens(mapped[last])
+    return parentFirst.length > 0 && parentLast.length > 0
+      && containsTokens(fullName, [...parentFirst, ...parentLast])
+  })
+  return [{
+    type: 'parent_student_name_swap',
+    severity: 'warning',
+    field: 'FullName',
+    message: parentName
+      ? 'Full name does not contain the student first and last names and appears to contain a parent or guardian name'
+      : 'Full name does not contain the student first and last names'
+  }]
 }
 
 function checkDuplicateApplicant(submission: Submission, context: ValidationContext): ValidationIssueInput[] {
@@ -325,18 +300,6 @@ function checkMissingRequiredDocuments(submission: Submission): ValidationIssueI
   return []
 }
 
-function checkIncompleteReviewStage(submission: Submission, context: ValidationContext): ValidationIssueInput[] {
-  if (!submission.currentStageId) return []
-
-  const stage = context.reviewStageByApplicationAndStage.get(`${submission.applicationId}|${submission.currentStageId}`)
-  if (!stage?.requiredForProgress) return []
-
-  const completed = context.completedStagesBySubmission.get(submission.submissionId) || new Set<string>()
-  if (completed.has(submission.currentStageId)) return []
-
-  return [{ type: 'incomplete_review_stage', severity: 'warning', field: 'currentStageName', message: `Current review stage "${stage.stageName}" is incomplete` }]
-}
-
 function checkGeocoding(submission: Submission): ValidationIssueInput[] {
   const status = submission.geocode?.status
   if (status === 'no_address') {
@@ -349,16 +312,23 @@ function checkGeocoding(submission: Submission): ValidationIssueInput[] {
 }
 
 function parseDate(value: string): Date | null {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value)
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value)
+  if (!iso && !slash) return null
+  if (iso?.[0].includes('T') && Number.isNaN(Date.parse(value))) return null
+  const year = Number(iso?.[1] || slash?.[3])
+  const month = Number(iso?.[2] || slash?.[1])
+  const day = Number(iso?.[3] || slash?.[2])
+  if (year < 1000) return null
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
   return date
 }
 
 function getAgeAt(dob: Date, reference: Date): number {
-  let age = reference.getFullYear() - dob.getFullYear()
-  const monthDiff = reference.getMonth() - dob.getMonth()
-  if (monthDiff < 0 || (monthDiff === 0 && reference.getDate() < dob.getDate())) {
+  let age = reference.getUTCFullYear() - dob.getUTCFullYear()
+  const monthDiff = reference.getUTCMonth() - dob.getUTCMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && reference.getUTCDate() < dob.getUTCDate())) {
     age--
   }
   return age
@@ -371,6 +341,20 @@ function parseGrade(value: string): number | null {
 
 function normalizeName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '').trim()
+}
+
+function nameTokens(value: unknown): string[] {
+  return String(value ?? '').toLowerCase().match(/[a-z0-9]+/g) || []
+}
+
+function containsTokens(name: string[], parts: string[]): boolean {
+  const remaining = [...name]
+  return parts.every((part) => {
+    const index = remaining.indexOf(part)
+    if (index < 0) return false
+    remaining.splice(index, 1)
+    return true
+  })
 }
 
 function normalizeDate(value: string): string {

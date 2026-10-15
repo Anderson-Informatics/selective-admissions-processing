@@ -115,7 +115,7 @@ async function onDelete() {
 </script>
 
 <template>
-  <UContainer class="py-8 max-w-xl">
+  <UContainer class="py-8 max-w-5xl">
     <h1 class="text-2xl font-semibold mb-6">
       Edit Cycle
     </h1>
@@ -174,7 +174,7 @@ async function onDelete() {
         />
       </UFormField>
 
-      <div class="space-y-3 rounded-lg border p-4">
+      <div class="space-y-5 rounded-lg border p-4">
         <div class="flex items-center justify-between">
           <div>
             <h2 class="font-medium">
@@ -200,33 +200,49 @@ async function onDelete() {
         <div
           v-for="(round, index) in state.rounds"
           :key="round.key"
-          class="grid grid-cols-1 md:grid-cols-5 gap-2 items-end"
+          class="grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-2 xl:grid-cols-4"
         >
-          <UFormField label="Key">
+          <UFormField
+            label="Key"
+            class="min-w-0"
+          >
             <UInput
               v-model="round.key"
               placeholder="round-1"
+              class="w-full"
             />
           </UFormField>
-          <UFormField label="Name">
+          <UFormField
+            label="Name"
+            class="min-w-0"
+          >
             <UInput
               v-model="round.name"
               placeholder="Round 1"
+              class="w-full"
             />
           </UFormField>
-          <UFormField label="Start">
+          <UFormField
+            label="Start"
+            class="min-w-0"
+          >
             <UInput
               v-model="round.startDate"
               type="date"
+              class="w-full"
             />
           </UFormField>
-          <UFormField label="End">
+          <UFormField
+            label="End"
+            class="min-w-0"
+          >
             <UInput
               v-model="round.endDate"
               type="date"
+              class="w-full"
             />
           </UFormField>
-          <div class="flex items-center gap-2">
+          <div class="col-span-full flex items-center justify-end gap-2">
             <UCheckbox
               v-model="round.active"
               label="Active"
