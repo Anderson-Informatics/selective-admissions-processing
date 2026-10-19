@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { SelectItem } from '@nuxt/ui'
+import { toRaw } from 'vue'
 import { normalizeConditionGroup } from '~~/shared/routingConditions'
 import ReferenceSelect from './ReferenceSelect.vue'
 import { changeOperator, conditionValueList, newCondition, numericValueList } from './conditionValues'
+import { moveSibling } from './reorderConditions'
 
 interface References {
   stages: SelectItem[]
@@ -44,8 +46,19 @@ const comparisons: Array<{ label: string, value: string }> = [
 ]
 
 const gpaStatuses: Array<{ label: string, value: string }> = ['Complete', 'Incomplete', 'Partial', 'DPSCD Partial'].map(value => ({ label: value, value }))
-const group = computed<any>(() => normalizeConditionGroup(props.modelValue || { operator: 'and', conditions: [] }))
+const group = computed<any>(() => props.modelValue?.operator ? props.modelValue : normalizeConditionGroup(props.modelValue || { operator: 'and', conditions: [] }))
 const numericKinds = ['reviewScore', 'reviewCount', 'reviewSpread']
+const rowKeys = ref<number[]>([])
+let nextRowKey = 0
+let pendingGroup: unknown
+watch(() => props.modelValue, (value) => {
+  if (toRaw(value) === pendingGroup) {
+    pendingGroup = undefined
+    return
+  }
+  const current = normalizeConditionGroup(value || { operator: 'and', conditions: [] }) as { conditions: unknown[] }
+  rowKeys.value = current.conditions.map(() => nextRowKey++)
+}, { immediate: true })
 function numericInput(condition: any): boolean {
   return numericKinds.includes(condition.kind) || ['gt', 'gte', 'lt', 'lte'].includes(condition.op)
 }
@@ -69,9 +82,12 @@ function isUnmapped(condition: any): boolean {
   return Boolean(name) && !mappedReviewFields(condition).some(item => typeof item === 'object' && item !== null && 'value' in item && item.value === name)
 }
 function setGroup(patch: Record<string, unknown>) {
-  emit('update:modelValue', { ...group.value, ...patch })
+  const value = { ...group.value, ...patch }
+  pendingGroup = value
+  emit('update:modelValue', value)
 }
 function add(item: any) {
+  rowKeys.value = [...rowKeys.value, nextRowKey++]
   setGroup({ conditions: [...group.value.conditions, item] })
 }
 function setItem(index: number, item: any) {
@@ -115,7 +131,14 @@ function setValues(index: number, values: string[]) {
   setProperty(index, 'value', numericValueList(group.value.conditions[index], values))
 }
 function remove(index: number) {
+  rowKeys.value = rowKeys.value.filter((_, i) => i !== index)
   setGroup({ conditions: group.value.conditions.filter((_: unknown, i: number) => i !== index) })
+}
+function move(index: number, direction: -1 | 1) {
+  const conditions = moveSibling(group.value.conditions as any[], index, direction)
+  if (conditions === group.value.conditions) return
+  rowKeys.value = moveSibling(rowKeys.value, index, direction)
+  setGroup({ conditions })
 }
 </script>
 
@@ -161,7 +184,7 @@ function remove(index: number) {
     </p>
     <div
       v-for="(item, index) in group.conditions"
-      :key="index"
+      :key="rowKeys[Number(index)]"
       class="space-y-2"
     >
       <UDropdownMenu
@@ -364,15 +387,35 @@ function remove(index: number) {
             This field is not mapped on the selected review form.
           </p>
         </div>
-        <UButton
-          size="xs"
-          icon="i-lucide-trash-2"
-          color="error"
-          variant="ghost"
-          :aria-label="item.operator ? 'Remove group' : 'Remove condition'"
-          :disabled="Boolean(depth) && group.conditions.length === 1"
-          @click="remove(Number(index))"
-        />
+        <div class="flex shrink-0 flex-col items-center">
+          <UButton
+            size="xs"
+            icon="i-lucide-chevron-up"
+            color="neutral"
+            variant="ghost"
+            :aria-label="item.operator ? 'Move group up' : 'Move condition up'"
+            :disabled="Number(index) === 0"
+            @click="move(Number(index), -1)"
+          />
+          <UButton
+            size="xs"
+            icon="i-lucide-chevron-down"
+            color="neutral"
+            variant="ghost"
+            :aria-label="item.operator ? 'Move group down' : 'Move condition down'"
+            :disabled="Number(index) === group.conditions.length - 1"
+            @click="move(Number(index), 1)"
+          />
+          <UButton
+            size="xs"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            :aria-label="item.operator ? 'Remove group' : 'Remove condition'"
+            :disabled="Boolean(depth) && group.conditions.length === 1"
+            @click="remove(Number(index))"
+          />
+        </div>
       </div>
     </div>
   </div>

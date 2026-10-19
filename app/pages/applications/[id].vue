@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 import RoutingConfigEditor from '../../components/routing/RoutingConfigEditor.vue'
+import { copyRoutingConfig, unmappedCopiedReviewFields, type CopyScope, type RoutingConfig } from '../../components/routing/copyRoutingConfig'
 
-interface RoutingConfig {
-  enabled: boolean
-  requiredWhen?: Record<string, unknown>
-  allowedStatuses?: string[]
-  statusRules: unknown[]
-  statusLabels?: Record<string, string>
-  outcomeRules: unknown[]
-  entryActions: unknown[]
-  exitActions: unknown[]
-}
 interface ReviewStage {
   _id?: string
   stageId: string
@@ -39,6 +30,10 @@ const publishing = ref(false)
 const selectedStageIndex = ref<number | null>(null)
 const selectedTemplate = ref('')
 const templateWarnings = ref<string[]>([])
+const copyOpen = ref(false)
+const copySourceId = ref('')
+const copyTargetId = ref('')
+const copyScope = ref<CopyScope>('all')
 const draftState = ref<'saved' | 'saving' | 'error'>('saved')
 const autosaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const draftSaves = new Map<string, Promise<void>>()
@@ -50,6 +45,30 @@ const { data: templates } = await useFetch<Template[]>('/api/applications/templa
 const { data: references } = await useFetch<References>(`/api/applications/${route.params.id}/routing-references`)
 const state = reactive({ name: '', type: 'exam', active: true, stages: [] as ReviewStage[] })
 const selectedStage = computed(() => selectedStageIndex.value == null ? undefined : state.stages[selectedStageIndex.value])
+const copySource = computed(() => state.stages.find(stage => stage.stageId === copySourceId.value))
+const copyTarget = computed(() => state.stages.find(stage => stage.stageId === copyTargetId.value))
+const copySourceItems = computed(() => state.stages.filter(stage => stage.stageId !== copyTargetId.value).map(stage => ({ label: stage.name, value: stage.stageId })))
+const copyScopes: Array<{ label: string, value: CopyScope }> = [
+  { label: 'Entire routing config', value: 'all' },
+  { label: 'Required When', value: 'requiredWhen' },
+  { label: 'Status Rules', value: 'statusRules' },
+  { label: 'Status Labels', value: 'statusLabels' },
+  { label: 'Outcome Rules', value: 'outcomeRules' },
+  { label: 'Entry Actions', value: 'entryActions' },
+  { label: 'Exit Actions', value: 'exitActions' }
+]
+const copyWarnings = computed(() => {
+  if (!copySource.value || !copyTarget.value || !references.value) return []
+  const copied = copyRoutingConfig(
+    copySource.value.routingDraft || copySource.value.routing,
+    copyTarget.value.routingDraft || copyTarget.value.routing,
+    copySource.value.stageId,
+    copyTarget.value.stageId,
+    copyScope.value
+  )
+  const fields = references.value.reviewFields.find(item => item.stageId === copyTarget.value?.stageId)?.fields || []
+  return unmappedCopiedReviewFields(copied, copyTarget.value.stageId, fields.map(item => String(typeof item === 'object' && item !== null && 'value' in item ? item.value : item)), copyScope.value)
+})
 const stageColumns: TableColumn<ReviewStage>[] = [
   { accessorKey: 'order', header: 'Order' },
   { accessorKey: 'name', header: 'Stage' },
@@ -79,6 +98,35 @@ watchEffect(() => {
 
 function selectStage(index: number) {
   selectedStageIndex.value = index
+}
+
+function openCopy() {
+  if (!selectedStage.value) return
+  copyTargetId.value = selectedStage.value.stageId
+  copySourceId.value = ''
+  copyScope.value = 'all'
+  copyOpen.value = true
+}
+
+function applyCopy() {
+  const source = copySource.value
+  const target = copyTarget.value
+  if (!source || !target || !references.value || source.stageId === target.stageId) return
+  const warnings = copyWarnings.value
+  target.routingDraft = copyRoutingConfig(
+    source.routingDraft || source.routing,
+    target.routingDraft || target.routing,
+    source.stageId,
+    target.stageId,
+    copyScope.value
+  )
+  scheduleDraftSave(target)
+  copyOpen.value = false
+  toast.add({
+    title: `${copyScopes.find(item => item.value === copyScope.value)?.label} copied to ${target.name} draft`,
+    description: warnings.length ? `Review fields not mapped on ${target.name}: ${warnings.join(', ')}` : undefined,
+    color: warnings.length ? 'warning' : 'success'
+  })
 }
 
 async function saveDraft(stage: ReviewStage) {
@@ -330,9 +378,20 @@ async function applyTemplate() {
       <aside>
         <UCard class="sticky top-4">
           <template #header>
-            <h2 class="font-semibold">
-              {{ selectedStage?.name || 'Select a stage' }}
-            </h2>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="font-semibold">
+                {{ selectedStage?.name || 'Select a stage' }}
+              </h2>
+              <UButton
+                v-if="selectedStage && state.stages.length > 1"
+                label="Copy from stage"
+                icon="i-lucide-copy"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                @click="openCopy"
+              />
+            </div>
           </template>
           <RoutingConfigEditor
             v-if="selectedStage"
@@ -349,5 +408,54 @@ async function applyTemplate() {
         </UCard>
       </aside>
     </div>
+    <UModal
+      v-model:open="copyOpen"
+      title="Copy routing configuration"
+      :description="`Copy a routing config or section into ${copyTarget?.name || 'this stage'}’s draft.`"
+    >
+      <template #body>
+        <div class="space-y-4">
+          <UFormField label="Copy from">
+            <USelectMenu
+              v-model="copySourceId"
+              :items="copySourceItems"
+              value-key="value"
+              placeholder="Select a stage"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="What to copy">
+            <USelect
+              v-model="copyScope"
+              :items="copyScopes"
+              class="w-full"
+            />
+          </UFormField>
+          <p class="text-sm text-muted">
+            This replaces {{ copyScope === 'all' ? 'the entire routing config' : copyScopes.find(item => item.value === copyScope)?.label }} in {{ copyTarget?.name }}’s draft. Full copies keep the destination’s Routing enabled setting. References to the source stage’s own reviews are updated; other stage references and outcome destinations remain unchanged.
+          </p>
+          <UAlert
+            v-if="copyWarnings.length"
+            title="Review fields not mapped on the destination form"
+            :description="copyWarnings.join(', ')"
+            color="warning"
+            variant="soft"
+          />
+        </div>
+      </template>
+      <template #footer="{ close }">
+        <UButton
+          label="Cancel"
+          color="neutral"
+          variant="outline"
+          @click="close"
+        />
+        <UButton
+          label="Copy into draft"
+          :disabled="!copySource || !copyTarget || !references"
+          @click="applyCopy"
+        />
+      </template>
+    </UModal>
   </UContainer>
 </template>
