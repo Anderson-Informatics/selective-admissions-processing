@@ -200,6 +200,29 @@ describe('GET /api/data/applicants', () => {
     expect(CycleModel.find).not.toHaveBeenCalled()
   })
 
+  it('excludes withdrawn submissions from both the page and total', async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      sort: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockResolvedValue([{ submissionId: 'active', mappedFields: {} }])
+    }
+    vi.mocked(SubmissionModel.find).mockReturnValue(query as never)
+    vi.mocked(SubmissionModel.countDocuments).mockResolvedValue(1)
+
+    const result = await handler({ authorization: 'Bearer private-key' }) as { applicants: { submissionId: string }[], total: number }
+    const filter = vi.mocked(SubmissionModel.find).mock.calls[0]?.[0] as { status?: { $not?: RegExp } }
+
+    expect(SubmissionModel.countDocuments).toHaveBeenCalledWith(filter)
+    expect(filter.status?.$not).toBeInstanceOf(RegExp)
+    expect(filter.status?.$not?.test('withdrawn')).toBe(true)
+    expect(filter.status?.$not?.test('Withdrawn')).toBe(true)
+    expect(filter.status?.$not?.test('submitted')).toBe(false)
+    expect(result.applicants.map(applicant => applicant.submissionId)).toEqual(['active'])
+    expect(result.total).toBe(1)
+  })
+
   it.each([{ page: '0' }, { page: 'abc' }, { page: '9007199254740991' }, { limit: '101' }, { limit: '0' }])(
     'rejects invalid pagination without querying the database: %j',
     async (query) => {

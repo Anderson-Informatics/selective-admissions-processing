@@ -27,14 +27,15 @@ export default defineEventHandler(async (event) => {
   }
 
   await connectDb()
+  const filter = { status: { $not: /^withdrawn$/i } }
   const [submissions, total] = await Promise.all([
-    SubmissionModel.find({})
+    SubmissionModel.find(filter)
       .select('submissionId submissionIdInt completedAt cycleId projectId mappedFields.StudentNumber mappedFields.FirstName mappedFields.LastName mappedFields.FullName mappedFields.DOB mappedFields.ParentFirstName mappedFields.ParentLastName mappedFields.ParentPhone mappedFields.ParentEmail')
       .sort({ _id: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean(),
-    SubmissionModel.countDocuments({})
+    SubmissionModel.countDocuments(filter)
   ])
   const projectIds = [...new Set(submissions.map(submission => submission.projectId).filter((id): id is string => !!id))]
   const cycleIds = [...new Set(submissions.map(submission => submission.cycleId).filter((id): id is string => !!id))]

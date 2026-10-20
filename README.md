@@ -59,12 +59,16 @@ pnpm preview
 
 ## Applicant Data API
 
+For request examples, field definitions, pagination, and errors, see
+[Applicant Data API](APPLICANTS_API.md).
+
 Set `NUXT_DATA_KEY` and `NUXT_DATA_SECRET` on the server (see `.env.example`).
 The `GET /api/data/applicants` endpoint does not require a user session; callers
 must send `Authorization: Bearer <DATA_KEY>` over HTTPS. Keep `DATA_SECRET` private
 to the server. If either variable is unset, the endpoint is unavailable.
 
-Results include submissions from all cycles and statuses, sorted by database ID. The JSON
+Results include submissions from all cycles except those with status `withdrawn`
+(case-insensitive), sorted by database ID. The JSON
 response contains `applicants`, `total`, `page`, and `limit`. Use `?page=1&limit=100`
 to paginate (default limit 100, maximum 100). Each applicant contains only
 `submissionId`, `submissionIdInt`, `submissionDate`, `StudentNumber`, `FirstName`,
