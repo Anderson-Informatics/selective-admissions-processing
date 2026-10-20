@@ -3,9 +3,9 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 interface Cycle { _id: string, year: string, name: string, active: boolean }
 interface Application { _id: string, name: string }
-interface PreviewMove { submissionId: string, applicationName: string, currentStage: string, proposedStage: string, reason: string, backward: boolean }
+interface PreviewMove { submissionId: string, applicantName: string, applicationName: string, currentStage: string, proposedStage: string, reason: string, backward: boolean }
 interface LedgerEntry { stageId: string, name: string, order: number, role: string, required: boolean, status: string, complete: boolean }
-interface SubmissionDetail { submissionId: string, applicationName: string, currentStage: string, proposedStage?: string | null, decision: string, backward: boolean, diagnostics: Array<{ code: string, message: string }>, reviewCompletion: LedgerEntry[] }
+interface SubmissionDetail { submissionId: string, applicantName: string, applicationName: string, currentStage: string, proposedStage?: string | null, decision: string, backward: boolean, diagnostics: Array<{ code: string, message: string }>, reviewCompletion: LedgerEntry[] }
 interface PreviewResult {
   evaluated: number
   noAction: number
@@ -18,9 +18,12 @@ interface PreviewResult {
 
 const toast = useToast()
 const { data: cycles } = await useFetch<Cycle[]>('/api/cycles')
+const { data: labels, error: labelsError } = await useFetch<SelectItem[]>('/api/routing/labels')
 const selectedCycleId = ref('')
 const ALL_APPLICATIONS = '__all__'
+const ALL_LABELS = '__all__'
 const selectedApplicationId = ref(ALL_APPLICATIONS)
+const selectedLabelId = ref(ALL_LABELS)
 const limit = ref(250)
 const loading = ref(false)
 const result = ref<PreviewResult | null>(null)
@@ -48,9 +51,17 @@ const applicationItems = computed<SelectItem[]>(() => [
   { label: 'All applications', value: ALL_APPLICATIONS },
   ...(applications.value || []).map(application => ({ label: application.name, value: application._id }))
 ])
+const labelItems = computed<SelectItem[]>(() => [
+  { label: 'All labels', value: ALL_LABELS },
+  ...(labels.value || [])
+])
 
 watch(selectedCycleId, () => {
   selectedApplicationId.value = ALL_APPLICATIONS
+  selectedLabelId.value = ALL_LABELS
+  result.value = null
+})
+watch([selectedApplicationId, selectedLabelId], () => {
   result.value = null
 })
 
@@ -63,6 +74,7 @@ async function previewRouting() {
       body: {
         cycleId: selectedCycleId.value,
         applicationId: selectedApplicationId.value === ALL_APPLICATIONS ? undefined : selectedApplicationId.value,
+        labelId: selectedLabelId.value === ALL_LABELS ? undefined : selectedLabelId.value,
         limit: limit.value
       }
     })
@@ -76,7 +88,7 @@ async function previewRouting() {
 }
 
 const columns: TableColumn<PreviewMove>[] = [
-  { accessorKey: 'submissionId', header: 'Submission' },
+  { accessorKey: 'applicantName', header: 'Applicant Name' },
   { accessorKey: 'applicationName', header: 'Application' },
   { accessorKey: 'currentStage', header: 'Current stage' },
   { accessorKey: 'proposedStage', header: 'Proposed stage' },
@@ -85,7 +97,7 @@ const columns: TableColumn<PreviewMove>[] = [
 ]
 
 const detailColumns: TableColumn<SubmissionDetail>[] = [
-  { accessorKey: 'submissionId', header: 'Submission' },
+  { accessorKey: 'applicantName', header: 'Applicant Name' },
   { accessorKey: 'currentStage', header: 'Current stage' },
   { accessorKey: 'proposedStage', header: 'Next stage' },
   { accessorKey: 'decision', header: 'Decision' },
@@ -122,6 +134,13 @@ function openDetail(detail: SubmissionDetail) {
           class="w-72"
         />
       </UFormField>
+      <UFormField label="Label">
+        <USelect
+          v-model="selectedLabelId"
+          :items="labelItems"
+          class="w-72"
+        />
+      </UFormField>
       <UFormField label="Maximum submissions">
         <UInput
           v-model.number="limit"
@@ -139,6 +158,14 @@ function openDetail(detail: SubmissionDetail) {
       />
     </div>
 
+    <UAlert
+      v-if="labelsError"
+      title="Labels could not be loaded"
+      description="Check your session and try again."
+      color="error"
+      variant="subtle"
+      class="mb-6"
+    />
     <UAlert
       v-if="applicationsError"
       title="Applications could not be loaded"
@@ -280,7 +307,7 @@ function openDetail(detail: SubmissionDetail) {
           class="space-y-4"
         >
           <div class="text-sm text-muted">
-            {{ selectedDetail.submissionId }} — {{ selectedDetail.currentStage }} → {{ selectedDetail.proposedStage || 'No move' }}
+            {{ selectedDetail.applicantName }} — {{ selectedDetail.currentStage }} → {{ selectedDetail.proposedStage || 'No move' }}
           </div>
           <UTable
             :data="selectedDetail.reviewCompletion"

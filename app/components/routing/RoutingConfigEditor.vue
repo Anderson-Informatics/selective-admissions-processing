@@ -6,6 +6,7 @@ import ConditionGroupEditor from './ConditionGroupEditor.vue'
 import OutcomeRulesEditor from './OutcomeRulesEditor.vue'
 import ReferenceSelect from './ReferenceSelect.vue'
 import StatusRulesEditor from './StatusRulesEditor.vue'
+import { routingSectionPresence } from './routingSectionPresence'
 
 const props = defineProps<{
   modelValue: any
@@ -13,6 +14,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: any] }>()
 const config = computed(() => props.modelValue || { enabled: false, statusRules: [], outcomeRules: [], entryActions: [], exitActions: [] })
+const sectionPresence = computed(() => routingSectionPresence(config.value))
 const statusItems = computed(() => Object.entries(config.value.statusLabels || {}).map(([status, labelId]) => ({ status, labelId })))
 function update(patch: Record<string, unknown>) {
   emit('update:modelValue', { ...config.value, ...patch })
@@ -54,6 +56,13 @@ function removeStatusLabel(status: string) {
     >
       <summary class="cursor-pointer font-medium">
         Required When
+        <UBadge
+          :label="sectionPresence.requiredWhen ? 'Configured' : 'Not configured'"
+          :color="sectionPresence.requiredWhen ? 'success' : 'neutral'"
+          variant="subtle"
+          size="sm"
+          class="ms-2 align-middle"
+        />
       </summary>
       <div class="pt-4 space-y-3">
         <p class="text-sm text-muted">
@@ -71,6 +80,13 @@ function removeStatusLabel(status: string) {
     <details class="rounded-lg border p-4">
       <summary class="cursor-pointer font-medium">
         Status Rules
+        <UBadge
+          :label="sectionPresence.statusRules ? 'Configured' : 'Not configured'"
+          :color="sectionPresence.statusRules ? 'success' : 'neutral'"
+          variant="subtle"
+          size="sm"
+          class="ms-2 align-middle"
+        />
       </summary>
       <div class="pt-4 space-y-3">
         <p class="text-sm text-muted">
@@ -88,6 +104,13 @@ function removeStatusLabel(status: string) {
     <details class="rounded-lg border p-4">
       <summary class="cursor-pointer font-medium">
         Status Labels
+        <UBadge
+          :label="sectionPresence.statusLabels ? 'Configured' : 'Not configured'"
+          :color="sectionPresence.statusLabels ? 'success' : 'neutral'"
+          variant="subtle"
+          size="sm"
+          class="ms-2 align-middle"
+        />
       </summary>
       <div class="pt-4 space-y-2">
         <p class="text-sm text-muted">
@@ -137,6 +160,13 @@ function removeStatusLabel(status: string) {
     <details class="rounded-lg border p-4">
       <summary class="cursor-pointer font-medium">
         Outcome Rules
+        <UBadge
+          :label="sectionPresence.outcomeRules ? 'Configured' : 'Not configured'"
+          :color="sectionPresence.outcomeRules ? 'success' : 'neutral'"
+          variant="subtle"
+          size="sm"
+          class="ms-2 align-middle"
+        />
       </summary>
       <div class="pt-4 space-y-3">
         <p class="text-sm text-muted">
@@ -153,6 +183,13 @@ function removeStatusLabel(status: string) {
     <details class="rounded-lg border p-4">
       <summary class="cursor-pointer font-medium">
         Entry Actions
+        <UBadge
+          :label="sectionPresence.entryActions ? 'Configured' : 'Not configured'"
+          :color="sectionPresence.entryActions ? 'success' : 'neutral'"
+          variant="subtle"
+          size="sm"
+          class="ms-2 align-middle"
+        />
       </summary>
       <div class="pt-4 space-y-3">
         <p class="text-sm text-muted">
@@ -170,6 +207,13 @@ function removeStatusLabel(status: string) {
     <details class="rounded-lg border p-4">
       <summary class="cursor-pointer font-medium">
         Exit Actions
+        <UBadge
+          :label="sectionPresence.exitActions ? 'Configured' : 'Not configured'"
+          :color="sectionPresence.exitActions ? 'success' : 'neutral'"
+          variant="subtle"
+          size="sm"
+          class="ms-2 align-middle"
+        />
       </summary>
       <div class="pt-4 space-y-3">
         <p class="text-sm text-muted">

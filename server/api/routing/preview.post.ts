@@ -5,12 +5,14 @@ import { ReviewModel } from '../../models/Review'
 import { ReviewStageModel } from '../../models/ReviewStage'
 import { SubmissionModel } from '../../models/Submission'
 import { normalizeRoutingConfig } from '../../utils/routingConfig'
+import { applicantName, routingPreviewFilter } from '../../utils/routingPreview'
 import { resolveCycleRound } from '../../utils/cycleRounds'
 import { computeReviewCompletion, routeSubmission, type RoutingContext, type RoutingStage } from '../../utils/routingEvaluator'
 
 interface PreviewBody {
   cycleId?: string
   applicationId?: string
+  labelId?: string
   limit?: number
 }
 
@@ -19,9 +21,9 @@ export default defineEventHandler(async (event) => {
   await requireAuth(event)
   const body = await readBody<PreviewBody>(event)
   if (!body.cycleId) throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
+  if (body.labelId != null && typeof body.labelId !== 'string') throw createError({ statusCode: 400, statusMessage: 'labelId must be a string' })
 
-  const filter: Record<string, unknown> = { cycleId: body.cycleId }
-  if (body.applicationId) filter.applicationId = body.applicationId
+  const filter = routingPreviewFilter(body.cycleId, body.applicationId, body.labelId)
   const limit = Math.max(1, Math.min(body.limit || 250, 500))
   const cycle = await CycleModel.findById(body.cycleId).lean()
   const rounds = cycle?.rounds || []
@@ -56,6 +58,7 @@ export default defineEventHandler(async (event) => {
     const routingStages = stagesByApplication.get(String(submission.applicationId)) || []
     const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
     const mappedFields = submission.mappedFields || {}
+    const name = applicantName(mappedFields, submission.submissionId)
     const submissionDate = mappedFields.submissionDate || mappedFields.SubmissionDate || submission.submissionDate
     const round = resolveCycleRound(submissionDate, rounds)
     const context: RoutingContext = {
@@ -84,6 +87,7 @@ export default defineEventHandler(async (event) => {
     diagnostics.push(...decision.diagnostics.map(diagnostic => ({ submissionId: submission.submissionId, ...diagnostic })))
     submissionDetails.push({
       submissionId: submission.submissionId,
+      applicantName: name,
       applicationName: applicationNames.get(String(submission.applicationId)) || String(submission.applicationId),
       currentStage: current?.name || submission.currentStageName || 'Unknown',
       proposedStage: target?.name || decision.toStageId || null,
@@ -95,6 +99,7 @@ export default defineEventHandler(async (event) => {
     if (decision.action === 'move') {
       proposedMoves.push({
         submissionId: submission.submissionId,
+        applicantName: name,
         applicationId: String(submission.applicationId),
         applicationName: applicationNames.get(String(submission.applicationId)) || String(submission.applicationId),
         currentStage: current?.name || submission.currentStageName || 'Unknown',

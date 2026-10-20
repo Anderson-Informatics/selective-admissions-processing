@@ -45,7 +45,7 @@ const comparisons: Array<{ label: string, value: string }> = [
   { label: 'is blank', value: 'isNull' }
 ]
 
-const gpaStatuses: Array<{ label: string, value: string }> = ['Complete', 'Incomplete', 'Partial', 'DPSCD Partial'].map(value => ({ label: value, value }))
+const gpaStatuses: Array<{ label: string, value: string }> = ['Complete', 'Incomplete', 'Partial', 'DPSCD Partial', 'OOD Partial'].map(value => ({ label: value, value }))
 const group = computed<any>(() => props.modelValue?.operator ? props.modelValue : normalizeConditionGroup(props.modelValue || { operator: 'and', conditions: [] }))
 const numericKinds = ['reviewScore', 'reviewCount', 'reviewSpread']
 const rowKeys = ref<number[]>([])

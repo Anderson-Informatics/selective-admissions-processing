@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildReviewCompletionForSubmission } from './reviewCompletionRefresh'
-import { computeReviewCompletion, routeSubmission, type RoutingContext, type RoutingStage } from './routingEvaluator'
+import { computeReviewCompletion, deriveGpaStatus, evaluateCondition, routeSubmission, type RoutingContext, type RoutingStage } from './routingEvaluator'
 
 const stage = (stageId: string, order: number, role: RoutingStage['role'], routing: Partial<RoutingStage['routing']> = {}): RoutingStage => ({
   stageId,
@@ -30,6 +30,27 @@ const context = (overrides: Partial<RoutingContext> = {}): RoutingContext => ({
 })
 
 describe('review completion evaluator', () => {
+  it('classifies an uploaded Opt-In GPA with explicitly insufficient attendance as OOD Partial', () => {
+    const partial = context({
+      submission: { ...context().submission, mappedFields: { CumulativeGPA: 3.5 } },
+      gpa: { optIn: { enrolledMinTerms: 'no', enrolledMinTermsFlag: false, termsEnrolled: 2, cumulativeGpa: 3.2 } }
+    })
+
+    expect(deriveGpaStatus(partial)).toBe('OOD Partial')
+    expect(evaluateCondition({ kind: 'gpaStatus', op: 'eq', value: 'OOD Partial' }, partial)).toBe(true)
+    expect(buildReviewCompletionForSubmission(partial.submission, [], [], partial.gpa).gpaStatus).toBe('OOD Partial')
+  })
+
+  it('does not classify sufficient or unanswered Opt-In attendance as OOD Partial', () => {
+    for (const attendance of ['yes', ''] as const) {
+      expect(deriveGpaStatus(context({
+        gpa: { optIn: { enrolledMinTerms: attendance, enrolledMinTermsFlag: attendance === 'yes', cumulativeGpa: 3.2 } }
+      }))).toBe('Complete')
+    }
+    expect(deriveGpaStatus(context({ gpa: { dpscd: { quartersAvailable: 4 } } }))).toBe('DPSCD Partial')
+    expect(deriveGpaStatus(context())).toBe('Incomplete')
+  })
+
   it('builds a persistence-ready ledger from plain submission data', () => {
     const result = buildReviewCompletionForSubmission({
       submissionId: 'sub-1',

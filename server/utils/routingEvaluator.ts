@@ -167,6 +167,7 @@ function getStageReviews(context: RoutingContext, condition: ConditionValue): Ro
 export function deriveGpaStatus(context: RoutingContext): string {
   if (context.gpaStatus) return context.gpaStatus
   const fields = context.submission.mappedFields
+  if (context.gpa?.optIn?.enrolledMinTerms?.trim().toLowerCase() === 'no') return 'OOD Partial'
   const cumulative = fields.CumulativeGPA ?? fields.cumulativeGPA ?? context.gpa?.dpscd?.cumulativeGpa ?? context.gpa?.optIn?.cumulativeGpa
   const quarters = context.gpa?.dpscd?.quartersAvailable
   const terms = context.gpa?.optIn?.termsEnrolled
