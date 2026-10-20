@@ -28,8 +28,14 @@ export interface Job {
   parentJobId?: Types.ObjectId
   formId?: string
   formName?: string
-  payload: any
-  result?: any
+  payload: {
+    uploadId?: string
+    applicationId?: string
+    batchSize?: number
+    dryRun?: boolean
+    force?: boolean
+  }
+  result?: { entries?: number, forms?: JobFormResult[] } & Record<string, unknown>
   error?: string
   progress?: JobProgress
   attempts: number

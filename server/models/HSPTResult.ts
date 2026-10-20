@@ -14,7 +14,7 @@ export interface HSPTResult {
   gender: string
   age: string
   birth: string
-  birthDate?: Date
+  birthDate?: Date | null
   optCd: string
   rdrs: number
   mtrs: number

@@ -12,8 +12,8 @@ export interface FormEntry {
   completedAt?: Date
   createdBy?: string
   createdAt?: Date
-  fieldData: any[]
-  mappedData: any
+  fieldData: unknown[]
+  mappedData: Record<string, unknown>
   isMapped: boolean
   createdAtTimestamp?: Date
   updatedAtTimestamp?: Date

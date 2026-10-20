@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
     HSPTResultModel.countDocuments(filter)
   ])
 
-  const submissionIds = [...new Set(results.map(r => r.linkedSubmissionId).filter(Boolean))]
+  const submissionIds = [...new Set(results.map(r => r.linkedSubmissionId).filter((id): id is string => !!id))]
   const submissions = await SubmissionModel.find({
     submissionId: { $in: submissionIds }
   }).select('submissionId submissionIdInt mappedFields').lean()

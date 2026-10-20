@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   await requireAuth(event)
   setResponseHeader(event, 'Cache-Control', 'no-store')
   const { cycleId } = getQuery(event) as { cycleId?: string }
-  const filter: any = { parentJobId: { $exists: false } }
+  const filter: { parentJobId: { $exists: boolean }, cycleId?: string } = { parentJobId: { $exists: false } }
   if (cycleId) filter.cycleId = cycleId
 
   return JobModel.find(filter)

@@ -43,7 +43,7 @@ export async function getMappedFormManifest(cycleId: string): Promise<MappedForm
   const nameByFormId: Record<string, string> = {}
   for (const item of metadata) {
     if (!nameByFormId[item.externalId]) {
-      nameByFormId[item.externalId] = item.data?.name || item.name
+      nameByFormId[item.externalId] = typeof item.data?.name === 'string' ? item.data.name : item.name
     }
   }
 

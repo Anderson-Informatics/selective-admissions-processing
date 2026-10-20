@@ -1,6 +1,6 @@
 import { dispatchPendingJobs } from '../lib/dispatch'
 
-export default async function handler(request: Request, context: any) {
+export default async function handler(request: Request, context: { site?: { url?: string } }) {
   const secret = request.headers.get('x-job-dispatch-secret')
   if (!process.env.NUXT_JOB_DISPATCH_SECRET || secret !== process.env.NUXT_JOB_DISPATCH_SECRET) {
     return new Response('Unauthorized', { status: 401 })

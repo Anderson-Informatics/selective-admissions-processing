@@ -57,6 +57,23 @@ Locally preview production build:
 pnpm preview
 ```
 
+## Applicant Data API
+
+Set `NUXT_DATA_KEY` and `NUXT_DATA_SECRET` on the server (see `.env.example`).
+The `GET /api/data/applicants` endpoint does not require a user session; callers
+must send `Authorization: Bearer <DATA_KEY>` over HTTPS. Keep `DATA_SECRET` private
+to the server. If either variable is unset, the endpoint is unavailable.
+
+Results include submissions from all cycles and statuses, sorted by database ID. The JSON
+response contains `applicants`, `total`, `page`, and `limit`. Use `?page=1&limit=100`
+to paginate (default limit 100, maximum 100). Each applicant contains only
+`submissionId`, `submissionIdInt`, `submissionDate`, `StudentNumber`, `FirstName`,
+`LastName`, `FullName`, `DOB`, `ParentFirstName`, `ParentLastName`, `ParentPhone`,
+`ParentEmail`, `Application`, and `Year`; missing values are `null`.
+`submissionDate` comes from the submission's `completedAt` value. `Application`
+is the synced Submittable project name; `Year` is the school-year string stored
+in the submission's cycle (not its `cycleId`).
+
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
 
 ## Renovate integration

@@ -1,4 +1,4 @@
-import type { FilterQuery } from 'mongoose'
+import type { QueryFilter } from 'mongoose'
 import { SubmissionModel } from '~~/server/models/Submission'
 import { ValidationIssueModel, type ValidationIssue } from '~~/server/models/ValidationIssue'
 
@@ -30,10 +30,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
   }
 
-  const filter: FilterQuery<ValidationIssue> = { cycleId }
+  const filter: QueryFilter<ValidationIssue> = { cycleId }
   if (applicationId) filter.applicationId = applicationId
-  if (severity) filter.severity = severity
-  if (status) filter.status = status
+  if (severity) filter.severity = severity as ValidationIssue['severity']
+  if (status) filter.status = status as ValidationIssue['status']
   if (type) filter.type = type
   if (q?.trim()) {
     const pattern = new RegExp(q.trim(), 'i')
@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
     }).select('submissionId').lean()
     const matchingSubmissionIds = matchingSubmissions.map(s => s.submissionId)
 
-    const or: FilterQuery<ValidationIssue>[] = [
+    const or: QueryFilter<ValidationIssue>[] = [
       { submissionId: pattern },
       { message: pattern },
       { type: pattern }

@@ -190,18 +190,46 @@ const columns = [
     </h1>
 
     <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start">
-      <UFormField label="Admission cycle" class="w-full sm:w-72">
-        <USelect v-model="selectedCycleId" :items="(cycles || []).map(c => ({ label: `${c.year} — ${c.name}`, value: c._id }))" placeholder="Select a cycle" />
+      <UFormField
+        label="Admission cycle"
+        class="w-full sm:w-72"
+      >
+        <USelect
+          v-model="selectedCycleId"
+          :items="(cycles || []).map(c => ({ label: `${c.year} — ${c.name}`, value: c._id }))"
+          placeholder="Select a cycle"
+        />
       </UFormField>
 
-      <UFormField label="Application" class="w-full sm:w-96">
-        <USelect v-model="selectedApplicationId" :items="applicationItems" placeholder="Filter by application" />
+      <UFormField
+        label="Application"
+        class="w-full sm:w-96"
+      >
+        <USelect
+          v-model="selectedApplicationId"
+          :items="applicationItems"
+          placeholder="Filter by application"
+        />
       </UFormField>
 
-      <UFormField label="Search" class="w-full sm:w-80 sm:ml-auto">
-        <form class="flex gap-2 w-full" @submit.prevent="doSearch">
-          <UInput v-model="search" placeholder="Name, email, or submission ID" class="w-full" />
-          <UButton type="submit" icon="i-lucide-search" color="neutral" />
+      <UFormField
+        label="Search"
+        class="w-full sm:w-80 sm:ml-auto"
+      >
+        <form
+          class="flex gap-2 w-full"
+          @submit.prevent="doSearch"
+        >
+          <UInput
+            v-model="search"
+            placeholder="Name, email, or submission ID"
+            class="w-full"
+          />
+          <UButton
+            type="submit"
+            icon="i-lucide-search"
+            color="neutral"
+          />
         </form>
       </UFormField>
     </div>
@@ -270,7 +298,10 @@ const columns = [
       </template>
     </UTable>
 
-    <div v-if="data?.submissions.length" class="flex items-center justify-between">
+    <div
+      v-if="data?.submissions.length"
+      class="flex items-center justify-between"
+    >
       <UButton
         color="neutral"
         variant="outline"
@@ -292,9 +323,17 @@ const columns = [
       </UButton>
     </div>
 
-    <UModal v-model:open="modalOpen" title="Submission details" description="Mapped fields from this submission." :ui="{ content: '!max-w-4xl' }">
+    <UModal
+      v-model:open="modalOpen"
+      title="Submission details"
+      description="Mapped fields from this submission."
+      :ui="{ content: '!max-w-4xl' }"
+    >
       <template #body>
-        <div v-if="selectedSubmission" class="space-y-4">
+        <div
+          v-if="selectedSubmission"
+          class="space-y-4"
+        >
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span class="text-muted">Submission ID:</span>
@@ -382,7 +421,11 @@ const columns = [
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="[key, value] in mappedFieldEntries" :key="key" class="border-t">
+                <tr
+                  v-for="[key, value] in mappedFieldEntries"
+                  :key="key"
+                  class="border-t"
+                >
                   <td class="p-2 font-medium">
                     {{ key }}
                   </td>
@@ -397,7 +440,12 @@ const columns = [
       </template>
 
       <template #footer="{ close }">
-        <UButton color="neutral" variant="outline" label="Close" @click="close" />
+        <UButton
+          color="neutral"
+          variant="outline"
+          label="Close"
+          @click="close"
+        />
       </template>
     </UModal>
   </UContainer>

@@ -213,9 +213,20 @@ function statusColor(issue: ValidationIssue) {
       </UFormField>
 
       <UFormField label="Search">
-        <form class="flex gap-2 w-full" @submit.prevent="doSearch">
-          <UInput v-model="search" placeholder="Submission, type, or message" class="w-full" />
-          <UButton type="submit" icon="i-lucide-search" color="neutral" />
+        <form
+          class="flex gap-2 w-full"
+          @submit.prevent="doSearch"
+        >
+          <UInput
+            v-model="search"
+            placeholder="Submission, type, or message"
+            class="w-full"
+          />
+          <UButton
+            type="submit"
+            icon="i-lucide-search"
+            color="neutral"
+          />
         </form>
       </UFormField>
     </div>
@@ -247,7 +258,11 @@ function statusColor(issue: ValidationIssue) {
       </template>
 
       <template #severity-cell="{ row }">
-        <UBadge :label="row.original.severity" :color="severityColor(row.original.severity)" variant="subtle" />
+        <UBadge
+          :label="row.original.severity"
+          :color="severityColor(row.original.severity)"
+          variant="subtle"
+        />
       </template>
 
       <template #message-cell="{ row }">
@@ -257,7 +272,11 @@ function statusColor(issue: ValidationIssue) {
       </template>
 
       <template #status-cell="{ row }">
-        <UBadge :label="statusLabel(row.original)" :color="statusColor(row.original)" variant="subtle" />
+        <UBadge
+          :label="statusLabel(row.original)"
+          :color="statusColor(row.original)"
+          variant="subtle"
+        />
       </template>
 
       <template #updatedAt-cell="{ row }">
@@ -277,7 +296,10 @@ function statusColor(issue: ValidationIssue) {
       </template>
     </UTable>
 
-    <div v-if="data?.issues.length" class="flex items-center justify-between">
+    <div
+      v-if="data?.issues.length"
+      class="flex items-center justify-between"
+    >
       <UButton
         color="neutral"
         variant="outline"

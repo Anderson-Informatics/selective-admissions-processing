@@ -11,28 +11,6 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
-  icon: {
-    clientBundle: {
-      scan: true,
-      icons: [
-        'lucide:plus',
-        'lucide:pencil',
-        'lucide:trash-2',
-        'lucide:copy',
-        'lucide:loader',
-        'lucide:search',
-        'lucide:save',
-        'lucide:eye',
-        'lucide:map-pin',
-        'lucide:refresh-cw'
-      ]
-    }
-  },
-
-  routeRules: {
-    '/': { prerender: false }
-  },
-
   runtimeConfig: {
     mongodbUri: '',
     mongodbLookupUri: '',
@@ -42,6 +20,8 @@ export default defineNuxtConfig({
     hereApiKey: '',
     authUsers: '',
     authSecret: '',
+    dataKey: '',
+    dataSecret: '',
     msalTenantId: '',
     msalClientId: '',
     msalClientSecret: '',
@@ -57,6 +37,10 @@ export default defineNuxtConfig({
     }
   },
 
+  routeRules: {
+    '/': { prerender: false }
+  },
+
   compatibilityDate: '2026-06-30',
 
   eslint: {
@@ -65,6 +49,24 @@ export default defineNuxtConfig({
         commaDangle: 'never',
         braceStyle: '1tbs'
       }
+    }
+  },
+
+  icon: {
+    clientBundle: {
+      scan: true,
+      icons: [
+        'lucide:plus',
+        'lucide:pencil',
+        'lucide:trash-2',
+        'lucide:copy',
+        'lucide:loader',
+        'lucide:search',
+        'lucide:save',
+        'lucide:eye',
+        'lucide:map-pin',
+        'lucide:refresh-cw'
+      ]
     }
   }
 })

@@ -1,6 +1,6 @@
-import type { HydratedDocument } from 'mongoose'
+import type { AnyBulkWriteOperation, HydratedDocument } from 'mongoose'
 import { JobModel, type Job, type JobProgress, type JobStatus, type JobType } from '../models/Job'
-import { MetadataModel } from '../models/Metadata'
+import { MetadataModel, type Metadata } from '../models/Metadata'
 import { HSPTUploadModel } from '../models/HSPTUpload'
 import { extractFormSubmissions } from './extraction'
 import { parseAndUpsertHSPTCsv, previewHSPTCsv, previewHSPTMatching, runHSPTMatching } from './hspt'
@@ -28,7 +28,7 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
 
 interface HandlerResult {
   status?: JobStatus
-  result: any
+  result: unknown
 }
 
 interface JobContext {
@@ -37,7 +37,7 @@ interface JobContext {
   hereApiKey?: string
 }
 
-export async function createJob(type: JobType, cycleId: string, createdBy: string, payload: any = {}) {
+export async function createJob(type: JobType, cycleId: string, createdBy: string, payload: Job['payload'] = {}) {
   return JobModel.create({ type, status: 'pending', cycleId, createdBy, payload })
 }
 
@@ -79,8 +79,8 @@ export async function runJob(job: HydratedDocument<Job>, options: { submittable?
       }
     })
     return { status, result: output.result }
-  } catch (error: any) {
-    const message = error.message || String(error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
     await JobModel.findByIdAndUpdate(job._id, {
       $set: {
         status: 'failed',
@@ -126,18 +126,18 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
     })
 
     const syncedAt = new Date()
-    const operations: any[] = []
+    const operations: AnyBulkWriteOperation<Metadata>[] = []
     for (const project of projects) {
-      operations.push({ updateOne: { filter: { type: 'project', externalId: project.projectId }, update: { $set: { cycleId: job.cycleId, name: project.name, data: project, syncedAt } }, upsert: true } })
+      operations.push({ updateOne: { filter: { type: 'project', externalId: project.projectId }, update: { $set: { cycleId: job.cycleId, name: project.name, data: { ...project }, syncedAt } }, upsert: true } })
     }
     for (const form of forms) {
-      operations.push({ updateOne: { filter: { type: 'form', externalId: form.formId }, update: { $set: { cycleId: job.cycleId, name: form.name, data: form, syncedAt } }, upsert: true } })
+      operations.push({ updateOne: { filter: { type: 'form', externalId: form.formId }, update: { $set: { cycleId: job.cycleId, name: form.name, data: { ...form }, syncedAt } }, upsert: true } })
     }
     for (const label of labels) {
-      operations.push({ updateOne: { filter: { type: 'label', externalId: label.labelId }, update: { $set: { cycleId: job.cycleId, name: label.name, data: label, syncedAt } }, upsert: true } })
+      operations.push({ updateOne: { filter: { type: 'label', externalId: label.labelId }, update: { $set: { cycleId: job.cycleId, name: label.name, data: { ...label }, syncedAt } }, upsert: true } })
     }
     for (const member of team) {
-      operations.push({ updateOne: { filter: { type: 'team', externalId: member.userId }, update: { $set: { cycleId: job.cycleId, name: `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.email, data: member, syncedAt } }, upsert: true } })
+      operations.push({ updateOne: { filter: { type: 'team', externalId: member.userId }, update: { $set: { cycleId: job.cycleId, name: `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.email, data: { ...member }, syncedAt } }, upsert: true } })
     }
 
     await setProgress({ phase: 'writing', total: operations.length, processed: 0, message: `Writing ${operations.length} metadata records` })

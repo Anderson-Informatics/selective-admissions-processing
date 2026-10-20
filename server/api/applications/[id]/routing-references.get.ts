@@ -26,7 +26,8 @@ export default defineEventHandler(async (event) => {
   const canonicalFields = [...new Set(mappings.filter(mapping => formIds.has(mapping.formId)).map(mapping => mapping.canonicalName).filter(Boolean))].sort()
   const reviewFields = stages.map((stage) => {
     const form = forms.find(item => item.externalId === stage.formId)
-    const formLabels = new Map<string, string>((form?.data?.fields || []).map((field: { formFieldId: string, label?: string }) => [field.formFieldId, field.label || '']))
+    const formFields = form?.data?.fields
+    const formLabels = new Map<string, string>((Array.isArray(formFields) ? formFields : []).map((field: { formFieldId: string, label?: string }) => [field.formFieldId, field.label || '']))
     const fields = mappings.filter(mapping => mapping.formId === stage.formId && mapping.canonicalName)
     const unique = new Map(fields.map((mapping) => {
       const [fieldId, subField] = mapping.fieldId.split(':')

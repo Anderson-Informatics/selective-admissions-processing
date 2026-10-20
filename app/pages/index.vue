@@ -106,12 +106,23 @@ function statusColor(jobStatus: string) {
           Admissions pipeline status for the selected cycle.
         </p>
       </div>
-      <UFormField label="Admission cycle" class="w-full sm:w-72">
-        <USelect v-model="selectedCycleId" :items="cycleItems" placeholder="Select a cycle" class="w-full" />
+      <UFormField
+        label="Admission cycle"
+        class="w-full sm:w-72"
+      >
+        <USelect
+          v-model="selectedCycleId"
+          :items="cycleItems"
+          placeholder="Select a cycle"
+          class="w-full"
+        />
       </UFormField>
     </div>
 
-    <div v-if="status === 'pending'" class="py-12 text-center text-muted">
+    <div
+      v-if="status === 'pending'"
+      class="py-12 text-center text-muted"
+    >
       Loading dashboard...
     </div>
 
@@ -125,7 +136,10 @@ function statusColor(jobStatus: string) {
 
     <template v-else-if="dashboard">
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <UCard v-for="application in dashboard.byApplication" :key="application.applicationId">
+        <UCard
+          v-for="application in dashboard.byApplication"
+          :key="application.applicationId"
+        >
           <p class="truncate text-sm text-muted">
             {{ application.name }}
           </p>
@@ -156,7 +170,13 @@ function statusColor(jobStatus: string) {
           <p class="mt-2 text-3xl font-semibold">
             {{ dashboard.totals.activeJobs.toLocaleString() }}
           </p>
-          <UButton to="/jobs" label="View jobs" color="neutral" variant="link" class="mt-2 p-0" />
+          <UButton
+            to="/jobs"
+            label="View jobs"
+            color="neutral"
+            variant="link"
+            class="mt-2 p-0"
+          />
         </UCard>
 
         <UCard>
@@ -166,7 +186,13 @@ function statusColor(jobStatus: string) {
           <p class="mt-2 text-3xl font-semibold">
             {{ dashboard.totals.openIssues.toLocaleString() }}
           </p>
-          <UButton to="/validation" label="View issues" color="neutral" variant="link" class="mt-2 p-0" />
+          <UButton
+            to="/validation"
+            label="View issues"
+            color="neutral"
+            variant="link"
+            class="mt-2 p-0"
+          />
         </UCard>
       </div>
 
@@ -187,13 +213,27 @@ function statusColor(jobStatus: string) {
                 Submission status
               </h3>
             </template>
-            <div v-if="dashboard.byStatus.length" class="space-y-3">
-              <div v-for="item in dashboard.byStatus" :key="item.name" class="flex items-center justify-between gap-4">
+            <div
+              v-if="dashboard.byStatus.length"
+              class="space-y-3"
+            >
+              <div
+                v-for="item in dashboard.byStatus"
+                :key="item.name"
+                class="flex items-center justify-between gap-4"
+              >
                 <span class="truncate text-sm">{{ item.name }}</span>
-                <UBadge :label="item.total.toLocaleString()" color="neutral" variant="soft" />
+                <UBadge
+                  :label="item.total.toLocaleString()"
+                  color="neutral"
+                  variant="soft"
+                />
               </div>
             </div>
-            <p v-else class="text-sm text-muted">
+            <p
+              v-else
+              class="text-sm text-muted"
+            >
               No status data available.
             </p>
           </UCard>
@@ -204,13 +244,27 @@ function statusColor(jobStatus: string) {
                 Open issues by severity
               </h3>
             </template>
-            <div v-if="dashboard.bySeverity.length" class="space-y-3">
-              <div v-for="item in dashboard.bySeverity" :key="item.name" class="flex items-center justify-between gap-4">
+            <div
+              v-if="dashboard.bySeverity.length"
+              class="space-y-3"
+            >
+              <div
+                v-for="item in dashboard.bySeverity"
+                :key="item.name"
+                class="flex items-center justify-between gap-4"
+              >
                 <span class="truncate text-sm capitalize">{{ item.name }}</span>
-                <UBadge :label="item.total.toLocaleString()" color="neutral" variant="soft" />
+                <UBadge
+                  :label="item.total.toLocaleString()"
+                  color="neutral"
+                  variant="soft"
+                />
               </div>
             </div>
-            <p v-else class="text-sm text-muted">
+            <p
+              v-else
+              class="text-sm text-muted"
+            >
               No open validation issues.
             </p>
           </UCard>
@@ -229,7 +283,12 @@ function statusColor(jobStatus: string) {
                 {{ dashboard.totals.completedReviews.toLocaleString() }} / {{ dashboard.totals.totalReviews.toLocaleString() }} complete
               </p>
             </div>
-            <UProgress :model-value="reviewCompletionPercent" :max="100" size="sm" class="mt-3" />
+            <UProgress
+              :model-value="reviewCompletionPercent"
+              :max="100"
+              size="sm"
+              class="mt-3"
+            />
           </UCard>
         </div>
 
@@ -239,7 +298,10 @@ function statusColor(jobStatus: string) {
               Review stages
             </h3>
           </template>
-          <div v-if="dashboard.byReviewStage.length" class="overflow-x-auto">
+          <div
+            v-if="dashboard.byReviewStage.length"
+            class="overflow-x-auto"
+          >
             <table class="w-full text-sm">
               <thead class="bg-muted/50 text-left">
                 <tr>
@@ -258,7 +320,11 @@ function statusColor(jobStatus: string) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in dashboard.byReviewStage" :key="item.name" class="border-t">
+                <tr
+                  v-for="item in dashboard.byReviewStage"
+                  :key="item.name"
+                  class="border-t"
+                >
                   <td class="p-3">
                     {{ item.name }}
                   </td>
@@ -275,7 +341,10 @@ function statusColor(jobStatus: string) {
               </tbody>
             </table>
           </div>
-          <p v-else class="p-6 text-center text-sm text-muted">
+          <p
+            v-else
+            class="p-6 text-center text-sm text-muted"
+          >
             No review data available.
           </p>
         </UCard>
@@ -291,11 +360,20 @@ function statusColor(jobStatus: string) {
                   Latest pipeline activity for this cycle.
                 </p>
               </div>
-              <UButton to="/jobs" label="View all jobs" color="neutral" variant="outline" size="sm" />
+              <UButton
+                to="/jobs"
+                label="View all jobs"
+                color="neutral"
+                variant="outline"
+                size="sm"
+              />
             </div>
           </template>
 
-          <div v-if="dashboard.recentJobs.length" class="overflow-x-auto">
+          <div
+            v-if="dashboard.recentJobs.length"
+            class="overflow-x-auto"
+          >
             <table class="w-full text-sm">
               <thead class="bg-muted/50 text-left">
                 <tr>
@@ -314,16 +392,32 @@ function statusColor(jobStatus: string) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="job in dashboard.recentJobs" :key="job._id" class="border-t">
+                <tr
+                  v-for="job in dashboard.recentJobs"
+                  :key="job._id"
+                  class="border-t"
+                >
                   <td class="p-3 font-medium">
                     {{ formatJobType(job.type) }}
                   </td>
                   <td class="p-3">
-                    <UBadge :label="job.status" :color="statusColor(job.status)" variant="soft" />
+                    <UBadge
+                      :label="job.status"
+                      :color="statusColor(job.status)"
+                      variant="soft"
+                    />
                   </td>
                   <td class="min-w-56 p-3">
-                    <UProgress v-if="job.progress" :model-value="job.progress.percent || 0" :max="100" size="xs" />
-                    <span v-else class="text-muted">—</span>
+                    <UProgress
+                      v-if="job.progress"
+                      :model-value="job.progress.percent || 0"
+                      :max="100"
+                      size="xs"
+                    />
+                    <span
+                      v-else
+                      class="text-muted"
+                    >—</span>
                   </td>
                   <td class="p-3 text-muted">
                     {{ formatDate(job.startedAt || job.createdAt) }}
@@ -332,7 +426,10 @@ function statusColor(jobStatus: string) {
               </tbody>
             </table>
           </div>
-          <p v-else class="p-6 text-center text-sm text-muted">
+          <p
+            v-else
+            class="p-6 text-center text-sm text-muted"
+          >
             No jobs have been run for this cycle.
           </p>
         </UCard>

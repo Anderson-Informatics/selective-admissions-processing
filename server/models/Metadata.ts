@@ -5,7 +5,7 @@ export interface Metadata {
   type: 'project' | 'form' | 'label' | 'team'
   externalId: string
   name: string
-  data: any
+  data: Record<string, unknown>
   syncedAt?: Date
   createdAt?: Date
   updatedAt?: Date

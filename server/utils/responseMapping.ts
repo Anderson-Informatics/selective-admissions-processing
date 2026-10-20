@@ -102,7 +102,7 @@ export async function mapFormResponsesForCycle(cycleId: string, applicationIds?:
   const metadata = await MetadataModel.find({ type: 'form', externalId: { $in: mappedFormIds } }).sort({ updatedAt: -1 }).lean()
   const formsById: Record<string, SubmittableForm> = {}
   for (const item of metadata) {
-    if (!formsById[item.externalId] && item.data?.fields) formsById[item.externalId] = item.data as SubmittableForm
+    if (!formsById[item.externalId] && Array.isArray(item.data?.fields)) formsById[item.externalId] = item.data as unknown as SubmittableForm
   }
   const missingFormIds = mappedFormIds.filter(formId => !formsById[formId])
   const missingForms = await mapWithConcurrency<string, SubmittableForm>(missingFormIds, 3, formId => fetchForm(formId))

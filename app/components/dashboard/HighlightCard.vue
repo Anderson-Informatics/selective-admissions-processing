@@ -21,13 +21,29 @@ function formatPercent(percent: number | null) {
         {{ highlight.completed.toLocaleString() }} / {{ highlight.total.toLocaleString() }}
       </p>
     </div>
-    <UProgress :model-value="highlight.percent || 0" :max="100" size="sm" class="mt-3" />
-    <div v-if="highlight.segments.length" class="mt-4 space-y-2 border-t border-default pt-3">
-      <div v-for="segment in highlight.segments" :key="segment.key" class="flex items-center justify-between gap-3 text-sm">
+    <UProgress
+      :model-value="highlight.percent || 0"
+      :max="100"
+      size="sm"
+      class="mt-3"
+    />
+    <div
+      v-if="highlight.segments.length"
+      class="mt-4 space-y-2 border-t border-default pt-3"
+    >
+      <div
+        v-for="segment in highlight.segments"
+        :key="segment.key"
+        class="flex items-center justify-between gap-3 text-sm"
+      >
         <span class="truncate text-muted">{{ segment.label }}</span>
         <span class="flex shrink-0 items-center gap-2">
           <span>{{ segment.completed.toLocaleString() }} / {{ segment.total.toLocaleString() }}</span>
-          <UBadge :label="formatPercent(segment.percent)" color="neutral" variant="soft" />
+          <UBadge
+            :label="formatPercent(segment.percent)"
+            color="neutral"
+            variant="soft"
+          />
         </span>
       </div>
     </div>

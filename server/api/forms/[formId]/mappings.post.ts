@@ -1,5 +1,12 @@
 import { FieldMappingModel } from '~~/server/models/FieldMapping'
 
+interface MappingInput {
+  fieldId: string
+  label: string
+  canonicalName: string
+  transform?: string
+}
+
 export default defineEventHandler(async (event) => {
   await connectDb()
   await requireAuth(event)
@@ -17,9 +24,9 @@ export default defineEventHandler(async (event) => {
 
   await FieldMappingModel.deleteMany({ cycleId: body.cycleId, formId })
 
-  const docs = body.mappings
-    .filter((m: any) => m.fieldId && m.label && m.canonicalName)
-    .map((m: any) => ({
+  const docs = (body.mappings as MappingInput[])
+    .filter(m => m.fieldId && m.label && m.canonicalName)
+    .map(m => ({
       cycleId: body.cycleId,
       formId,
       fieldId: m.fieldId,

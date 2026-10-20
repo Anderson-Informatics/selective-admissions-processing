@@ -46,7 +46,10 @@ async function onSubmit() {
         </div>
       </template>
 
-      <form class="space-y-4" @submit.prevent="onSubmit">
+      <form
+        class="space-y-4"
+        @submit.prevent="onSubmit"
+      >
         <UInput
           v-model="email"
           type="email"
@@ -65,7 +68,10 @@ async function onSubmit() {
           required
         />
 
-        <p v-if="error" class="text-sm text-red-600">
+        <p
+          v-if="error"
+          class="text-sm text-red-600"
+        >
           {{ error }}
         </p>
 

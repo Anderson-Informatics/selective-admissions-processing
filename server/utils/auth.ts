@@ -21,8 +21,8 @@ function parseAuthUsers(value: unknown): AuthUser[] {
       }
     }
     return users
-  } catch (err: any) {
-    throw new Error(`Failed to parse NUXT_AUTH_USERS: ${err.message}`)
+  } catch (err: unknown) {
+    throw new Error(`Failed to parse NUXT_AUTH_USERS: ${err instanceof Error ? err.message : String(err)}`, { cause: err })
   }
 }
 

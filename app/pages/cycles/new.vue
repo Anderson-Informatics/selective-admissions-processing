@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const toast = useToast()
-const router = useRouter()
 const loading = ref(false)
 
 const state = reactive({
@@ -26,9 +25,9 @@ async function onSubmit() {
     })
     toast.add({ title: 'Cycle created', color: 'success' })
     await navigateTo('/cycles')
-  } catch (err: any) {
+  } catch (err: unknown) {
     toast.add({
-      title: err.data?.statusMessage || 'Failed to create cycle',
+      title: (err as { data?: { statusMessage?: string } }).data?.statusMessage || 'Failed to create cycle',
       color: 'error'
     })
   } finally {
@@ -43,29 +42,58 @@ async function onSubmit() {
       New Cycle
     </h1>
 
-    <form class="space-y-4" @submit.prevent="onSubmit">
-      <UFormField label="Year" required>
-        <UInput v-model="state.year" placeholder="2026-2027" required />
+    <form
+      class="space-y-4"
+      @submit.prevent="onSubmit"
+    >
+      <UFormField
+        label="Year"
+        required
+      >
+        <UInput
+          v-model="state.year"
+          placeholder="2026-2027"
+          required
+        />
       </UFormField>
 
-      <UFormField label="Name" required>
-        <UInput v-model="state.name" required />
+      <UFormField
+        label="Name"
+        required
+      >
+        <UInput
+          v-model="state.name"
+          required
+        />
       </UFormField>
 
       <UFormField label="Active cycle">
-        <UCheckbox v-model="state.active" label="Make this the active cycle" />
+        <UCheckbox
+          v-model="state.active"
+          label="Make this the active cycle"
+        />
       </UFormField>
 
       <UFormField label="Start date">
-        <UInput v-model="state.startDate" type="date" />
+        <UInput
+          v-model="state.startDate"
+          type="date"
+        />
       </UFormField>
 
       <UFormField label="End date">
-        <UInput v-model="state.endDate" type="date" />
+        <UInput
+          v-model="state.endDate"
+          type="date"
+        />
       </UFormField>
 
       <div class="flex gap-2 pt-2">
-        <UButton type="submit" label="Create cycle" :loading="loading" />
+        <UButton
+          type="submit"
+          label="Create cycle"
+          :loading="loading"
+        />
         <UButton
           to="/cycles"
           label="Cancel"

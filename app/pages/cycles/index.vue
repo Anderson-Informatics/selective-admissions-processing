@@ -33,7 +33,7 @@ const cloneLoading = ref(false)
 
 function formatDate(value?: string) {
   if (!value) return ''
-  return new Date(value).toISOString().split('T')[0]
+  return new Date(value).toISOString().split('T')[0] ?? ''
 }
 
 function openClone(cycle: Cycle) {
@@ -145,17 +145,39 @@ async function deleteCycle(id: string) {
       description="Enter details for the cloned cycle."
     >
       <template #body>
-        <UFormField label="Year" required>
-          <UInput v-model="cloneState.year" placeholder="2026-2027" />
+        <UFormField
+          label="Year"
+          required
+        >
+          <UInput
+            v-model="cloneState.year"
+            placeholder="2026-2027"
+          />
         </UFormField>
-        <UFormField label="Name" required class="mt-4">
+        <UFormField
+          label="Name"
+          required
+          class="mt-4"
+        >
           <UInput v-model="cloneState.name" />
         </UFormField>
-        <UFormField label="Start date" class="mt-4">
-          <UInput v-model="cloneState.startDate" type="date" />
+        <UFormField
+          label="Start date"
+          class="mt-4"
+        >
+          <UInput
+            v-model="cloneState.startDate"
+            type="date"
+          />
         </UFormField>
-        <UFormField label="End date" class="mt-4">
-          <UInput v-model="cloneState.endDate" type="date" />
+        <UFormField
+          label="End date"
+          class="mt-4"
+        >
+          <UInput
+            v-model="cloneState.endDate"
+            type="date"
+          />
         </UFormField>
       </template>
 

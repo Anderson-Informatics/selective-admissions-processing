@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const user = getAuthUsers().find(
-    (u) => u.email.toLowerCase() === String(email).toLowerCase() && u.password === password
+    u => u.email.toLowerCase() === String(email).toLowerCase() && u.password === password
   )
 
   if (!user) {

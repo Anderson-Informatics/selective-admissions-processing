@@ -171,24 +171,45 @@ async function saveMappings() {
       Form Field Mappings
     </h1>
 
-    <UFormField label="Admission cycle" class="mb-6">
-      <USelect v-model="selectedCycleId" :items="(cycles || []).map(c => ({ label: `${c.year} — ${c.name}`, value: c._id }))" placeholder="Select a cycle" class="w-72" />
+    <UFormField
+      label="Admission cycle"
+      class="mb-6"
+    >
+      <USelect
+        v-model="selectedCycleId"
+        :items="(cycles || []).map(c => ({ label: `${c.year} — ${c.name}`, value: c._id }))"
+        placeholder="Select a cycle"
+        class="w-72"
+      />
     </UFormField>
 
-    <div v-if="status === 'pending'" class="text-muted py-8 text-center">
+    <div
+      v-if="status === 'pending'"
+      class="text-muted py-8 text-center"
+    >
       Loading forms...
     </div>
 
-    <div v-else-if="!forms?.length" class="text-muted py-8 text-center">
+    <div
+      v-else-if="!forms?.length"
+      class="text-muted py-8 text-center"
+    >
       No applications/forms mapped for this cycle yet. Map applications first.
     </div>
 
-    <div v-else class="max-h-[60vh] overflow-y-auto border rounded-lg">
+    <div
+      v-else
+      class="max-h-[60vh] overflow-y-auto border rounded-lg"
+    >
       <table class="w-full text-sm">
         <thead class="bg-muted text-left sticky top-0">
           <tr>
             <th class="p-2 font-medium">
-              <button type="button" class="hover:text-primary" @click="toggleSort('application')">
+              <button
+                type="button"
+                class="hover:text-primary"
+                @click="toggleSort('application')"
+              >
                 Application{{ sortIndicator('application') }}
               </button>
             </th>
@@ -196,7 +217,11 @@ async function saveMappings() {
               Form
             </th>
             <th class="p-2 font-medium">
-              <button type="button" class="hover:text-primary" @click="toggleSort('type')">
+              <button
+                type="button"
+                class="hover:text-primary"
+                @click="toggleSort('type')"
+              >
                 Type{{ sortIndicator('type') }}
               </button>
             </th>
@@ -215,7 +240,11 @@ async function saveMappings() {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="form in sortedForms" :key="form.formId" class="border-t">
+          <tr
+            v-for="form in sortedForms"
+            :key="form.formId"
+            class="border-t"
+          >
             <td class="p-2">
               {{ form.applicationName }}
             </td>
@@ -268,13 +297,24 @@ async function saveMappings() {
       </table>
     </div>
 
-    <UModal v-model:open="modalOpen" :title="`${selectedApplicationName} — ${selectedFormLabel}`" description="Map each form field label to a canonical application field." :ui="{ content: '!max-w-4xl' }">
+    <UModal
+      v-model:open="modalOpen"
+      :title="`${selectedApplicationName} — ${selectedFormLabel}`"
+      description="Map each form field label to a canonical application field."
+      :ui="{ content: '!max-w-4xl' }"
+    >
       <template #body>
-        <div v-if="formStatus === 'pending'" class="text-muted py-8 text-center">
+        <div
+          v-if="formStatus === 'pending'"
+          class="text-muted py-8 text-center"
+        >
           Loading form fields...
         </div>
 
-        <div v-else-if="formDetail" class="space-y-4">
+        <div
+          v-else-if="formDetail"
+          class="space-y-4"
+        >
           <UAlert
             v-if="unmappedCount > 0"
             color="warning"
@@ -298,11 +338,25 @@ async function saveMappings() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="field in formDetail.fields" :key="field.fieldId" class="border-t">
+                <tr
+                  v-for="field in formDetail.fields"
+                  :key="field.fieldId"
+                  class="border-t"
+                >
                   <td class="p-2">
                     <span :class="{ 'text-warning': field.labelChanged }">{{ field.label }}</span>
-                    <UBadge v-if="field.isAutoSuggested" label="suggested" color="info" variant="soft" size="sm" class="ml-2" />
-                    <span v-if="field.labelChanged" class="ml-2 text-xs text-warning">changed</span>
+                    <UBadge
+                      v-if="field.isAutoSuggested"
+                      label="suggested"
+                      color="info"
+                      variant="soft"
+                      size="sm"
+                      class="ml-2"
+                    />
+                    <span
+                      v-if="field.labelChanged"
+                      class="ml-2 text-xs text-warning"
+                    >changed</span>
                   </td>
                   <td class="p-2 text-muted">
                     {{ field.fieldType }}
@@ -326,8 +380,18 @@ async function saveMappings() {
       </template>
 
       <template #footer="{ close }">
-        <UButton color="neutral" variant="outline" label="Cancel" @click="close" />
-        <UButton label="Save mappings" :loading="saving" :disabled="!formDetail" @click="saveMappings" />
+        <UButton
+          color="neutral"
+          variant="outline"
+          label="Cancel"
+          @click="close"
+        />
+        <UButton
+          label="Save mappings"
+          :loading="saving"
+          :disabled="!formDetail"
+          @click="saveMappings"
+        />
       </template>
     </UModal>
   </UContainer>
