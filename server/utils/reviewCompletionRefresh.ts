@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CycleModel } from '../models/Cycle'
 import { GpaRecordModel } from '../models/GpaRecord'
-import { resolveCycleRound } from './cycleRounds'
+import { resolveSubmissionRound } from './cycleRounds'
 import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
@@ -127,9 +127,7 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
 
     for (const submission of submissions) {
       const stages = stagesByApplication.get(String(submission.applicationId)) || []
-      const mappedFields = submission.mappedFields || {}
-      const submissionDate = mappedFields.submissionDate || mappedFields.SubmissionDate || submission.submissionDate
-      const round = resolveCycleRound(submissionDate, rounds)
+      const round = resolveSubmissionRound(submission, rounds)
       const completion = buildReviewCompletionForSubmission(
         submission as Record<string, any>,
         stages,
@@ -149,7 +147,6 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
                 gpaStatus: completion.gpaStatus,
                 gpaDpscd: completion.gpaDpscd,
                 gpaOptIn: completion.gpaOptIn,
-                ...(submissionDate ? { submissionDate: new Date(String(submissionDate)) } : {}),
                 roundKey: round.key,
                 roundName: round.name,
                 roundStatus: round.status

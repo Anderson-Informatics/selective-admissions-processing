@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeCycleRounds, resolveCycleRound } from './cycleRounds'
+import { normalizeCycleRounds, resolveCycleRound, resolveSubmissionRound } from './cycleRounds'
 
 describe('cycle rounds', () => {
   const rounds = normalizeCycleRounds([
@@ -16,6 +16,17 @@ describe('cycle rounds', () => {
   it('reports missing and outside dates', () => {
     expect(resolveCycleRound(undefined, rounds).status).toBe('missing_submission_date')
     expect(resolveCycleRound('2026-09-01', rounds).status).toBe('outside_configured_ranges')
+  })
+
+  it('uses completion rather than creation or legacy submission dates for the submission round', () => {
+    expect(resolveSubmissionRound({
+      completedAt: new Date('2026-02-10'),
+      createdAt: new Date('2025-12-15'),
+      submissionDate: new Date('2025-12-20'),
+      mappedFields: { SubmissionDate: '2025-12-20' }
+    }, rounds).key).toBe('round-2')
+    expect(resolveSubmissionRound({ completedAt: undefined, createdAt: new Date('2025-12-15') }, rounds).status).toBe('missing_submission_date')
+    expect(resolveSubmissionRound({ completedAt: new Date('2026-09-01') }, rounds).status).toBe('outside_configured_ranges')
   })
 
   it('rejects overlapping ranges', () => {

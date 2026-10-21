@@ -6,7 +6,7 @@ import { ReviewStageModel } from '../../models/ReviewStage'
 import { SubmissionModel } from '../../models/Submission'
 import { normalizeRoutingConfig } from '../../utils/routingConfig'
 import { applicantName, routingPreviewFilter } from '../../utils/routingPreview'
-import { resolveCycleRound } from '../../utils/cycleRounds'
+import { resolveSubmissionRound } from '../../utils/cycleRounds'
 import { computeReviewCompletion, routeSubmission, type RoutingContext, type RoutingStage } from '../../utils/routingEvaluator'
 
 interface PreviewBody {
@@ -59,8 +59,7 @@ export default defineEventHandler(async (event) => {
     const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
     const mappedFields = submission.mappedFields || {}
     const name = applicantName(mappedFields, submission.submissionId)
-    const submissionDate = mappedFields.submissionDate || mappedFields.SubmissionDate || submission.submissionDate
-    const round = resolveCycleRound(submissionDate, rounds)
+    const round = resolveSubmissionRound(submission, rounds)
     const context: RoutingContext = {
       submission: {
         submissionId: submission.submissionId,

@@ -34,3 +34,7 @@ export function resolveCycleRound(dateValue: unknown, rounds: CycleRoundInput[])
   if (!round) return { key: undefined, name: undefined, status: 'outside_configured_ranges' as const }
   return { key: round.key, name: round.name, status: 'matched' as const }
 }
+
+export function resolveSubmissionRound<T extends { completedAt?: Date | string }>(submission: T, rounds: CycleRoundInput[]) {
+  return resolveCycleRound(submission.completedAt, rounds)
+}

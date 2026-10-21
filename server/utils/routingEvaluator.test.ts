@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { normalizeCycleRounds, resolveSubmissionRound } from './cycleRounds'
 import { buildReviewCompletionForSubmission } from './reviewCompletionRefresh'
 import { computeReviewCompletion, deriveGpaStatus, evaluateCondition, routeSubmission, type RoutingContext, type RoutingStage } from './routingEvaluator'
 
@@ -70,6 +71,24 @@ describe('review completion evaluator', () => {
     ], context())
 
     expect(result.reviewCompletion[0]).toMatchObject({ stageId: 'new', required: true, status: 'Mapped', complete: true })
+  })
+
+  it('routes a completed round-one IEP application to its earlier required stage', () => {
+    const rounds = normalizeCycleRounds([
+      { key: 'round-1', name: 'Round 1', order: 1, startDate: '2026-10-12', endDate: '2027-01-31' }
+    ])
+    const submission = { ...context().submission, mappedFields: { IEPorNPSPor504: 'IEP or NPSP', DPSCD: 'No' }, completedAt: new Date('2026-10-21') }
+    const decision = routeSubmission([
+      stage('new', 0, 'initial'),
+      stage('iep-completion', 1, 'work', { requiredWhen: { operator: 'and', conditions: [
+        { kind: 'field', name: 'IEPorNPSPor504', op: 'eq', value: 'IEP or NPSP' },
+        { kind: 'cycleRound', op: 'eq', value: 'round-1' },
+        { kind: 'field', name: 'DPSCD', op: 'ne', value: 'Yes' }
+      ] } }),
+      stage('gpa-completion', 5, 'work', { requiredWhen: { operator: 'and', conditions: [{ kind: 'gpaStatus', op: 'eq', value: 'Incomplete' }] } })
+    ], context({ submission, cycleRound: resolveSubmissionRound(submission, rounds).key }))
+
+    expect(decision).toMatchObject({ action: 'move', toStageId: 'iep-completion', reason: 'next_required' })
   })
 
   it('keeps final stages incomplete for ledger reporting', () => {
