@@ -73,6 +73,20 @@ describe('review completion evaluator', () => {
     expect(result.reviewCompletion[0]).toMatchObject({ stageId: 'new', required: true, status: 'Mapped', complete: true })
   })
 
+  it('selects the earliest of multiple required incomplete stages without warning', () => {
+    const stages = [
+      stage('essay', 10, 'work'),
+      stage('new', 0, 'initial'),
+      stage('gpa', 5, 'work')
+    ]
+    const completion = computeReviewCompletion(stages, context())
+    const decision = routeSubmission(stages, context())
+
+    expect(completion.reviewCompletion.map(entry => entry.stageId)).toEqual(['new', 'gpa', 'essay'])
+    expect(completion.diagnostics).toEqual([])
+    expect(decision).toMatchObject({ action: 'move', reason: 'next_required', toStageId: 'gpa', diagnostics: [] })
+  })
+
   it('routes a completed round-one IEP application to its earlier required stage', () => {
     const rounds = normalizeCycleRounds([
       { key: 'round-1', name: 'Round 1', order: 1, startDate: '2026-10-12', endDate: '2027-01-31' }
@@ -274,5 +288,23 @@ describe('review completion evaluator', () => {
     }))
 
     expect(result).toMatchObject({ action: 'move', toStageId: 'declined', reason: 'outcome' })
+  })
+
+  it('still reports an outcome rule targeting a missing stage', () => {
+    const result = routeSubmission([
+      stage('new', 0, 'initial', { outcomeRules: [{
+        name: 'missing destination',
+        enabled: true,
+        when: { operator: 'and', conditions: [] },
+        moveToStageId: 'missing'
+      }] }),
+      stage('essay', 10, 'work')
+    ], context())
+
+    expect(result).toMatchObject({
+      action: 'stay',
+      reason: 'invalid_target',
+      diagnostics: [{ code: 'invalid_target_stage', stageIds: ['missing'] }]
+    })
   })
 })

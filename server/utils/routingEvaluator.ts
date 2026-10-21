@@ -63,7 +63,7 @@ export interface ReviewCompletionEntry {
 }
 
 export interface RoutingDiagnostic {
-  code: 'overlapping_required_stages' | 'no_required_stage' | 'invalid_target_stage'
+  code: 'no_required_stage' | 'invalid_target_stage'
   message: string
   stageIds?: string[]
 }
@@ -261,12 +261,7 @@ export function computeReviewCompletion(stages: RoutingStage[], context: Routing
     return { stageId: stage.stageId, name: stage.name, order: stage.order, role: stage.role, required, ...status }
   })
 
-  const requiredIncomplete = reviewCompletion.filter(entry => entry.required && !entry.complete)
-  const diagnostics: RoutingDiagnostic[] = []
-  if (requiredIncomplete.length > 1) {
-    diagnostics.push({ code: 'overlapping_required_stages', message: 'Multiple required incomplete stages match; order determines the next stage.', stageIds: requiredIncomplete.map(entry => entry.stageId) })
-  }
-  return { reviewCompletion, diagnostics }
+  return { reviewCompletion, diagnostics: [] }
 }
 
 export function routeSubmission(stages: RoutingStage[], context: RoutingContext): RoutingDecision {
