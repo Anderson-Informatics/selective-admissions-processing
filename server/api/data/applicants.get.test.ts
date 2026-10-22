@@ -88,7 +88,7 @@ describe('GET /api/data/applicants', () => {
           DOB: '2012-03-04',
           ParentFirstName: 'Pat',
           ParentLastName: 'Lee',
-          ParentPhone: '555-1234',
+          ParentPhone: '+1 (313) 555-1234',
           ParentEmail: 'pat@example.test',
           privateNote: 'must not be included'
         }
@@ -145,7 +145,7 @@ describe('GET /api/data/applicants', () => {
           DOB: '2012-03-04',
           ParentFirstName: 'Pat',
           ParentLastName: 'Lee',
-          ParentPhone: '555-1234',
+          ParentPhone: '+1 (313) 555-1234',
           ParentEmail: 'pat@example.test'
         },
         {
@@ -237,14 +237,22 @@ describe('GET /api/data/applicants', () => {
   )
 
   it('streams all non-withdrawn applicants as a downloadable CSV, ignoring pagination', async () => {
+    const phones = [
+      '+1 (313) 555-0123',
+      '313.555.0124',
+      '1-313-555-0125',
+      '+44 20 7946 0958',
+      '313-555-0126 ext 7',
+      '=HYPERLINK("https://example.test")'
+    ]
     const submissions = Array.from({ length: 251 }, (_, index) => ({
       submissionId: `s${index}`,
       projectId: 'project-1',
       cycleId: 'cycle-1',
       completedAt: index === 0 ? new Date('2026-05-06T12:00:00Z') : undefined,
       mappedFields: index === 0
-        ? { StudentNumber: '00123', FirstName: '=1+1', LastName: 'A,"B"\nC', ParentEmail: 'a@example.test' }
-        : {}
+        ? { StudentNumber: '00123', FirstName: '=1+1', LastName: 'A,"B"\nC', ParentPhone: phones[index], ParentEmail: 'a@example.test' }
+        : { ParentPhone: phones[index] }
     }))
     const cursor = {
       async* [Symbol.asyncIterator]() { yield* submissions },
@@ -297,8 +305,16 @@ describe('GET /api/data/applicants', () => {
       StudentNumber: '00123',
       FirstName: '\'=1+1',
       LastName: 'A,"B"\nC',
+      ParentPhone: '(313) 555-0123',
       ParentEmail: 'a@example.test'
     })
+    expect(rows.slice(1, 6).map(row => row.ParentPhone)).toEqual([
+      '(313) 555-0124',
+      '(313) 555-0125',
+      '\'+44 20 7946 0958',
+      '313-555-0126 ext 7',
+      '\'=HYPERLINK("https://example.test")'
+    ])
     expect(rows[250]?.submissionId).toBe('s250')
     expect(setHeader).toHaveBeenCalledWith(event, 'Content-Type', 'text/csv; charset=utf-8')
     expect(setHeader).toHaveBeenCalledWith(event, 'Content-Disposition', 'attachment; filename="applicants.csv"')

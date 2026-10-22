@@ -33,7 +33,7 @@ curl --fail-with-body \
 | --- | --- | --- |
 | `format` | `json` (paginated response) or `csv` (download all matching submissions). | `json` |
 
-CSV uses the same fields and withdrawn-submission exclusion as JSON, with one header row and one row per applicant ordered by database ID. The response has `Content-Type: text/csv` and a download filename of `applicants.csv`. CSV ignores `page` and `limit`; it does not return a JSON envelope or `total`. Null fields become empty cells, dates use ISO 8601 UTC, and potentially executable spreadsheet formulas in text fields are prefixed with an apostrophe. Import `StudentNumber` as text in spreadsheet programs to keep leading zeros. The export streams in batches, but is not a point-in-time snapshot: concurrent updates may change field values while it downloads.
+CSV uses the same fields and withdrawn-submission exclusion as JSON, with one header row and one row per applicant ordered by database ID. The response has `Content-Type: text/csv` and a download filename of `applicants.csv`. CSV ignores `page` and `limit`; it does not return a JSON envelope or `total`. Null fields become empty cells, dates use ISO 8601 UTC, and potentially executable spreadsheet formulas in text fields are prefixed with an apostrophe. In CSV only, `ParentPhone` values made up of 10 US digits (or 11 digits beginning with `1`) and ordinary phone punctuation are formatted as `(###) ###-####`; other values, including extensions and international numbers, retain their stored format and CSV safety handling. JSON phone values are unchanged. Import `StudentNumber` as text in spreadsheet programs to keep leading zeros. The export streams in batches, but is not a point-in-time snapshot: concurrent updates may change field values while it downloads.
 
 ## Pagination
 
@@ -67,7 +67,7 @@ Every applicant object has the following keys. A missing value is `null`, except
 | `ParentPhone` | Parent/guardian phone number from mapped responses. |
 | `ParentEmail` | Parent/guardian email address from mapped responses. |
 
-Mapped response fields are returned as stored; this endpoint does not normalize their spelling, dates, or phone numbers. No other submission or mapped-response fields are included.
+Mapped response fields are returned as stored in JSON; only eligible CSV phone numbers are formatted as described above. No other submission or mapped-response fields are included.
 
 Example response:
 

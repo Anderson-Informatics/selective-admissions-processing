@@ -55,13 +55,23 @@ function csvCell(value: unknown) {
   return `"${text.replaceAll('"', '""')}"`
 }
 
+function csvPhone(value: unknown) {
+  if (typeof value !== 'string' && typeof value !== 'number') return value
+  const phone = String(value).trim()
+  if (!/^\+?[\d(][\d(). -]*$/.test(phone)) return value
+  let digits = phone.replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1)
+  else if (digits.length !== 10 || phone.startsWith('+')) return value
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
 async function* csvRows(filter: { status: { $not: RegExp } }) {
   yield `${applicantFields.join(',')}\r\n`
   const cursor = SubmissionModel.find(filter).select(selection).sort({ _id: 1 }).lean().cursor()
   let batch: ApplicantSubmission[] = []
   async function* flush() {
     for (const applicant of await mapApplicants(batch)) {
-      yield `${applicantFields.map(field => csvCell(applicant[field])).join(',')}\r\n`
+      yield `${applicantFields.map(field => csvCell(field === 'ParentPhone' ? csvPhone(applicant[field]) : applicant[field])).join(',')}\r\n`
     }
     batch = []
   }
