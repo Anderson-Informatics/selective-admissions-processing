@@ -13,6 +13,7 @@ export interface RoutingStage {
 
 export interface RoutingReview {
   stageId: string
+  stageName?: string
   status?: string
   score?: number
   completedAt?: Date | string
@@ -164,17 +165,59 @@ function getStageReviews(context: RoutingContext, condition: ConditionValue): Ro
   return ids.flatMap(id => resolveReviews(context.reviews, id, typeof condition.scope === 'string' ? condition.scope : 'latestCompleted'))
 }
 
-export function deriveGpaStatus(context: RoutingContext): string {
-  if (context.gpaStatus) return context.gpaStatus
-  const fields = context.submission.mappedFields
-  if (context.gpa?.optIn?.enrolledMinTerms?.trim().toLowerCase() === 'no') return 'OOD Partial'
-  const cumulative = fields.CumulativeGPA ?? fields.cumulativeGPA ?? context.gpa?.dpscd?.cumulativeGpa ?? context.gpa?.optIn?.cumulativeGpa
+export interface ResolvedGpa {
+  status: string
+  cumulativeGpa: number | null
+  source: 'recording' | 'dpscd' | 'optIn' | 'partial' | null
+}
+
+function validGpa(value: unknown): number | null {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 && number <= 4.3 ? number : null
+}
+
+function latestCompleted(reviews: RoutingReview[]): RoutingReview | undefined {
+  return reviews.filter(isCompletedReview)
+    .sort((a, b) => reviewTimestamp(b, 'completedAt') - reviewTimestamp(a, 'completedAt')
+      || reviewTimestamp(b, 'createdAt') - reviewTimestamp(a, 'createdAt'))[0]
+}
+
+export function resolveGpa(context: RoutingContext): ResolvedGpa {
+  const recording = latestCompleted(context.reviews.filter(review => /^gpa recording$/i.test(review.stageName?.trim() || '')))
+  const recordedGpa = validGpa(recording?.mappedData?.CumulativeGPA)
+  if (recording && String(recording.mappedData?.AbleToRecord || '').trim().toLowerCase() === 'yes' && recordedGpa != null) {
+    return { status: 'Complete', cumulativeGpa: recordedGpa, source: 'recording' }
+  }
+
+  const dpscdGpa = validGpa(context.gpa?.dpscd?.cumulativeGpa)
   const quarters = context.gpa?.dpscd?.quartersAvailable
-  const terms = context.gpa?.optIn?.termsEnrolled
-  const enrolled = context.gpa?.optIn?.enrolledMinTermsFlag || context.gpa?.optIn?.enrolledMinTerms?.toLowerCase() === 'yes'
-  if (isPresent(cumulative) || (typeof quarters === 'number' && quarters >= 6) || (enrolled && typeof terms === 'number' && terms >= 4)) return 'Complete'
-  if (isPresent(fields.PartialGPA) || fields.Semesters === 'DPSCD Student Without Upload' || (typeof quarters === 'number' && quarters > 0)) return quarters != null && quarters < 6 ? 'DPSCD Partial' : 'Partial'
-  return 'Incomplete'
+  if (dpscdGpa != null && typeof quarters === 'number' && quarters >= 6) {
+    return { status: 'Complete', cumulativeGpa: dpscdGpa, source: 'dpscd' }
+  }
+
+  const optInGpa = validGpa(context.gpa?.optIn?.cumulativeGpa)
+  const attendance = context.gpa?.optIn?.enrolledMinTerms?.trim().toLowerCase()
+  // Only an explicit "no" blocks an otherwise valid Opt-In GPA.
+  if (optInGpa != null && attendance !== 'no') {
+    return { status: 'Complete', cumulativeGpa: optInGpa, source: 'optIn' }
+  }
+
+  const partial = latestCompleted(context.reviews.filter(review =>
+    /partial\s*gpa|gpa\s*partial/i.test(review.stageName || '') || Object.hasOwn(review.mappedData || {}, 'PartialGPA')
+  ))
+  const partialGpa = validGpa(partial?.mappedData?.PartialGPA)
+  if (partialGpa != null) return { status: 'Partial', cumulativeGpa: partialGpa, source: 'partial' }
+
+  if (typeof quarters === 'number' && quarters > 0 && quarters < 6) {
+    return { status: 'DPSCD Partial', cumulativeGpa: null, source: null }
+  }
+  if (attendance === 'no') return { status: 'OOD Partial', cumulativeGpa: null, source: null }
+  return { status: 'Incomplete', cumulativeGpa: null, source: null }
+}
+
+export function deriveGpaStatus(context: RoutingContext): string {
+  return context.gpaStatus || resolveGpa(context).status
 }
 
 export function evaluateCondition(condition: unknown, context: RoutingContext): boolean {

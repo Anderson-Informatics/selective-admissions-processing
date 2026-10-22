@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const dashboardMetricSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('reviewStage'), stageId: z.string().min(1) }).strict(),
   z.object({ type: z.literal('gpaStatus'), status: z.string().min(1) }).strict(),
+  z.object({ type: z.literal('gpaRecording') }).strict(),
   z.object({ type: z.literal('gpaRecord'), source: z.enum(['dpscd', 'optIn']) }).strict(),
   z.object({ type: z.literal('hsptLinked') }).strict(),
   z.object({
@@ -62,7 +63,7 @@ export function defaultDashboardHighlights(
   if (gpaStages.length || application.type === 'exam') {
     const segments: DashboardSegment[] = []
     if (recordingStage) {
-      segments.push({ key: 'gpa-recording', label: recordingStage.name, metric: { type: 'reviewStage', stageId: recordingStage.stageId } })
+      segments.push({ key: 'gpa-recording', label: recordingStage.name, metric: { type: 'gpaRecording' } })
     }
     segments.push({ key: 'dpscd-gpa', label: 'DPSCD GPA', metric: { type: 'gpaRecord', source: 'dpscd' } })
     segments.push({ key: 'optin-gpa', label: 'Opt-In GPA', metric: { type: 'gpaRecord', source: 'optIn' } })

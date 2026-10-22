@@ -1,6 +1,6 @@
 # Applicant Data API
 
-This endpoint returns applicant information from stored submissions as JSON. It is intended for authorized integrations that need to read applicant data without a user login.
+This endpoint returns applicant information from stored submissions as paginated JSON or a downloadable CSV export. It is intended for authorized integrations that need to read applicant data without a user login.
 
 ## Access
 
@@ -19,6 +19,21 @@ curl --fail-with-body \
 ```
 
 Replace `YOUR_HOST` with the deployed application's hostname. Do not share the key or use it from a public browser application.
+
+To download all applicants as CSV:
+
+```sh
+curl --fail-with-body \
+  -H "Authorization: Bearer $DATA_KEY" \
+  -o applicants.csv \
+  'https://YOUR_HOST/api/data/applicants?format=csv'
+```
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| `format` | `json` (paginated response) or `csv` (download all matching submissions). | `json` |
+
+CSV uses the same fields and withdrawn-submission exclusion as JSON, with one header row and one row per applicant ordered by database ID. The response has `Content-Type: text/csv` and a download filename of `applicants.csv`. CSV ignores `page` and `limit`; it does not return a JSON envelope or `total`. Null fields become empty cells, dates use ISO 8601 UTC, and potentially executable spreadsheet formulas in text fields are prefixed with an apostrophe. Import `StudentNumber` as text in spreadsheet programs to keep leading zeros. The export streams in batches, but is not a point-in-time snapshot: concurrent updates may change field values while it downloads.
 
 ## Pagination
 
@@ -86,7 +101,7 @@ Example response:
 
 | HTTP status | Meaning |
 | --- | --- |
-| `400` | Invalid `page` or `limit`. |
+| `400` | Invalid `format`, or invalid `page` or `limit` for JSON. |
 | `401` | Missing, incorrectly formatted, or invalid Bearer key. |
 | `503` | The server is missing the API key or secret configuration. |
 | `5xx` | Another server error, such as a database connection failure. |

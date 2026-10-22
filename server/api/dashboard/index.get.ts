@@ -1,10 +1,11 @@
-import { ApplicationModel } from '~~/server/models/Application'
-import { JobModel } from '~~/server/models/Job'
-import { ReviewModel } from '~~/server/models/Review'
-import { ReviewStageModel } from '~~/server/models/ReviewStage'
-import { SubmissionModel } from '~~/server/models/Submission'
-import { ValidationIssueModel } from '~~/server/models/ValidationIssue'
-import { resolveDashboardHighlights, type DashboardMetricSpec } from '~~/server/utils/dashboardConfig'
+import { ApplicationModel } from '../../models/Application'
+import { JobModel } from '../../models/Job'
+import { MetadataModel } from '../../models/Metadata'
+import { ReviewModel } from '../../models/Review'
+import { ReviewStageModel } from '../../models/ReviewStage'
+import { SubmissionModel } from '../../models/Submission'
+import { ValidationIssueModel } from '../../models/ValidationIssue'
+import { resolveDashboardHighlights, type DashboardMetricSpec } from '../../utils/dashboardConfig'
 
 interface MetricResult {
   completed: number
@@ -17,11 +18,16 @@ interface StageStat {
   completed: number
 }
 
+interface GpaGroupStat {
+  total: number
+  completed: number
+}
+
 interface MetricContext {
   totalsByApplication: Map<string, number>
   stageStats: Map<string, StageStat>
   gpaStatusCounts: Map<string, number>
-  gpaRecordCounts: Map<string, { dpscd: number, optIn: number }>
+  gpaGroupCounts: Map<string, GpaGroupStat>
   hsptLinkedCounts: Map<string, number>
   mappedFieldCounts: Map<string, number>
 }
@@ -44,10 +50,12 @@ function evaluateMetric(spec: DashboardMetricSpec, applicationId: string, contex
       completed = context.gpaStatusCounts.get(`${applicationId}:${spec.status}`) || 0
       total = context.totalsByApplication.get(applicationId) || 0
       break
+    case 'gpaRecording':
     case 'gpaRecord': {
-      const counts = context.gpaRecordCounts.get(applicationId)
-      completed = (spec.source === 'dpscd' ? counts?.dpscd : counts?.optIn) || 0
-      total = context.totalsByApplication.get(applicationId) || 0
+      const group = spec.type === 'gpaRecording' ? 'recording' : spec.source
+      const stat = context.gpaGroupCounts.get(`${applicationId}:${group}`)
+      completed = stat?.completed || 0
+      total = stat?.total || 0
       break
     }
     case 'hsptLinked':
@@ -83,8 +91,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
   }
 
-  const submissionFilter = { cycleId }
+  const submissionFilter = { cycleId, status: { $not: /^withdrawn$/i } }
+  const stageSubmissionFilter = { cycleId }
   const jobFilter = { cycleId, parentJobId: { $exists: false } }
+  const labels = await MetadataModel.find({
+    type: 'label',
+    name: { $in: [/^\s*dpscd\s*$/i, /^\s*opt[-\s]?in\s*$/i] }
+  }).select('externalId name').lean()
+  const dpscdLabelId = labels.find(label => /^\s*dpscd\s*$/i.test(label.name))?.externalId
+  const optInLabelId = labels.find(label => /^\s*opt[-\s]?in\s*$/i.test(label.name))?.externalId
+  const hasDpscdLabel = dpscdLabelId ? { $in: [dpscdLabelId, { $ifNull: ['$labelIds', []] }] } : { $literal: false }
+  const hasOptInLabel = optInLabelId ? { $in: [optInLabelId, { $ifNull: ['$labelIds', []] }] } : { $literal: false }
+  const isRecording = dpscdLabelId && optInLabelId
+    ? { $and: [{ $not: [hasDpscdLabel] }, { $not: [hasOptInLabel] }] }
+    : { $literal: false }
+  const isComplete = { $eq: ['$gpaStatus', 'Complete'] }
+  const groupTotal = (condition: object) => ({ $sum: { $cond: [condition, 1, 0] } })
+  const groupComplete = (condition: object) => ({ $sum: { $cond: [{ $and: [condition, isComplete] }, 1, 0] } })
   const [
     applications,
     reviewStages,
@@ -136,7 +159,7 @@ export default defineEventHandler(async (event) => {
       { $sort: { total: -1, _id: 1 } }
     ]),
     SubmissionModel.aggregate([
-      { $match: submissionFilter },
+      { $match: stageSubmissionFilter },
       { $unwind: '$reviewCompletion' },
       { $match: { 'reviewCompletion.role': { $ne: 'final' } } },
       {
@@ -157,12 +180,16 @@ export default defineEventHandler(async (event) => {
         $group: {
           _id: '$applicationId',
           total: { $sum: 1 },
-          gpaDpscd: { $sum: { $cond: ['$gpaDpscd', 1, 0] } },
-          gpaOptIn: { $sum: { $cond: ['$gpaOptIn', 1, 0] } },
+          gpaRecordingTotal: groupTotal(isRecording),
+          gpaRecordingComplete: groupComplete(isRecording),
+          gpaDpscdTotal: groupTotal(hasDpscdLabel),
+          gpaDpscdComplete: groupComplete(hasDpscdLabel),
+          gpaOptInTotal: groupTotal(hasOptInLabel),
+          gpaOptInComplete: groupComplete(hasOptInLabel),
           hsptLinked: {
             $sum: {
               $cond: [
-                { $and: [{ $ne: ['$hsptResultId', null] }, { $ne: ['$hsptResultId', ''] }] },
+                { $ne: [{ $ifNull: ['$hsptResultId', ''] }, ''] },
                 1,
                 0
               ]
@@ -231,12 +258,14 @@ export default defineEventHandler(async (event) => {
   }
 
   const totalsByApplication = new Map<string, number>()
-  const gpaRecordCounts = new Map<string, { dpscd: number, optIn: number }>()
+  const gpaGroupCounts = new Map<string, GpaGroupStat>()
   const hsptLinkedCounts = new Map<string, number>()
   for (const item of applicationMetrics) {
     const applicationId = String(item._id)
     totalsByApplication.set(applicationId, item.total)
-    gpaRecordCounts.set(applicationId, { dpscd: item.gpaDpscd, optIn: item.gpaOptIn })
+    gpaGroupCounts.set(`${applicationId}:recording`, { total: item.gpaRecordingTotal, completed: item.gpaRecordingComplete })
+    gpaGroupCounts.set(`${applicationId}:dpscd`, { total: item.gpaDpscdTotal, completed: item.gpaDpscdComplete })
+    gpaGroupCounts.set(`${applicationId}:optIn`, { total: item.gpaOptInTotal, completed: item.gpaOptInComplete })
     hsptLinkedCounts.set(applicationId, item.hsptLinked)
   }
 
@@ -270,7 +299,7 @@ export default defineEventHandler(async (event) => {
     totalsByApplication,
     stageStats,
     gpaStatusCounts,
-    gpaRecordCounts,
+    gpaGroupCounts,
     hsptLinkedCounts,
     mappedFieldCounts
   }

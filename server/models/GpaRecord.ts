@@ -40,6 +40,8 @@ export interface GpaRecord {
   submissionIdInt?: number
   dpscd?: DpscdGpa
   optIn?: OptInGpa
+  resolvedCumulativeGpa?: number | null
+  resolvedSource?: 'recording' | 'dpscd' | 'optIn' | 'partial' | null
   createdAt?: Date
   updatedAt?: Date
 }
@@ -79,7 +81,9 @@ const gpaRecordSchema = new Schema<GpaRecord>({
     sourceFile: String,
     uploadId: String,
     importedAt: Date
-  }
+  },
+  resolvedCumulativeGpa: Number,
+  resolvedSource: String
 }, { timestamps: true })
 
 gpaRecordSchema.index({ cycleId: 1, submissionId: 1 }, { unique: true })

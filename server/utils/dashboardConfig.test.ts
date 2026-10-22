@@ -19,7 +19,7 @@ describe('defaultDashboardHighlights', () => {
     const gpa = highlights[0]!
     expect(gpa.metric).toEqual({ type: 'gpaStatus', status: 'Complete' })
     expect(gpa.segments).toEqual([
-      { key: 'gpa-recording', label: 'GPA Recording', metric: { type: 'reviewStage', stageId: 'gpa-recording' } },
+      { key: 'gpa-recording', label: 'GPA Recording', metric: { type: 'gpaRecording' } },
       { key: 'dpscd-gpa', label: 'DPSCD GPA', metric: { type: 'gpaRecord', source: 'dpscd' } },
       { key: 'optin-gpa', label: 'Opt-In GPA', metric: { type: 'gpaRecord', source: 'optIn' } }
     ])

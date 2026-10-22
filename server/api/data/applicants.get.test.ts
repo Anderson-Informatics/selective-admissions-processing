@@ -1,3 +1,6 @@
+import { text } from 'node:stream/consumers'
+import type { Readable } from 'node:stream'
+import { parse } from 'csv-parse/sync'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CycleModel } from '../../models/Cycle'
 import { MetadataModel } from '../../models/Metadata'
@@ -38,6 +41,8 @@ beforeEach(() => {
   vi.stubGlobal('createError', ({ statusCode, statusMessage }: { statusCode: number, statusMessage: string }) =>
     Object.assign(new Error(statusMessage), { statusCode }))
   vi.stubGlobal('connectDb', connectDb)
+  vi.stubGlobal('setHeader', vi.fn())
+  vi.stubGlobal('sendStream', async (_event: unknown, stream: Readable) => text(stream))
 })
 
 afterEach(() => {
@@ -111,7 +116,7 @@ describe('GET /api/data/applicants', () => {
     }
     vi.mocked(CycleModel.find).mockReturnValue(cycleQuery as never)
 
-    const result = await handler({ authorization: 'Bearer private-key', query: { page: '2', limit: '3' } })
+    const result = await handler({ authorization: 'Bearer private-key', query: { format: 'json', page: '2', limit: '3' } })
 
     expect(connectDb).toHaveBeenCalledOnce()
     expect(query.select).toHaveBeenCalledWith(expect.stringContaining('completedAt'))
@@ -230,4 +235,98 @@ describe('GET /api/data/applicants', () => {
       expect(connectDb).not.toHaveBeenCalled()
     }
   )
+
+  it('streams all non-withdrawn applicants as a downloadable CSV, ignoring pagination', async () => {
+    const submissions = Array.from({ length: 251 }, (_, index) => ({
+      submissionId: `s${index}`,
+      projectId: 'project-1',
+      cycleId: 'cycle-1',
+      completedAt: index === 0 ? new Date('2026-05-06T12:00:00Z') : undefined,
+      mappedFields: index === 0
+        ? { StudentNumber: '00123', FirstName: '=1+1', LastName: 'A,"B"\nC', ParentEmail: 'a@example.test' }
+        : {}
+    }))
+    const cursor = {
+      async* [Symbol.asyncIterator]() { yield* submissions },
+      close: vi.fn()
+    }
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      sort: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockReturnThis(),
+      cursor: vi.fn().mockReturnValue(cursor),
+      skip: vi.fn(),
+      limit: vi.fn()
+    }
+    vi.mocked(SubmissionModel.find).mockReturnValue(query as never)
+    vi.mocked(MetadataModel.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockResolvedValue([{ externalId: 'project-1', name: 'Admissions' }])
+    } as never)
+    vi.mocked(CycleModel.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockResolvedValue([{ _id: 'cycle-1', year: '2026-2027' }])
+    } as never)
+
+    const event = { authorization: 'Bearer private-key', query: { format: 'csv', page: '0', limit: '999' } }
+    const csv = await handler(event) as string
+    const rows = parse(csv, { columns: true }) as Record<string, string>[]
+    const filter = vi.mocked(SubmissionModel.find).mock.calls[0]?.[0] as unknown as { status: { $not: RegExp } }
+
+    expect(filter.status.$not.test('Withdrawn')).toBe(true)
+    expect(query.select).toHaveBeenCalledWith(expect.stringContaining('completedAt'))
+    expect(query.sort).toHaveBeenCalledWith({ _id: 1 })
+    expect(query.skip).not.toHaveBeenCalled()
+    expect(query.limit).not.toHaveBeenCalled()
+    expect(SubmissionModel.countDocuments).not.toHaveBeenCalled()
+    expect(MetadataModel.find).toHaveBeenCalledTimes(2)
+    expect(CycleModel.find).toHaveBeenCalledTimes(2)
+    expect(cursor.close).toHaveBeenCalledOnce()
+    expect(rows).toHaveLength(251)
+    expect(Object.keys(rows[0] || {})).toEqual([
+      'submissionId', 'submissionIdInt', 'submissionDate', 'Application', 'Year',
+      'StudentNumber', 'FirstName', 'LastName', 'FullName', 'DOB',
+      'ParentFirstName', 'ParentLastName', 'ParentPhone', 'ParentEmail'
+    ])
+    expect(rows[0]).toMatchObject({
+      submissionId: 's0',
+      submissionIdInt: '',
+      submissionDate: '2026-05-06T12:00:00.000Z',
+      Application: 'Admissions',
+      Year: '2026-2027',
+      StudentNumber: '00123',
+      FirstName: '\'=1+1',
+      LastName: 'A,"B"\nC',
+      ParentEmail: 'a@example.test'
+    })
+    expect(rows[250]?.submissionId).toBe('s250')
+    expect(setHeader).toHaveBeenCalledWith(event, 'Content-Type', 'text/csv; charset=utf-8')
+    expect(setHeader).toHaveBeenCalledWith(event, 'Content-Disposition', 'attachment; filename="applicants.csv"')
+    expect(setHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'no-store')
+  })
+
+  it('returns just the CSV header for an empty export', async () => {
+    const cursor = {
+      async* [Symbol.asyncIterator]() {},
+      close: vi.fn()
+    }
+    vi.mocked(SubmissionModel.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      sort: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockReturnThis(),
+      cursor: vi.fn().mockReturnValue(cursor)
+    } as never)
+
+    const csv = await handler({ authorization: 'Bearer private-key', query: { format: 'csv' } }) as string
+    expect(csv).toMatch(/^submissionId,submissionIdInt,submissionDate,Application,Year,.*ParentEmail\r\n$/)
+    expect(MetadataModel.find).not.toHaveBeenCalled()
+    expect(CycleModel.find).not.toHaveBeenCalled()
+    expect(cursor.close).toHaveBeenCalledOnce()
+  })
+
+  it.each(['xml', '', ['csv', 'json']])('rejects invalid format %j before database access', async (format) => {
+    await expect(handler({ authorization: 'Bearer private-key', query: { format } }))
+      .rejects.toMatchObject({ statusCode: 400 })
+    expect(connectDb).not.toHaveBeenCalled()
+  })
 })

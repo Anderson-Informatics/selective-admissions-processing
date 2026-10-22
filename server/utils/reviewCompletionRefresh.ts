@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { AnyBulkWriteOperation } from 'mongoose'
 import { CycleModel } from '../models/Cycle'
-import { GpaRecordModel } from '../models/GpaRecord'
+import { GpaRecordModel, type GpaRecord } from '../models/GpaRecord'
 import { resolveSubmissionRound } from './cycleRounds'
 import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import { normalizeRoutingConfig } from './routingConfig'
-import { computeReviewCompletion, deriveGpaStatus, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
+import { computeReviewCompletion, resolveGpa, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
 
 export interface RefreshProgress {
   (update: { phase?: string, processed?: number, total?: number, percent?: number, message?: string }): Promise<void>
@@ -38,9 +39,10 @@ function toRoutingStages(stages: Array<Record<string, any>>): RoutingStage[] {
   }))
 }
 
-function toRoutingReviews(reviews: Array<Record<string, any>>): RoutingReview[] {
+function toRoutingReviews(reviews: Array<Record<string, any>>, stages: RoutingStage[]): RoutingReview[] {
   return reviews.map(review => ({
     stageId: review.stageId,
+    stageName: stages.find(stage => stage.stageId === review.stageId)?.name || review.stageName,
     status: review.status,
     score: review.score,
     completedAt: review.completedAt,
@@ -67,7 +69,7 @@ export function buildReviewCompletionForSubmission(
       hsptResultId: submission.hsptResultId,
       status: submission.status
     },
-    reviews: toRoutingReviews(reviews),
+    reviews: toRoutingReviews(reviews, routingStages),
     gpa,
     cycleRound
   }
@@ -76,9 +78,11 @@ export function buildReviewCompletionForSubmission(
     .filter(entry => (entry.role === 'work' || entry.role === 'initial') && !/ready for placement/i.test(entry.name))
     .every(entry => !entry.required || entry.complete)
   const completion = computeReviewCompletion(routingStages, { ...context, prerequisitesComplete })
+  const resolvedGpa = resolveGpa(context)
   return {
     ...completion,
-    gpaStatus: deriveGpaStatus(context),
+    gpaStatus: resolvedGpa.status,
+    resolvedGpa,
     gpaDpscd: Boolean(gpa?.dpscd),
     gpaOptIn: Boolean(gpa?.optIn)
   }
@@ -124,6 +128,7 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
     }
     const gpaBySubmission = new Map(gpaRecords.map(record => [record.submissionId, record]))
     const operations = []
+    const gpaOperations: AnyBulkWriteOperation<GpaRecord>[] = []
 
     for (const submission of submissions) {
       const stages = stagesByApplication.get(String(submission.applicationId)) || []
@@ -138,6 +143,19 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
       result.processed += 1
       result.diagnostics += completion.diagnostics.length
       if (!options.dryRun) {
+        gpaOperations.push({
+          updateOne: {
+            filter: { cycleId: options.cycleId, submissionId: submission.submissionId },
+            update: {
+              $setOnInsert: { cycleId: options.cycleId, submissionId: submission.submissionId },
+              $set: {
+                resolvedCumulativeGpa: completion.resolvedGpa.cumulativeGpa,
+                resolvedSource: completion.resolvedGpa.source
+              }
+            },
+            upsert: true
+          }
+        })
         operations.push({
           updateOne: {
             filter: { cycleId: options.cycleId, submissionId: submission.submissionId },
@@ -157,6 +175,7 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
       }
     }
 
+    if (gpaOperations.length) await GpaRecordModel.bulkWrite(gpaOperations)
     if (operations.length) {
       const writeResult = await SubmissionModel.bulkWrite(operations)
       result.updated += writeResult.modifiedCount

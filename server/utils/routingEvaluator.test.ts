@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeCycleRounds, resolveSubmissionRound } from './cycleRounds'
 import { buildReviewCompletionForSubmission } from './reviewCompletionRefresh'
-import { computeReviewCompletion, deriveGpaStatus, evaluateCondition, routeSubmission, type RoutingContext, type RoutingStage } from './routingEvaluator'
+import { computeReviewCompletion, deriveGpaStatus, evaluateCondition, resolveGpa, routeSubmission, type RoutingContext, type RoutingStage } from './routingEvaluator'
 
 const stage = (stageId: string, order: number, role: RoutingStage['role'], routing: Partial<RoutingStage['routing']> = {}): RoutingStage => ({
   stageId,
@@ -31,6 +31,79 @@ const context = (overrides: Partial<RoutingContext> = {}): RoutingContext => ({
 })
 
 describe('review completion evaluator', () => {
+  const recordingReview = (gpa: unknown, answer = 'Yes', completed = true) => ({
+    stageId: 'recording',
+    stageName: 'GPA Recording',
+    status: completed ? 'complete' : 'in_progress',
+    completedAt: completed ? new Date('2026-10-21') : undefined,
+    mappedData: { CumulativeGPA: gpa, AbleToRecord: answer }
+  })
+
+  it('prioritizes the latest valid completed GPA Recording review over external records', () => {
+    const input = context({
+      reviews: [recordingReview(2.5), { ...recordingReview(0), completedAt: new Date('2026-10-22') }],
+      gpa: { dpscd: { quartersAvailable: 6, cumulativeGpa: 3.7 }, optIn: { cumulativeGpa: 3.8 } }
+    })
+    expect(resolveGpa(input)).toEqual({ status: 'Complete', cumulativeGpa: 0, source: 'recording' })
+    expect(buildReviewCompletionForSubmission(input.submission, [
+      { stageId: 'recording', name: 'GPA Recording' }
+    ], [{ ...recordingReview(0), stageName: '' }], input.gpa).resolvedGpa).toEqual({
+      status: 'Complete', cumulativeGpa: 0, source: 'recording'
+    })
+  })
+
+  it.each([[-1], [4.31], [''], ['not a GPA']])('rejects an invalid recording GPA of %s', (gpa) => {
+    expect(resolveGpa(context({
+      reviews: [recordingReview(gpa)],
+      gpa: { dpscd: { quartersAvailable: 6, cumulativeGpa: 3.4 } }
+    }))).toEqual({ status: 'Complete', cumulativeGpa: 3.4, source: 'dpscd' })
+  })
+
+  it('does not use incomplete, rejected, or stale recording reviews', () => {
+    for (const review of [recordingReview(3.1, 'No'), recordingReview(3.1, 'Yes', false)]) {
+      expect(resolveGpa(context({ reviews: [review] }))).toEqual({
+        status: 'Incomplete', cumulativeGpa: null, source: null
+      })
+    }
+    expect(resolveGpa(context({ reviews: [
+      recordingReview(3.1),
+      { ...recordingReview(4.8), completedAt: new Date('2026-10-22') }
+    ] }))).toEqual({ status: 'Incomplete', cumulativeGpa: null, source: null })
+  })
+
+  it('uses DPSCD before Opt-In, and preserves insufficient-history statuses', () => {
+    expect(resolveGpa(context({ gpa: {
+      dpscd: { quartersAvailable: 6, cumulativeGpa: 3.2 },
+      optIn: { cumulativeGpa: 3.8, enrolledMinTerms: 'yes' }
+    } }))).toEqual({ status: 'Complete', cumulativeGpa: 3.2, source: 'dpscd' })
+    expect(resolveGpa(context({ gpa: {
+      dpscd: { quartersAvailable: 4, cumulativeGpa: 3.2 },
+      optIn: { cumulativeGpa: 3.8, enrolledMinTerms: 'yes' }
+    } }))).toEqual({ status: 'Complete', cumulativeGpa: 3.8, source: 'optIn' })
+    expect(resolveGpa(context({ gpa: { dpscd: { quartersAvailable: 4, cumulativeGpa: 3.2 } } }))).toEqual({
+      status: 'DPSCD Partial', cumulativeGpa: null, source: null
+    })
+  })
+
+  it('uses a completed Partial GPA review after full sources, before partial fallback statuses', () => {
+    const partial = {
+      stageId: 'partial', stageName: 'Partial GPA', status: 'complete', mappedData: { PartialGPA: '2.9' }
+    }
+    expect(resolveGpa(context({ reviews: [partial], gpa: {
+      dpscd: { quartersAvailable: 4 },
+      optIn: { enrolledMinTerms: 'no', cumulativeGpa: 3 }
+    } }))).toEqual({ status: 'Partial', cumulativeGpa: 2.9, source: 'partial' })
+    expect(resolveGpa(context({ reviews: [{ ...partial, status: 'in_progress' }], gpa: {
+      optIn: { enrolledMinTerms: 'no', cumulativeGpa: 3 }
+    } }))).toEqual({ status: 'OOD Partial', cumulativeGpa: null, source: null })
+    expect(resolveGpa(context({ reviews: [partial], gpa: {
+      dpscd: { quartersAvailable: 6, cumulativeGpa: 3.6 }
+    } })).source).toBe('dpscd')
+    expect(resolveGpa(context({ reviews: [{ ...partial, mappedData: { PartialGPA: 4.4 } }] }))).toEqual({
+      status: 'Incomplete', cumulativeGpa: null, source: null
+    })
+  })
+
   it('classifies an uploaded Opt-In GPA with explicitly insufficient attendance as OOD Partial', () => {
     const partial = context({
       submission: { ...context().submission, mappedFields: { CumulativeGPA: 3.5 } },

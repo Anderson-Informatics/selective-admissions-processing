@@ -70,7 +70,15 @@ export default defineEventHandler(async (event) => {
         hsptResultId: submission.hsptResultId,
         status: submission.status
       },
-      reviews: submissionReviews.map(review => ({ stageId: review.stageId, status: review.status, score: review.score, completedAt: review.completedAt, createdAt: review.createdAt, mappedData: review.mappedData || {} })),
+      reviews: submissionReviews.map(review => ({
+        stageId: review.stageId,
+        stageName: routingStages.find(stage => stage.stageId === review.stageId)?.name || review.stageName,
+        status: review.status,
+        score: review.score,
+        completedAt: review.completedAt,
+        createdAt: review.createdAt,
+        mappedData: review.mappedData || {}
+      })),
       gpa: gpaBySubmission.get(submission.submissionId) as RoutingContext['gpa'],
       cycleRound: round.key
     }
