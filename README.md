@@ -78,6 +78,11 @@ to paginate (default limit 100, maximum 100). Each applicant contains only
 is the synced Submittable project name; `Year` is the school-year string stored
 in the submission's cycle (not its `cycleId`).
 
+`GET /api/data/applications` uses the same key, filters, and `format`/pagination
+options but returns every application column (initial form entry metadata plus all
+mapped answers) under an `applications` key. See
+[Full application endpoint](APPLICANTS_API.md#full-application-endpoint).
+
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
 
 ## Renovate integration

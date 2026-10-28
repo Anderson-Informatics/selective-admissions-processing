@@ -12,6 +12,8 @@ export interface FormEntry {
   completedAt?: Date
   createdBy?: string
   createdAt?: Date
+  entryVersionId?: string
+  openedForEditingAt?: Date
   fieldData: unknown[]
   mappedData: Record<string, unknown>
   isMapped: boolean
@@ -31,6 +33,8 @@ const formEntrySchema = new Schema<FormEntry>({
   completedAt: Date,
   createdBy: String,
   createdAt: Date,
+  entryVersionId: String,
+  openedForEditingAt: Date,
   fieldData: { type: [Schema.Types.Mixed], default: [] },
   mappedData: { type: Schema.Types.Mixed, default: {} },
   isMapped: { type: Boolean, default: false }

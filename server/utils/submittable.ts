@@ -62,6 +62,7 @@ export interface SubmittableFormEntry {
     completedAt?: string
     createdBy?: string
     createdAt?: string
+    openedForEditingAt?: string
     fieldData: unknown[]
   }
 }
