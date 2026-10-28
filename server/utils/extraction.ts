@@ -117,12 +117,16 @@ export async function extractFormSubmissions(
               completedAt: entry.completedAt ? new Date(entry.completedAt) : undefined,
               createdBy: entry.createdBy,
               createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
+              entryVersionId: entry.entryVersionId,
+              openedForEditingAt: entry.openedForEditingAt ? new Date(entry.openedForEditingAt) : undefined,
               fieldData: entry.fieldData || [],
               mappedData: {},
               isMapped: false
             }
           },
-          upsert: true
+          upsert: true,
+          // Keep Submittable's createdAt instead of Mongoose's insert-time timestamp.
+          overwriteImmutable: true
         }
       })
 
@@ -148,7 +152,8 @@ export async function extractFormSubmissions(
             },
             $addToSet: addToSet
           },
-          upsert: true
+          upsert: true,
+          overwriteImmutable: true
         }
       })
     }

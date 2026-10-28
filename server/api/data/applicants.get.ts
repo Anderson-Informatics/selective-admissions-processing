@@ -1,9 +1,9 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Readable } from 'node:stream'
 import type { Submission } from '../../models/Submission'
 import { CycleModel } from '../../models/Cycle'
 import { MetadataModel } from '../../models/Metadata'
 import { SubmissionModel } from '../../models/Submission'
+import { csvCell, csvPhone, notWithdrawnFilter, parseDataFormat, parseDataPagination, requireDataKey } from '../../utils/dataApi'
 
 const applicantFields = [
   'submissionId', 'submissionIdInt', 'submissionDate', 'Application', 'Year',
@@ -48,23 +48,6 @@ async function mapApplicants(submissions: ApplicantSubmission[]) {
   })
 }
 
-function csvCell(value: unknown) {
-  let text = value == null ? '' : value instanceof Date ? value.toISOString() : String(value)
-  // Quoting alone does not stop spreadsheet applications from evaluating formulas.
-  if (typeof value === 'string' && (/^\s*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text))) text = `'${text}`
-  return `"${text.replaceAll('"', '""')}"`
-}
-
-function csvPhone(value: unknown) {
-  if (typeof value !== 'string' && typeof value !== 'number') return value
-  const phone = String(value).trim()
-  if (!/^\+?[\d(][\d(). -]*$/.test(phone)) return value
-  let digits = phone.replace(/\D/g, '')
-  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1)
-  else if (digits.length !== 10 || phone.startsWith('+')) return value
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-}
-
 async function* csvRows(filter: { status: { $not: RegExp } }) {
   yield `${applicantFields.join(',')}\r\n`
   const cursor = SubmissionModel.find(filter).select(selection).sort({ _id: 1 }).lean().cursor()
@@ -87,42 +70,21 @@ async function* csvRows(filter: { status: { $not: RegExp } }) {
 }
 
 export default defineEventHandler(async (event) => {
-  const { dataKey, dataSecret } = useRuntimeConfig()
-  if (!dataKey || !dataSecret) {
-    throw createError({ statusCode: 503, statusMessage: 'Service Unavailable' })
-  }
-
-  const authorization = getHeader(event, 'authorization')
-  const suppliedKey = /^Bearer ([^\s]+)$/i.exec(authorization || '')?.[1]
-  const digest = (key: string) => createHmac('sha256', dataSecret).update(key).digest()
-  if (!suppliedKey || !timingSafeEqual(digest(suppliedKey), digest(dataKey))) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
+  requireDataKey(event)
 
   const query = getQuery(event)
-  const format = query.format ?? 'json'
-  if (format !== 'json' && format !== 'csv') {
-    throw createError({ statusCode: 400, statusMessage: 'format must be json or csv' })
-  }
+  const format = parseDataFormat(query)
   if (format === 'csv') {
     await connectDb()
     setHeader(event, 'Content-Type', 'text/csv; charset=utf-8')
     setHeader(event, 'Content-Disposition', 'attachment; filename="applicants.csv"')
     setHeader(event, 'Cache-Control', 'no-store')
-    return sendStream(event, Readable.from(csvRows({ status: { $not: /^withdrawn$/i } })))
+    return sendStream(event, Readable.from(csvRows(notWithdrawnFilter())))
   }
 
-  const page = Number(query.page ?? 1)
-  const limit = Number(query.limit ?? 100)
-  if (Array.isArray(query.page) || Array.isArray(query.limit)
-    || !Number.isSafeInteger(page) || page < 1
-    || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
-    || (page - 1) * limit > Number.MAX_SAFE_INTEGER) {
-    throw createError({ statusCode: 400, statusMessage: 'page and limit must be positive integers (limit <= 100)' })
-  }
-
+  const { page, limit } = parseDataPagination(query)
   await connectDb()
-  const filter = { status: { $not: /^withdrawn$/i } }
+  const filter = notWithdrawnFilter()
   const [submissions, total] = await Promise.all([
     SubmissionModel.find(filter)
       .select(selection)

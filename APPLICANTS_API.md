@@ -97,6 +97,27 @@ Example response:
 }
 ```
 
+## Full application endpoint
+
+`GET /api/data/applications` returns every application column for each submission. It uses the same authentication, `format` (`json` or `csv`), pagination, ordering, withdrawn-submission exclusion, CSV safety handling, and error responses as `/api/data/applicants`. The JSON response has `applications` (an array), `total`, `page`, and `limit`; the CSV download is named `applications.csv`.
+
+```sh
+curl --fail-with-body \
+  -H "Authorization: Bearer $DATA_KEY" \
+  -o applications.csv \
+  'https://YOUR_HOST/api/data/applications?format=csv'
+```
+
+Each application has these keys, in this order. Missing values are `null` (empty cells in CSV).
+
+`formType`, `submissionId`, `projectId`, `entryId`, `formId`, `status`, `completedAt`, `createdBy`, `createdAt`, `entryVersionId`, `openedForEditingAt`, `FullName`, `FirstName`, `LastName`, `SingleAcceptance`, `GradeEntering`, `ParentFirstName`, `ParentLastName`, `ParentEmail`, `ParentPhone`, `ParentPhone2`, `DOB`, `Email`, `Phone`, `Address1`, `Address2`, `City`, `State`, `Zip`, `Country`, `Gender`, `DPSCD`, `IEPorNPSPor504`, `ELL`, `ExamDate`, `Ref1Name`, `Ref1Phone`, `Ref1Email`, `Ref1Relationship`, `Ref2Name`, `Ref2Phone`, `Ref2Email`, `Ref2Relationship`, `Ref3Name`, `Ref3Phone`, `Ref3Email`, `Ref3Relationship`, `Interests`, `SignatureStudent`, `SignatureParent`, `SEMCOG`, `OODSchool`, `FirstChoiceSchool`, `SecondChoiceSchool`, `ThirdChoiceSchool`, `Essay`, `Sports`, `ELLStatement`, `Language`, `DPSCDSchool`, `AnotherSchoolAttend`, `StudentNumber`, `AnotherSchool`, `UploadNonDPSCD`, `Upload504`, `OtherSchoolLocation`, `UploadIEP`, `FourthChoiceSchool`, `FifthChoiceSchool`
+
+- `formType`, `entryId`, `formId`, `entryVersionId`, and `openedForEditingAt` come from the submission's earliest initial (application) form entry. `completedAt`, `createdBy`, and `createdAt` also come from that entry, falling back to the submission's values when no initial entry is stored.
+- `status` is the submission's current Submittable status (for example, `Accepted`), not the form entry status.
+- `entryVersionId` and `openedForEditingAt` are populated by extraction runs made after this endpoint was added; re-run extraction to fill them for existing entries.
+- All other keys are the mapped response fields with the same canonical names. They are `null` unless the source form fields are mapped to those canonical names.
+- In CSV, `ParentPhone`, `ParentPhone2`, `Phone`, `Ref1Phone`, `Ref2Phone`, and `Ref3Phone` use the phone formatting described above.
+
 ## Errors
 
 | HTTP status | Meaning |
