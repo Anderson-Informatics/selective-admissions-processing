@@ -1,4 +1,5 @@
-import { ValidationIssueModel } from '~~/server/models/ValidationIssue'
+import { ValidationIssueModel } from '../../../models/ValidationIssue'
+import { reconcileValidationLabelsForSubmission } from '../../../utils/validationLabels'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
@@ -26,6 +27,12 @@ export default defineEventHandler(async (event) => {
 
   if (!issue) {
     throw createError({ statusCode: 404, statusMessage: 'Issue not found' })
+  }
+
+  try {
+    await reconcileValidationLabelsForSubmission(issue.cycleId, issue.submissionId)
+  } catch {
+    throw createError({ statusCode: 502, statusMessage: 'Issue resolved, but Submittable labels could not be updated. Run validation again to retry.' })
   }
 
   return issue

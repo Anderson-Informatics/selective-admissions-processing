@@ -151,7 +151,8 @@ export async function submittableRequest<T>(path: string, options: RequestInit =
       throw new Error(`Submittable API error ${response.status}: ${response.statusText} ${text.slice(0, 200)}`)
     }
 
-    return response.json() as Promise<T>
+    const text = await response.text()
+    return (text ? JSON.parse(text) : undefined) as T
   }
 }
 
@@ -242,17 +243,49 @@ export async function fetchTeam(clientConfig?: SubmittableClientConfig): Promise
   return data.teamMembers || []
 }
 
+function labelIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((label) => {
+    if (typeof label === 'string') return label
+    if (label && typeof label === 'object' && typeof label.labelId === 'string') return label.labelId
+    throw new Error('Invalid Submittable submission label response')
+  })
+}
+
+export async function addSubmissionLabel(submissionId: string, labelId: string, clientConfig?: SubmittableClientConfig): Promise<void> {
+  await submittableRequest<unknown>(`/submissions/${encodeURIComponent(submissionId)}/labels/${encodeURIComponent(labelId)}`, { method: 'PUT' }, clientConfig)
+}
+
+export async function removeSubmissionLabel(submissionId: string, labelId: string, clientConfig?: SubmittableClientConfig): Promise<void> {
+  await submittableRequest<unknown>(`/submissions/${encodeURIComponent(submissionId)}/labels/${encodeURIComponent(labelId)}`, { method: 'DELETE' }, clientConfig)
+}
+
+export async function addSubmissionLabelBulk(submissionIds: string[], labelId: string, clientConfig?: SubmittableClientConfig): Promise<void> {
+  const uniqueIds = [...new Set(submissionIds)]
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    const batch = uniqueIds.slice(index, index + 500)
+    const result = await submittableRequest<{ submissionIds?: string[] | null }>(
+      '/submissions/labels',
+      { method: 'PUT', body: JSON.stringify({ labelId, submissionIds: batch }) },
+      clientConfig
+    )
+    const applied = new Set(result?.submissionIds || [])
+    if (batch.some(id => !applied.has(id))) throw new Error(`Bulk label application was incomplete for ${labelId}`)
+  }
+}
+
 export async function fetchSubmission(
   submissionId: string,
   clientConfig?: SubmittableClientConfig
 ): Promise<SubmittableSubmissionListItem> {
   const data = await submittableRequest<unknown>(`/submissions/${submissionId}`, {}, clientConfig)
-  const sub = data as { submissionId: string, projectId?: string, reviewStageId?: string, status?: string, submissionStatus?: string }
+  const sub = data as { submissionId: string, projectId?: string, reviewStageId?: string, status?: string, submissionStatus?: string, labels?: unknown }
   return {
     submissionId: sub.submissionId,
     projectId: sub.projectId,
     reviewStageId: sub.reviewStageId,
-    status: sub.status || sub.submissionStatus
+    status: sub.status || sub.submissionStatus,
+    labels: labelIds(sub.labels)
   }
 }
 
@@ -275,7 +308,7 @@ export async function fetchSubmissionsForProject(
     const data = await submittableRequest<{ items: unknown[], continuationToken?: string }>(`/submissions?${params.toString()}`, {}, clientConfig)
     submissions.push(...(data.items || []).map((item) => {
       const sub = item as SubmittableSubmissionListItem & { submissionStatus?: string }
-      return { ...sub, status: sub.status || sub.submissionStatus }
+      return { ...sub, labels: labelIds(sub.labels), status: sub.status || sub.submissionStatus }
     }))
     continuationToken = data.continuationToken
   } while (continuationToken)

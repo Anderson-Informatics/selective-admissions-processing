@@ -158,6 +158,33 @@ describe('student full-name validation', () => {
     }])
   })
 
+  it.each([
+    { FullName: 'Alex Smith', FirstName: 'Alex', LastName: 'Smith Jr.' },
+    { FullName: 'Alex Smith', FirstName: 'Alex', LastName: 'Smith III' },
+    { FullName: 'Alex Smith Jr.', FirstName: 'Alex', LastName: 'Smith III' },
+    { FullName: 'Alex Smith', FirstName: 'Alex', LastName: 'Smith Sr., IV' },
+    { FullName: 'Alex Smith', FirstName: 'Alex Jr', LastName: 'Smith' }
+  ])('ignores a trailing suffix in only one name field: %j', async (fields) => {
+    submissions = [submission(fields)]
+    await runValidationForCycle('cycle-1')
+    expect(openIssues('parent_student_name_swap')).toEqual([])
+  })
+
+  it('does not strip a genuine student surname or mask a genuine mismatch', async () => {
+    submissions = [
+      submission({ FullName: 'Alex Smith', FirstName: 'Alex', LastName: 'Junior' }),
+      submission({ FullName: 'Alex Smith', FirstName: 'Alex', LastName: 'Jones Jr.' }, { submissionId: 'sub-2' })
+    ]
+    await runValidationForCycle('cycle-1')
+    expect(openIssues('parent_student_name_swap')).toHaveLength(2)
+  })
+
+  it('keeps a suffix-shaped surname when it is the mapped last name', async () => {
+    submissions = [submission({ FullName: 'Alex V', FirstName: 'Alex', LastName: 'V' })]
+    await runValidationForCycle('cycle-1')
+    expect(openIssues('parent_student_name_swap')).toEqual([])
+  })
+
   it('does not count the same full-name token twice', async () => {
     submissions = [submission({ FullName: 'Lee', FirstName: 'Lee', LastName: 'Lee' })]
     await runValidationForCycle('cycle-1')

@@ -232,9 +232,9 @@ function checkStudentNumber(submission: Submission): ValidationIssueInput[] {
 
 function checkParentStudentNameSwap(submission: Submission): ValidationIssueInput[] {
   const mapped = submission.mappedFields || {}
-  const fullName = nameTokens(mapped.FullName)
-  const firstName = nameTokens(mapped.FirstName)
-  const lastName = nameTokens(mapped.LastName)
+  const lastName = nameTokensWithoutSuffix(mapped.LastName)
+  const fullName = nameTokensWithoutSuffix(mapped.FullName, lastName.length === 1 ? lastName[0] : undefined)
+  const firstName = nameTokensWithoutSuffix(mapped.FirstName)
   if (!fullName.length || !firstName.length || !lastName.length) return []
   if (containsNames(fullName, [firstName, lastName])) return []
 
@@ -345,6 +345,14 @@ function normalizeName(value: string): string {
 
 function nameTokens(value: unknown): string[] {
   return String(value ?? '').toLowerCase().match(/[a-z0-9]+/g) || []
+}
+
+const nameSuffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'])
+
+function nameTokensWithoutSuffix(value: unknown, preserve?: string): string[] {
+  const tokens = nameTokens(value)
+  while (tokens.length > 1 && nameSuffixes.has(tokens[tokens.length - 1]!) && tokens[tokens.length - 1] !== preserve) tokens.pop()
+  return tokens
 }
 
 function containsNames(fullName: string[], names: string[][]): boolean {

@@ -8,6 +8,7 @@ import { mapWithConcurrency } from './concurrency'
 import { getApplicationIdsWithMappings, getMappedFormManifest } from './mappingStatus'
 import { mapFormResponsesForCycle } from './responseMapping'
 import { runValidationForCycle } from './validation'
+import { reconcileValidationLabelsForCycle } from './validationLabels'
 import { runCatchmentForCycle } from './catchment'
 import { commitOptInGpaUpload, importDpscdGpaRecords, previewOptInGpaUpload } from './gpa'
 import { fetchForm, fetchForms, fetchLabels, fetchProjects, fetchTeam, type SubmittableClientConfig } from './submittable'
@@ -207,9 +208,12 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
     return { result: { ...result, applicationsWithMappings: applicationIds.length } }
   },
 
-  run_validation: async (job, { setProgress }) => {
+  run_validation: async (job, { setProgress, submittable }) => {
     const result = await runValidationForCycle(job.cycleId, setProgress)
-    return { result }
+    await setProgress({ phase: 'syncing_labels', message: 'Synchronizing validation labels with Submittable', percent: 99 })
+    const labels = await reconcileValidationLabelsForCycle(job.cycleId, submittable)
+    await setProgress({ phase: 'completed', message: `Validation complete. ${labels.added} labels added, ${labels.removed} removed.`, percent: 100 })
+    return { result: { ...result, labels } }
   },
 
   refresh_review_completion: async (job, { setProgress }) => {
