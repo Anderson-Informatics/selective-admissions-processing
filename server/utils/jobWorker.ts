@@ -1,5 +1,7 @@
 import mongoose from 'mongoose'
 import { JobModel, type JobStatus } from '../models/Job'
+import { HSPTUploadModel } from '../models/HSPTUpload'
+import { GpaUploadModel } from '../models/GpaUpload'
 import { runJob } from './jobs'
 import type { SubmittableClientConfig } from './submittable'
 
@@ -84,6 +86,20 @@ export async function processQueuedJob(jobId: string, config: JobWorkerConfig) {
   }, 60_000)
 
   try {
+    const uploadRecovery: Record<string, { field: string, status: 'previewing' | 'confirming' | 'importing' }> = {
+      hspt_upload_preview: { field: 'previewJobId', status: 'previewing' },
+      hspt_upload_commit: { field: 'commitJobId', status: 'confirming' },
+      dpscd_gpa_import: { field: 'importJobId', status: 'importing' },
+      optin_gpa_preview: { field: 'previewJobId', status: 'previewing' },
+      optin_gpa_commit: { field: 'commitJobId', status: 'confirming' }
+    }
+    const recovery = uploadRecovery[job.type]
+    if (job.attempts > 1 && recovery && job.payload?.uploadId) {
+      const filter = { _id: job.payload.uploadId, cycleId: job.cycleId, [recovery.field]: job._id, status: 'failed' as const }
+      const update = { $set: { status: recovery.status, error: undefined } }
+      if (job.type.startsWith('hspt_')) await HSPTUploadModel.updateOne(filter, update)
+      else await GpaUploadModel.updateOne(filter, update)
+    }
     await runJob(job, { submittable: config.submittable, hereApiKey: config.hereApiKey })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

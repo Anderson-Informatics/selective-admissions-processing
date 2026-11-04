@@ -181,7 +181,7 @@
 <p>This document describes the processing jobs that are currently implemented and runnable. It explains what each job does, which Submittable endpoints it calls, and which MongoDB collections and documents it reads or changes.</p>
 
 <div class="warning">
-  <strong>Implementation status:</strong> <code>metadata_sync</code>, <code>submission_extraction</code>, and <code>form_response_mapping</code> are functional. <code>score_compilation</code> is visible in the Jobs UI but its handler is not implemented and currently fails when run.
+  <strong>Implementation status (2026-11-03):</strong> Metadata sync, submission extraction, response mapping, validation with label synchronization, review-completion refresh, catchment lookup, HSPT preview/import, and DPSCD/Opt-In GPA ingestion have implemented handlers. Routing is preview-only. <code>score_compilation</code> is visible in the Jobs UI but its handler is not implemented and currently fails when run. Implemented does not mean verified against live production data.
 </div>
 
 <div class="toc">
@@ -191,6 +191,11 @@
     <li><a href="#metadata-sync"><code>metadata_sync</code></a></li>
     <li><a href="#submission-extraction"><code>submission_extraction</code></a></li>
     <li><a href="#form-response-mapping"><code>form_response_mapping</code></a></li>
+    <li><a href="#dpscd-gpa-import"><code>dpscd_gpa_import</code></a></li>
+    <li><a href="#optin-gpa-preview"><code>optin_gpa_preview</code></a></li>
+    <li><a href="#optin-gpa-commit"><code>optin_gpa_commit</code></a></li>
+    <li><a href="#additional-jobs">Validation, catchment, HSPT, and review completion</a></li>
+    <li><a href="#verification">Verification and release boundaries</a></li>
     <li><a href="#pipeline-order">Recommended Pipeline Order</a></li>
   </ol>
 </div>
@@ -415,7 +420,7 @@ applicationId + stageId → review stage name</code></pre>
   <p>Review entries (<code>formType: "review"</code>) are written to the <code>reviews</code> collection instead of <code>formentries</code>. They are matched by <code>entryId</code> and store the parent <code>submissionId</code>, the review <code>stageId</code>, resolved application and stage metadata, reviewer/score/assignment metadata, status, timestamps, and raw <code>fieldData</code>. Their <code>mappedData</code> and <code>isMapped</code> flags are also reset so the Form Response Mapping job normalizes their answers.</p>
 
   <h3>Submission upsert</h3>
-  <p>For each entry, the job also upserts a Submission document matched by <code>submissionId</code>. It sets the cycle, application, project, status, source timestamps, and creator. It also uses set semantics to add:</p>
+  <p>For each initial entry, the job also upserts a Submission document matched by <code>submissionId</code>. Review entries are stored separately and do not create or reset the parent Submission in this handler. The initial-entry upsert sets the cycle, application, project, status, source timestamps, and creator. It also uses set semantics to add:</p>
   <ul>
     <li>The entry's <code>entryId</code> to <code>entryIds</code>.</li>
     <li>The configured stage name to <code>stageNames</code>, when one is available.</li>
@@ -606,7 +611,7 @@ formFieldId:lastName</code></pre>
   <p>The raw <code>fieldData</code> is not changed. Entry updates are accumulated and written in batches of 500.</p>
 
   <h3>Submission updates and precedence</h3>
-  <p>Mapped entry values are grouped by <code>submissionId</code>. Initial-form and review-form values are combined into a single <code>mappedFields</code> object.</p>
+  <p>Mapped initial-entry values are grouped by <code>submissionId</code> into a single <code>mappedFields</code> object. Review answers are written to <code>Review.mappedData</code> separately and do not overwrite the applicant's initial-form fields. A successful mapping job queues a review-completion refresh.</p>
   <p>Because entries are processed oldest to newest, a later entry overwrites an earlier value when both map to the same canonical name. The final operation sets the complete reconstructed object:</p>
   <pre><code>{
   "$set": {
@@ -809,18 +814,47 @@ formFieldId:lastName</code></pre>
   </ul>
 </section>
 
+<section id="additional-jobs">
+  <h2>8. Additional Implemented Jobs</h2>
+  <table>
+    <thead><tr><th>Job</th><th>Trigger and behavior</th><th>Writes</th></tr></thead>
+    <tbody>
+      <tr><td><code>run_validation</code></td><td>Jobs page. Checks DOB, student number, names, duplicates, required plan documents, and geocoding. Automatically resolves stale issues and respects manual overrides.</td><td>ValidationIssue records and managed Check labels in Submittable; local submission label cache after successful synchronization.</td></tr>
+      <tr><td><code>refresh_review_completion</code></td><td>Jobs page, or queued after mapping and HSPT/GPA commits. Evaluates configured stage requirements and statuses from the current application data.</td><td>Submission review-completion ledgers and derived status fields. Does not move submissions in Submittable.</td></tr>
+      <tr><td><code>catchment_lookup</code></td><td>Jobs page; a single-submission lookup is also available from submission details. Uses HERE geocoding and MongoDB catchment zones.</td><td>Submission geocode/catchment fields and seeded catchment zones. Does not compile a Marygrove score.</td></tr>
+      <tr><td><code>hspt_upload_preview</code></td><td>HSPT upload flow. Parses staged CSV files and previews matching without importing results.</td><td>HSPTUpload preview/status.</td></tr>
+      <tr><td><code>hspt_upload_commit</code></td><td>Confirmed HSPT upload. Imports raw scores, computes scaled scores, and runs matching. Manual link, unlink, and reject actions are separate endpoints.</td><td>HSPTResult records, submission links, HSPTUpload result/status; clears staged files on success and queues review-completion refresh.</td></tr>
+    </tbody>
+  </table>
+  <p>GPA commits also queue review-completion refresh. Importing exam/GPA data does not compile final admissions scores. Routing configuration publishing activates configuration for evaluation, not a routing execution job.</p>
+</section>
+
+<section id="verification">
+  <h2>9. Verification and Release Boundaries</h2>
+  <p>Run <code>pnpm test</code>, <code>pnpm lint</code>, <code>pnpm typecheck</code>, and <code>pnpm build</code>. CI runs these checks on pushes and pull requests. The default local build uses the Node server preset; a local success does not prove Netlify background-function deployment works.</p>
+  <ul>
+    <li>Automated fixtures and mocked database/service boundaries cover cycle authorization, extraction upsert keys and project filtering, mapping and review-answer separation, HSPT score conversion and link-preserving upserts, GPA matching/provenance, validation labels, and worker leasing/retry behavior.</li>
+    <li>These tests do not establish real MongoDB index behavior, concurrent import safety, Netlify timeout recovery, or correctness of matching across a full admissions cycle.</li>
+    <li>Before a production release, validate representative extraction/imports in a sandbox, inspect unmatched and ambiguous records, test interrupted jobs, and verify label reconciliation and cycle isolation. Live service writes require explicit approval.</li>
+    <li>On a retried staged-upload job, the worker restores a failed upload's processing status only when the upload's cycle and recorded job ID match. Completed and cancelled uploads are not reset. Successful commits clear staged source payloads; failures after completion still require operator inspection rather than blindly reimporting empty source data.</li>
+    <li>HSPT imports reserve ResultID counter space for every input row, including reimports; repeated uploads can consume counter space even when upserts do not create new results.</li>
+    <li>Score compilation, internal-form score writeback, roster publishing, routing execution, and placement remain outside this implemented job set.</li>
+  </ul>
+</section>
+
 <section id="pipeline-order">
-  <h2>8. Recommended Pipeline Order</h2>
+  <h2>10. Recommended Pipeline Order</h2>
   <ol>
     <li><strong>Metadata Sync</strong> — download current Submittable projects, forms, labels, and team members.</li>
     <li><strong>Application configuration</strong> — map Submittable projects and review stages to the selected cycle.</li>
     <li><strong>Field mapping</strong> — assign canonical names to fields on initial and review forms.</li>
     <li><strong>Submission Extraction</strong> — download raw entries and build local FormEntry and Submission documents.</li>
     <li><strong>Form Response Mapping</strong> — normalize raw values and build each submission's consolidated mapped fields.</li>
-    <li><strong>Validation</strong> — run data-quality rules and create/resolve validation issues.</li>
     <li><strong>Catchment lookup</strong> — geocode addresses and determine catchment zones.</li>
-    <li><strong>GPA data ingestion</strong> — import the DPSCD GPA payload via the API endpoint and stage/confirm Opt-In XLSX uploads from the GPA page.</li>
-    <li><strong>Scoring and routing</strong> — planned but not currently implemented.</li>
+    <li><strong>Validation</strong> — run data-quality rules, create/resolve issues, and reconcile managed Check labels in Submittable.</li>
+    <li><strong>HSPT and GPA ingestion</strong> — preview/confirm HSPT CSVs, import the DPSCD GPA payload, and preview/confirm Opt-In XLSX uploads.</li>
+    <li><strong>Review completion and routing preview</strong> — inspect refreshed ledgers, proposed moves, and diagnostics without executing routing.</li>
+    <li><strong>Score compilation and routing execution</strong> — not implemented; do not run the score-compilation placeholder.</li>
   </ol>
   <p>Submission Extraction resets mapping state, so Form Response Mapping should be rerun after every extraction that updates entries for the cycle.</p>
 </section>

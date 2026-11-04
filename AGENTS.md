@@ -11,8 +11,11 @@
 - `pnpm dev` — start the development server at `http://localhost:3000`.
 - `pnpm build` — build for production.
 - `pnpm preview` — preview the production build locally.
-- `pnpm lint` — run ESLint. Note: the repo currently has many pre-existing lint errors/warnings (e.g. `server/utils/legacyFieldMap.ts` quote style); it does not pass cleanly.
-- `pnpm typecheck` — run Vue/Nuxt type checking. Note: currently fails with pre-existing errors (mostly `server/utils/hspt.ts`); verify your changed files are clean rather than expecting a clean run.
+- `pnpm lint` — run ESLint.
+- `pnpm typecheck` — run Vue/Nuxt type checking.
+- `pnpm test` — run Vitest unit and mocked route/workflow tests; these do not use live MongoDB or Submittable.
+- Verification baseline on 2026-11-03: tests, lint, typecheck, and the default local production build pass. The build may emit non-fatal font-network/tooling warnings. Local builds use the Node server preset unless a deployment preset is selected; verify Netlify background functions separately.
+- CI runs lint, typecheck, tests, and a production build on pushes and pull requests.
 
 ## Environment Variables
 Copy `.env.example` to `.env` and fill in values. Runtime config keys must be prefixed with `NUXT_` to be available in Nitro server routes. Public keys need to be prefixed with `NUXT_PUBLIC_` for client access.

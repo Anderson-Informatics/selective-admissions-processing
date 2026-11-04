@@ -2,6 +2,7 @@ import { CycleModel } from '~~/server/models/Cycle'
 import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 
 export default defineEventHandler(async (event) => {
+  await requireAuth(event)
   await connectDb()
 
   const id = getRouterParam(event, 'id')

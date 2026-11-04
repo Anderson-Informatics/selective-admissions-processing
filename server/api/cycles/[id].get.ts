@@ -1,6 +1,7 @@
 import { CycleModel } from '~~/server/models/Cycle'
 
 export default defineEventHandler(async (event) => {
+  await requireAuth(event)
   await connectDb()
 
   const id = getRouterParam(event, 'id')
