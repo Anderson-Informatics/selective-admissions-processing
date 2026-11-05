@@ -16,19 +16,28 @@ const emit = defineEmits<{ 'update:modelValue': [value: any] }>()
 const config = computed(() => props.modelValue || { enabled: false, statusRules: [], outcomeRules: [], entryActions: [], exitActions: [] })
 const sectionPresence = computed(() => routingSectionPresence(config.value))
 const statusItems = computed(() => Object.entries(config.value.statusLabels || {}).map(([status, labelId]) => ({ status, labelId })))
+const statusLabelKeys = ref<string[]>([])
+watch(() => statusItems.value.length, (length) => {
+  while (statusLabelKeys.value.length < length) statusLabelKeys.value.push(crypto.randomUUID())
+  statusLabelKeys.value.length = length
+}, { immediate: true })
 function update(patch: Record<string, unknown>) {
   emit('update:modelValue', { ...config.value, ...patch })
 }
 function addStatusLabel() {
+  statusLabelKeys.value.push(crypto.randomUUID())
   update({ statusLabels: { ...(config.value.statusLabels || {}), 'New status': '' } })
 }
 function updateStatusLabel(status: string, labelId: string, oldStatus: string) {
-  const labels = Object.fromEntries(Object.entries(config.value.statusLabels || {}).filter(([key]) => key !== oldStatus || oldStatus === status))
-  labels[status] = labelId
+  const labels: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(config.value.statusLabels || {})) {
+    labels[key === oldStatus ? status : key] = key === oldStatus ? labelId : value
+  }
   update({ statusLabels: labels })
 }
-function removeStatusLabel(status: string) {
-  const labels = Object.fromEntries(Object.entries(config.value.statusLabels || {}).filter(([key]) => key !== status))
+function removeStatusLabel(index: number) {
+  const labels = Object.fromEntries(Object.entries(config.value.statusLabels || {}).filter((_, i) => i !== index))
+  statusLabelKeys.value.splice(index, 1)
   update({ statusLabels: labels })
 }
 </script>
@@ -123,8 +132,8 @@ function removeStatusLabel(status: string) {
           No status-label mappings configured.
         </p>
         <div
-          v-for="item in statusItems"
-          :key="item.status"
+          v-for="(item, index) in statusItems"
+          :key="statusLabelKeys[index] ?? index"
           class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
         >
           <UInput
@@ -144,7 +153,7 @@ function removeStatusLabel(status: string) {
             color="error"
             variant="ghost"
             aria-label="Remove status label"
-            @click="removeStatusLabel(item.status)"
+            @click="removeStatusLabel(index)"
           />
         </div>
         <UButton

@@ -5,13 +5,20 @@ import ConditionGroupEditor from './ConditionGroupEditor.vue'
 
 const props = defineProps<{ modelValue: any[], references: { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> }, allowedStatuses?: string[] }>()
 const emit = defineEmits<{ 'update:modelValue': [value: any[]] }>()
+const ruleKeys = ref<string[]>([])
+watch(() => props.modelValue.length, (length) => {
+  while (ruleKeys.value.length < length) ruleKeys.value.push(crypto.randomUUID())
+  ruleKeys.value.length = length
+}, { immediate: true })
 function add() {
+  ruleKeys.value.push(crypto.randomUUID())
   emit('update:modelValue', [...props.modelValue, { name: 'New status rule', status: 'Incomplete', complete: false }])
 }
 function updateRule(index: number, patch: Record<string, unknown>) {
   emit('update:modelValue', props.modelValue.map((rule, i) => i === index ? { ...rule, ...patch } : rule))
 }
 function remove(index: number, rules: any[]) {
+  ruleKeys.value.splice(index, 1)
   emit('update:modelValue', rules.filter((_, itemIndex) => itemIndex !== index))
 }
 function move(index: number, direction: number, rules: any[]) {
@@ -20,6 +27,8 @@ function move(index: number, direction: number, rules: any[]) {
   const copy = [...rules]
   const [item] = copy.splice(index, 1)
   copy.splice(next, 0, item)
+  const [key] = ruleKeys.value.splice(index, 1)
+  ruleKeys.value.splice(next, 0, key!)
   emit('update:modelValue', copy)
 }
 </script>
@@ -43,7 +52,7 @@ function move(index: number, direction: number, rules: any[]) {
     </p>
     <div
       v-for="(rule, index) in modelValue"
-      :key="`${rule.name}-${index}`"
+      :key="ruleKeys[index] ?? index"
       class="rounded-lg border p-3 space-y-3"
     >
       <div class="flex items-center gap-2">
