@@ -295,11 +295,12 @@ export function computeReviewCompletion(stages: RoutingStage[], context: Routing
     const status = getStatus(stage, context)
     let required = false
     if (stage.role !== 'final') {
+      const hasCompletedReview = context.reviews.some(review => review.stageId === stage.stageId && isCompletedReview(review))
       required = stage.role === 'initial'
         ? true
-        : stage.routing.requiredWhen
+        : hasCompletedReview || (stage.routing.requiredWhen
           ? evaluateConditionGroup(stage.routing.requiredWhen, context)
-          : stage.routing.enabled
+          : stage.routing.enabled)
     }
     return { stageId: stage.stageId, name: stage.name, order: stage.order, role: stage.role, required, ...status }
   })

@@ -254,6 +254,26 @@ describe('review completion evaluator', () => {
     ])
   })
 
+  it('keeps a stage required once a completed review exists, even when requiredWhen no longer matches', () => {
+    const stages = [
+      stage('gpa-recording', 30, 'work', {
+        requiredWhen: { all: [{ kind: 'gpaStatus', op: 'eq', value: 'Incomplete' }] },
+        statusRules: [{ name: 'done', when: { all: [{ kind: 'reviewCount', stageId: 'gpa-recording', op: 'gte', value: 1 }] }, status: 'Recorded', complete: true }]
+      })
+    ]
+    const completed = context({ reviews: [{
+      stageId: 'gpa-recording',
+      stageName: 'GPA Recording',
+      status: 'complete',
+      completedAt: new Date('2026-10-21'),
+      mappedData: {}
+    }] })
+
+    expect(deriveGpaStatus(completed)).toBe('Incomplete')
+    expect(computeReviewCompletion(stages, context({ gpa: { dpscd: { quartersAvailable: 6, cumulativeGpa: 3.2 } } })).reviewCompletion[0]).toMatchObject({ required: false })
+    expect(computeReviewCompletion(stages, { ...completed, gpa: { dpscd: { quartersAvailable: 6, cumulativeGpa: 3.2 } } }).reviewCompletion[0]).toMatchObject({ required: true })
+  })
+
   it('requires GPA Recording until GPA and AbleToRecord are valid', () => {
     const recording = stage('gpa-recording', 30, 'work', {
       statusRules: [

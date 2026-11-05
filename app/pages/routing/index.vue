@@ -78,6 +78,7 @@ async function previewRouting() {
         limit: limit.value
       }
     })
+    stageFilter.value = null
     toast.add({ title: 'Routing preview complete', color: 'success' })
   } catch (error: unknown) {
     const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Routing preview failed'
@@ -87,22 +88,36 @@ async function previewRouting() {
   }
 }
 
-const columns: TableColumn<PreviewMove>[] = [
+const columns: TableColumn<SubmissionDetail>[] = [
   { accessorKey: 'applicantName', header: 'Applicant Name' },
-  { accessorKey: 'applicationName', header: 'Application' },
   { accessorKey: 'currentStage', header: 'Current stage' },
   { accessorKey: 'proposedStage', header: 'Proposed stage' },
-  { accessorKey: 'reason', header: 'Reason' },
-  { id: 'backward', header: 'Warning' }
-]
-
-const detailColumns: TableColumn<SubmissionDetail>[] = [
-  { accessorKey: 'applicantName', header: 'Applicant Name' },
-  { accessorKey: 'currentStage', header: 'Current stage' },
-  { accessorKey: 'proposedStage', header: 'Next stage' },
-  { accessorKey: 'decision', header: 'Decision' },
+  { accessorKey: 'decision', header: 'Reason' },
+  { id: 'warning', header: 'Warning', enableSorting: false },
   { id: 'details', header: 'Ledger', enableSorting: false }
 ]
+
+const stageFilter = ref<string | null>(null)
+const filteredDetails = computed(() => {
+  const details = result.value?.submissionDetails || []
+  return stageFilter.value ? details.filter(detail => detail.proposedStage === stageFilter.value) : details
+})
+
+function toggleStageFilter(stage: string) {
+  stageFilter.value = stageFilter.value === stage ? null : stage
+}
+
+const ledgerColumns: TableColumn<LedgerEntry>[] = [
+  { accessorKey: 'order', header: 'Order' },
+  { accessorKey: 'name', header: 'Stage' },
+  { accessorKey: 'role', header: 'Role' },
+  { accessorKey: 'required', header: 'Required' },
+  { accessorKey: 'status', header: 'Status' },
+  { accessorKey: 'complete', header: 'Complete' }
+]
+
+const requiredLedgerEntries = computed(() => (selectedDetail.value?.reviewCompletion || []).filter(entry => entry.required))
+const optionalLedgerEntries = computed(() => (selectedDetail.value?.reviewCompletion || []).filter(entry => !entry.required))
 
 function openDetail(detail: SubmissionDetail) {
   selectedDetail.value = detail
@@ -229,9 +244,18 @@ function openDetail(detail: SubmissionDetail) {
             v-for="(count, stage) in result.byTargetStage"
             :key="stage"
             :label="`${stage}: ${count}`"
-            variant="subtle"
+            :color="stageFilter === stage ? 'primary' : 'neutral'"
+            :variant="stageFilter === stage ? 'solid' : 'subtle'"
+            class="cursor-pointer"
+            @click="toggleStageFilter(String(stage))"
           />
         </div>
+        <p
+          v-if="stageFilter"
+          class="text-sm text-muted mt-2"
+        >
+          Filtering to "{{ stageFilter }}". Click the tag again to clear.
+        </p>
       </UCard>
 
       <UAlert
@@ -253,11 +277,24 @@ function openDetail(detail: SubmissionDetail) {
       </UAlert>
 
       <UTable
-        :data="result.proposedMoves"
+        :data="filteredDetails"
         :columns="columns"
         class="border rounded-lg"
       >
-        <template #backward-cell="{ row }">
+        <template #applicantName-cell="{ row }">
+          <a
+            :href="`https://dpscd.submittable.com/submissions/${row.original.submissionId}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-medium text-primary hover:underline"
+          >
+            {{ row.original.applicantName }}
+          </a>
+        </template>
+        <template #proposedStage-cell="{ row }">
+          {{ row.original.proposedStage || '—' }}
+        </template>
+        <template #warning-cell="{ row }">
           <UBadge
             v-if="row.original.backward"
             label="Backward move"
@@ -269,37 +306,22 @@ function openDetail(detail: SubmissionDetail) {
             class="text-muted"
           >—</span>
         </template>
+        <template #details-cell="{ row }">
+          <UButton
+            size="xs"
+            label="View ledger"
+            color="neutral"
+            variant="soft"
+            @click="openDetail(row.original)"
+          />
+        </template>
       </UTable>
-
-      <div>
-        <h2 class="text-lg font-semibold mb-2">
-          Submission ledger details
-        </h2>
-        <UTable
-          :data="result.submissionDetails"
-          :columns="detailColumns"
-          class="border rounded-lg"
-        >
-          <template #proposedStage-cell="{ row }">
-            {{ row.original.proposedStage || '—' }}
-          </template>
-          <template #details-cell="{ row }">
-            <UButton
-              size="xs"
-              label="View ledger"
-              color="neutral"
-              variant="soft"
-              @click="openDetail(row.original)"
-            />
-          </template>
-        </UTable>
-      </div>
     </div>
 
     <UModal
       v-model:open="detailModalOpen"
       title="Review completion ledger"
-      :ui="{ content: '!max-w-4xl' }"
+      :ui="{ content: '!max-w-7xl' }"
     >
       <template #body>
         <div
@@ -309,33 +331,56 @@ function openDetail(detail: SubmissionDetail) {
           <div class="text-sm text-muted">
             {{ selectedDetail.applicantName }} — {{ selectedDetail.currentStage }} → {{ selectedDetail.proposedStage || 'No move' }}
           </div>
-          <UTable
-            :data="selectedDetail.reviewCompletion"
-            :columns="[
-              { accessorKey: 'order', header: 'Order' },
-              { accessorKey: 'name', header: 'Stage' },
-              { accessorKey: 'role', header: 'Role' },
-              { accessorKey: 'required', header: 'Required' },
-              { accessorKey: 'status', header: 'Status' },
-              { accessorKey: 'complete', header: 'Complete' }
-            ]"
-            class="border rounded-lg"
-          >
-            <template #required-cell="{ row }">
-              <UBadge
-                :label="row.original.required ? 'Yes' : 'No'"
-                :color="row.original.required ? 'warning' : 'neutral'"
-                variant="subtle"
-              />
-            </template>
-            <template #complete-cell="{ row }">
-              <UBadge
-                :label="row.original.complete ? 'Yes' : 'No'"
-                :color="row.original.complete ? 'success' : 'neutral'"
-                variant="subtle"
-              />
-            </template>
-          </UTable>
+          <div>
+            <h3 class="font-medium mb-2">
+              Required stages
+            </h3>
+            <UTable
+              :data="requiredLedgerEntries"
+              :columns="ledgerColumns"
+              class="border rounded-lg"
+            >
+              <template #required-cell="{ row }">
+                <UBadge
+                  :label="row.original.required ? 'Yes' : 'No'"
+                  :color="row.original.required ? 'warning' : 'neutral'"
+                  variant="subtle"
+                />
+              </template>
+              <template #complete-cell="{ row }">
+                <UBadge
+                  :label="row.original.complete ? 'Yes' : 'No'"
+                  :color="row.original.complete ? 'success' : 'neutral'"
+                  variant="subtle"
+                />
+              </template>
+            </UTable>
+          </div>
+          <div>
+            <h3 class="font-medium mb-2">
+              Optional stages
+            </h3>
+            <UTable
+              :data="optionalLedgerEntries"
+              :columns="ledgerColumns"
+              class="border rounded-lg"
+            >
+              <template #required-cell="{ row }">
+                <UBadge
+                  :label="row.original.required ? 'Yes' : 'No'"
+                  :color="row.original.required ? 'warning' : 'neutral'"
+                  variant="subtle"
+                />
+              </template>
+              <template #complete-cell="{ row }">
+                <UBadge
+                  :label="row.original.complete ? 'Yes' : 'No'"
+                  :color="row.original.complete ? 'success' : 'neutral'"
+                  variant="subtle"
+                />
+              </template>
+            </UTable>
+          </div>
           <UAlert
             v-if="selectedDetail.diagnostics.length"
             title="Submission diagnostics"
