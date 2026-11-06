@@ -3,6 +3,7 @@ export interface MergeFieldOption {
   label: string
   questionText?: string
   fieldType?: string
+  options?: string[]
   token?: string
 }
 
@@ -43,6 +44,7 @@ export function buildFormFieldOptions(formId: string | undefined, mappings: Mapp
       const questionText = [field?.label, subField].filter(Boolean).join(' - ') || mapping.label
       const option: MergeFieldOption = { value: mapping.canonicalName!, label: mapping.canonicalName!, questionText }
       if (field?.fieldType && !subField) option.fieldType = field.fieldType
+      if (field?.options?.length && !subField) option.options = field.options.map(item => item.label).filter((label): label is string => Boolean(label))
       return [mapping.canonicalName!, option]
     }))
   return sortOptions(unique.values())

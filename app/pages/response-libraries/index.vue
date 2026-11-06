@@ -1,9 +1,56 @@
 <script setup lang="ts">
 interface LibraryEntry { match: string, text: string }
 interface ResponseLibrary { _id: string, name: string, key: string, description?: string, entries: LibraryEntry[] }
+interface CycleOption { _id: string, name: string, year: string, active: boolean }
+interface MergeFieldSource {
+  key: string
+  label: string
+  fields: Array<{ value: string, label: string, questionText?: string, options?: string[], token: string }>
+}
 
 const toast = useToast()
 const { data: libraries, refresh } = await useFetch<ResponseLibrary[]>('/api/response-libraries', { default: () => [] })
+const { data: cycles } = await useFetch<CycleOption[]>('/api/cycles', { default: () => [] })
+
+const importCycleId = ref<string | undefined>()
+const { data: mergeFieldData } = await useFetch<{ cycleId: string | null, sources: MergeFieldSource[] }>('/api/templates/merge-fields', {
+  query: computed(() => (importCycleId.value ? { cycleId: importCycleId.value } : {})),
+  default: () => ({ cycleId: null, sources: [] })
+})
+watch(() => mergeFieldData.value.cycleId, (id) => {
+  if (id && !importCycleId.value) importCycleId.value = id
+}, { immediate: true })
+
+const cycleItems = computed(() => (cycles.value || []).map(cycle => ({ label: `${cycle.name}${cycle.active ? ' (active)' : ''}`, value: cycle._id })))
+const sourceItems = computed(() => mergeFieldData.value.sources.filter(source => source.key !== 'builtin').map(source => ({ label: source.label, value: source.key })))
+const importSourceKey = ref('submission')
+const importFieldValue = ref<string | undefined>()
+const importSource = computed(() => mergeFieldData.value.sources.find(source => source.key === importSourceKey.value))
+const importFieldItems = computed(() => (importSource.value?.fields || [])
+  .filter(field => field.options?.length)
+  .map(field => ({ label: field.label, value: field.token, options: field.options || [] })))
+watch(importSourceKey, () => {
+  importFieldValue.value = undefined
+})
+const importField = computed(() => importFieldItems.value.find(field => field.value === importFieldValue.value))
+
+function importOptions() {
+  const field = importField.value
+  if (!field?.options?.length) return
+  const existing = new Set(form.entries.map(entry => entry.match.trim().toLowerCase()))
+  let added = 0
+  for (const label of field.options) {
+    if (existing.has(label.trim().toLowerCase())) continue
+    form.entries.push({ match: label, text: label })
+    existing.add(label.trim().toLowerCase())
+    added += 1
+  }
+  toast.add({
+    title: added ? `Imported ${added} option${added === 1 ? '' : 's'} from ${field.label}` : 'All options already have entries',
+    description: added ? 'Replacement text was pre-filled with the option label — edit it before using the library.' : undefined,
+    color: added ? 'success' : 'info'
+  })
+}
 
 const selectedId = ref<string | undefined>()
 const saving = ref(false)
@@ -152,6 +199,46 @@ async function remove() {
             class="w-full"
           />
         </UFormField>
+
+        <UCard>
+          <template #header>
+            <h2 class="font-medium">
+              Import options from a form field
+            </h2>
+          </template>
+          <div class="grid sm:grid-cols-3 gap-2">
+            <USelect
+              v-model="importCycleId"
+              :items="cycleItems"
+              placeholder="Cycle"
+              :disabled="cycleItems.length < 2"
+            />
+            <USelect
+              v-model="importSourceKey"
+              :items="sourceItems"
+              placeholder="Source"
+            />
+            <USelectMenu
+              v-model="importFieldValue"
+              :items="importFieldItems"
+              value-key="value"
+              :placeholder="importFieldItems.length ? 'Choose a field' : 'No option fields'"
+              :disabled="!importFieldItems.length"
+            />
+          </div>
+          <div class="flex items-center justify-between mt-3">
+            <p class="text-xs text-muted">
+              Adds an entry for each option label on the selected field — <strong>match</strong> pre-filled exactly, <strong>text</strong> pre-filled with the label so nothing is dropped until you edit it.
+            </p>
+            <UButton
+              label="Import options"
+              icon="i-lucide-download"
+              size="sm"
+              :disabled="!importField"
+              @click="importOptions"
+            />
+          </div>
+        </UCard>
 
         <div class="space-y-3">
           <div class="flex justify-between items-center">
