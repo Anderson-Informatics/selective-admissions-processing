@@ -65,6 +65,7 @@ const insertFormatItems = [
 const pendingListToken = ref<string | undefined>()
 const insertFormat = ref<InsertFormat>('list')
 const insertLibrary = ref<string | undefined>()
+const pendingIsMulti = computed(() => Boolean(fieldItems.value.find(item => item.value === pendingListToken.value)?.multi))
 
 const pendingDeadline = ref(false)
 const deadlineCount = ref(2)
@@ -98,9 +99,10 @@ function onFieldSelected(token: string | undefined) {
     pendingDeadline.value = true
     return
   }
-  if (fieldItems.value.find(item => item.value === token)?.multi) {
+  const fieldItem = fieldItems.value.find(item => item.value === token)
+  if (fieldItem?.multi || libraryItems.value.length) {
     pendingListToken.value = token
-    insertFormat.value = 'list'
+    insertFormat.value = fieldItem?.multi ? 'list' : 'raw'
     return
   }
   insertMergeField(token)
@@ -117,14 +119,19 @@ function cancelPendingDeadline() {
   mergeFieldValue.value = undefined
 }
 
+const pendingInsertPreview = computed(() => {
+  const token = pendingListToken.value
+  if (!token) return ''
+  let body = token.slice(0, -2)
+  if (insertFormat.value !== 'raw') body += ` | ${insertFormat.value}`
+  if (insertLibrary.value) body += ` | lib:${insertLibrary.value}`
+  return `${body}}}`
+})
+
 function insertPendingListField() {
   const token = pendingListToken.value
   if (!token) return
-  const format = insertFormat.value
-  let body = token.slice(0, -2)
-  if (format !== 'raw') body += ` | ${format}`
-  if (insertLibrary.value) body += ` | lib:${insertLibrary.value}`
-  insertMergeField(`${body}}}`, format === 'list' || format === 'numbered')
+  insertMergeField(pendingInsertPreview.value, insertFormat.value === 'list' || insertFormat.value === 'numbered')
   pendingListToken.value = undefined
   insertLibrary.value = undefined
 }
@@ -404,25 +411,17 @@ async function renderPreview() {
             </USelectMenu>
             <div
               v-if="pendingListToken"
-              class="space-y-2"
+              class="space-y-2 rounded-lg border p-3"
             >
-              <div class="flex items-center gap-2">
+              <div
+                v-if="pendingIsMulti"
+                class="flex items-center gap-2"
+              >
                 <span class="text-sm text-muted whitespace-nowrap">Insert as:</span>
                 <USelect
                   v-model="insertFormat"
                   :items="insertFormatItems"
                   class="flex-1"
-                />
-                <UButton
-                  label="Insert"
-                  icon="i-lucide-plus"
-                  @click="insertPendingListField"
-                />
-                <UButton
-                  label="Cancel"
-                  color="neutral"
-                  variant="ghost"
-                  @click="cancelPendingListField"
                 />
               </div>
               <div
@@ -435,6 +434,20 @@ async function renderPreview() {
                   :items="libraryItems"
                   placeholder="Map option labels via a library"
                   class="flex-1"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <code class="text-xs bg-elevated rounded px-2 py-1 flex-1 truncate">{{ pendingInsertPreview }}</code>
+                <UButton
+                  label="Insert"
+                  icon="i-lucide-plus"
+                  @click="insertPendingListField"
+                />
+                <UButton
+                  label="Cancel"
+                  color="neutral"
+                  variant="ghost"
+                  @click="cancelPendingListField"
                 />
               </div>
             </div>
@@ -690,10 +703,10 @@ async function renderPreview() {
               Response libraries
             </h3>
             <p class="text-muted">
-              Add <code v-pre>| lib:key</code> to a merge field to replace each selected option label with mapped text from a <ULink
+              After choosing a field, pick a <ULink
                 to="/response-libraries"
                 class="underline"
-              >response library</ULink>: <code v-pre>{{Stage.Field | list | lib:gpa-issues}}</code>. Options without a matching entry are omitted.
+              >response library</ULink> in the insert panel to map each selected option to alternate text — no need to type <code v-pre>| lib:key</code> yourself (e.g. <code v-pre>{{Stage.Field | list | lib:gpa-issues}}</code>). Options without a matching entry are omitted.
             </p>
           </section>
 
