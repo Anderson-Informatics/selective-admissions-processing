@@ -26,6 +26,11 @@ Copy `.env.example` to `.env` and fill in values. Runtime config keys must be pr
 - Use Nuxt UI components (`UButton`, `UInput`, `UTable`, etc.) for UI.
 - Avoid adding secrets or `.env` files to git (`.env` and `.env.*` are ignored, except `.env.example`).
 
+## Domain Notes
+- Admission rounds live on `Application.rounds` (not Cycle). `resolveSubmissionRound` is fed per-application rounds in `routingRun.ts` and `reviewCompletionRefresh.ts`. A boot-time migration (`server/utils/migrateRounds.ts`, run from `server/plugins/db.ts`) copies legacy `cycle.rounds` data onto applications and unsets it.
+- Submittable re-issues `reviewStageId` when a stage is modified. `metadata_sync` runs `applyStageReconcile` (`server/utils/stageReconcile.ts`) which remaps unambiguous old→new stageIds in place across ReviewStage, Review, Submission.currentStageId, `routing`/`routingDraft` configs, and dashboard metrics; ambiguous/orphan cases land in the job result. Routing configs must never be replaced — stageId references are rewritten via `rewriteReferencedStageIds` in `routingConfig.ts`. `routingHistory` is intentionally not rewritten.
+- `routing` is the published config; `routingDraft` is the working copy written by the stage PATCH endpoint and promoted by `routing-publish`.
+
 ## Workflow
 - Do not start development on the next feature unless explicit permission is given.
 - Before implementing any code, provide an implementation plan for review and wait for approval.

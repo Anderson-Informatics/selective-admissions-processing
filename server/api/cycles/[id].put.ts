@@ -1,5 +1,4 @@
 import { CycleModel } from '~~/server/models/Cycle'
-import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event)
@@ -30,13 +29,6 @@ export default defineEventHandler(async (event) => {
   if (body.startDate !== undefined) cycle.startDate = body.startDate ? new Date(body.startDate) : undefined
   if (body.endDate !== undefined) cycle.endDate = body.endDate ? new Date(body.endDate) : undefined
   if (body.scoreWeights !== undefined) cycle.scoreWeights = body.scoreWeights
-  if (body.rounds !== undefined) {
-    try {
-      cycle.rounds = normalizeCycleRounds(body.rounds)
-    } catch (error: unknown) {
-      throw createError({ statusCode: 400, statusMessage: error instanceof Error ? error.message : 'Invalid cycle rounds' })
-    }
-  }
 
   await cycle.save()
 

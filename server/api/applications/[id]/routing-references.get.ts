@@ -1,5 +1,4 @@
 import { ApplicationModel } from '~~/server/models/Application'
-import { CycleModel } from '~~/server/models/Cycle'
 import { FieldMappingModel } from '~~/server/models/FieldMapping'
 import { MetadataModel } from '~~/server/models/Metadata'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
@@ -13,8 +12,7 @@ export default defineEventHandler(async (event) => {
 
   const application = await ApplicationModel.findById(applicationId).lean()
   if (!application) throw createError({ statusCode: 404, statusMessage: 'Application not found' })
-  const [cycle, stages, mappings, labels, team, forms] = await Promise.all([
-    CycleModel.findById(application.cycleId).lean(),
+  const [stages, mappings, labels, team, forms] = await Promise.all([
     ReviewStageModel.find({ applicationId }).sort({ order: 1 }).lean(),
     FieldMappingModel.find({ cycleId: application.cycleId }).select('formId fieldId label canonicalName').lean(),
     MetadataModel.find({ type: 'label' }).sort({ name: 1 }).lean(),
@@ -35,7 +33,7 @@ export default defineEventHandler(async (event) => {
     stages: stages.map(stage => ({ value: stage.stageId, label: stage.name, order: stage.order, role: stage.role })),
     fields: canonicalFields.map(field => ({ value: field, label: field })),
     reviewFields,
-    rounds: (cycle?.rounds || []).map(round => ({ value: round.key, label: round.name })),
+    rounds: (application.rounds || []).map(round => ({ value: round.key, label: round.name })),
     labels: labels.map(label => ({ value: label.externalId, label: label.name })),
     users: team.map(member => ({ value: member.externalId, label: member.name }))
   }

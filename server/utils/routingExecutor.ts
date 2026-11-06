@@ -86,11 +86,17 @@ async function refreshCurrentStages(
 
   const applicationIdBySubmission = new Map(submissions.map(submission => [submission.submissionId, String(submission.applicationId)]))
   const operations: AnyBulkWriteOperation<Submission>[] = []
+  const unknownStageIds = new Map<string, string[]>()
   for (const [submissionId, data] of remote) {
     const set: Record<string, unknown> = {}
     if (data.stageId) {
       set.currentStageId = data.stageId
       set.currentStageName = stageNameByKey.get(`${applicationIdBySubmission.get(submissionId)}|${data.stageId}`) || ''
+      if (!set.currentStageName) {
+        const list = unknownStageIds.get(data.stageId) || []
+        list.push(submissionId)
+        unknownStageIds.set(data.stageId, list)
+      }
     }
     if (data.status) set.status = data.status
     if (data.labels) set.labelIds = data.labels
@@ -100,6 +106,7 @@ async function refreshCurrentStages(
   }
   if (operations.length) await SubmissionModel.bulkWrite(operations)
   await setProgress?.({ message: `Refreshed current stages for ${operations.length} submissions` })
+  return unknownStageIds
 }
 
 function errorMessage(error: unknown): string {
@@ -142,7 +149,15 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
   const scoped = await SubmissionModel.find(inScopeFilter).sort({ _id: 1 }).select('submissionId projectId applicationId').limit(Math.max(1, Math.min(options.limit || 250, 5000))).lean()
   if (scoped.length) {
     await setProgress({ phase: 'refreshing_stages', processed: 0, total: scoped.length, percent: 0, message: 'Refreshing current stages from Submittable' })
-    await refreshCurrentStages(options.cycleId, scoped as Submission[], setProgress, options.submittable)
+    const unknownStageIds = await refreshCurrentStages(options.cycleId, scoped as Submission[], setProgress, options.submittable)
+    for (const [stageId, submissionIds] of unknownStageIds || new Map<string, string[]>()) {
+      result.diagnostics.push({
+        code: 'unknown_stage_id',
+        message: `Remote reviewStageId ${stageId} matches no configured stage; submissions will not route correctly. Run metadata sync to reconcile stage IDs.`,
+        stageIds: [stageId],
+        submissionIds
+      })
+    }
   }
 
   const evaluation = await evaluateCycleSubmissions({

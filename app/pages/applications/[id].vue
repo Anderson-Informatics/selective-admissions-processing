@@ -17,7 +17,8 @@ interface ReviewStage {
   routingPublishedAt?: string
   routingDraftVersion?: number
 }
-interface Application { _id: string, cycleId: string, name: string, type: string, projectId: string, initialFormId?: string, active: boolean, stages: ReviewStage[] }
+interface ApplicationRound { key: string, name: string, order: number, startDate: string, endDate: string, active: boolean }
+interface Application { _id: string, cycleId: string, name: string, type: string, projectId: string, initialFormId?: string, active: boolean, rounds?: ApplicationRound[], stages: ReviewStage[] }
 interface Template { key: string, name: string, description?: string, draft?: boolean }
 interface References { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> }
 
@@ -43,7 +44,7 @@ const emptyRouting = (): RoutingConfig => ({ enabled: false, statusRules: [], ou
 const { data: application, status, refresh } = await useFetch<Application>(`/api/applications/${route.params.id}`)
 const { data: templates } = await useFetch<Template[]>('/api/applications/templates')
 const { data: references } = await useFetch<References>(`/api/applications/${route.params.id}/routing-references`)
-const state = reactive({ name: '', type: 'exam', active: true, stages: [] as ReviewStage[] })
+const state = reactive({ name: '', type: 'exam', active: true, rounds: [] as ApplicationRound[], stages: [] as ReviewStage[] })
 const selectedStage = computed(() => selectedStageIndex.value == null ? undefined : state.stages[selectedStageIndex.value])
 const copySource = computed(() => state.stages.find(stage => stage.stageId === copySourceId.value))
 const copyTarget = computed(() => state.stages.find(stage => stage.stageId === copyTargetId.value))
@@ -82,11 +83,24 @@ const roleItems: SelectItem[] = [
   { label: 'Final', value: 'final' }
 ]
 
+function formatRoundDate(value?: string): string {
+  if (!value) return ''
+  return new Date(value).toISOString().split('T')[0] || ''
+}
+
 watchEffect(() => {
   if (!application.value || state.stages.length) return
   state.name = application.value.name
   state.type = application.value.type
   state.active = application.value.active
+  state.rounds = (application.value.rounds || []).map(round => ({
+    key: round.key,
+    name: round.name,
+    order: round.order,
+    startDate: formatRoundDate(round.startDate),
+    endDate: formatRoundDate(round.endDate),
+    active: round.active !== false
+  }))
   state.stages = (application.value.stages || []).map(stage => ({
     ...stage,
     role: stage.role || 'work',
@@ -213,6 +227,18 @@ async function discardDraft() {
   toast.add({ title: 'Routing draft discarded', color: 'success' })
 }
 
+function addRound() {
+  const order = state.rounds.length + 1
+  state.rounds.push({ key: `round-${order}`, name: `Round ${order}`, order, startDate: '', endDate: '', active: true })
+}
+
+function removeRound(index: number) {
+  state.rounds.splice(index, 1)
+  state.rounds.forEach((round, roundIndex) => {
+    round.order = roundIndex + 1
+  })
+}
+
 async function saveApplicationMetadata() {
   if (!application.value) return
   loading.value = true
@@ -220,7 +246,7 @@ async function saveApplicationMetadata() {
     await flushDraftSaves()
     await apiRequest(`/api/applications/${application.value._id}`, {
       method: 'PUT',
-      body: { name: state.name, type: state.type, active: state.active, projectId: application.value.projectId, initialFormId: application.value.initialFormId, stages: state.stages }
+      body: { name: state.name, type: state.type, active: state.active, rounds: state.rounds, projectId: application.value.projectId, initialFormId: application.value.initialFormId, stages: state.stages }
     })
     toast.add({ title: 'Application settings saved', color: 'success' })
   } catch (error: unknown) {
@@ -373,6 +399,90 @@ async function applyTemplate() {
             />
           </template>
         </UTable>
+
+        <div class="space-y-5 rounded-lg border p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="font-medium">
+                Admission rounds
+              </h2>
+              <p class="text-sm text-muted">
+                Inclusive date ranges determine this application's routing round from submission date.
+              </p>
+            </div>
+            <UButton
+              label="Add round"
+              color="neutral"
+              variant="outline"
+              @click="addRound"
+            />
+          </div>
+          <div
+            v-if="!state.rounds.length"
+            class="text-sm text-muted"
+          >
+            No rounds configured.
+          </div>
+          <div
+            v-for="(round, index) in state.rounds"
+            :key="index"
+            class="grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-2"
+          >
+            <UFormField
+              label="Key"
+              class="min-w-0"
+            >
+              <UInput
+                v-model="round.key"
+                placeholder="round-1"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              label="Name"
+              class="min-w-0"
+            >
+              <UInput
+                v-model="round.name"
+                placeholder="Round 1"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              label="Start"
+              class="min-w-0"
+            >
+              <UInput
+                v-model="round.startDate"
+                type="date"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              label="End"
+              class="min-w-0"
+            >
+              <UInput
+                v-model="round.endDate"
+                type="date"
+                class="w-full"
+              />
+            </UFormField>
+            <div class="col-span-full flex items-center justify-end gap-2">
+              <UCheckbox
+                v-model="round.active"
+                label="Active"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                color="error"
+                variant="ghost"
+                aria-label="Remove round"
+                @click="removeRound(index)"
+              />
+            </div>
+          </div>
+        </div>
       </section>
 
       <aside>

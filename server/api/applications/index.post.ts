@@ -2,6 +2,7 @@
 import { ApplicationModel } from '~~/server/models/Application'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
 import { routingConfigSchema, reviewStageRoleSchema, defaultRoutingConfig, collectReferencedStageIds } from '~~/server/utils/routingConfig'
+import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 import { recordConfigAudit } from '~~/server/utils/configAudit'
 
 export default defineEventHandler(async (event) => {
@@ -41,13 +42,21 @@ export default defineEventHandler(async (event) => {
     if (invalid) throw createError({ statusCode: 400, statusMessage: 'Routing rules may only reference stages in this application' })
   }
 
+  let rounds
+  try {
+    rounds = normalizeCycleRounds(body.rounds)
+  } catch (error: unknown) {
+    throw createError({ statusCode: 400, statusMessage: error instanceof Error ? error.message : 'Invalid application rounds' })
+  }
+
   const application = await ApplicationModel.create({
     cycleId: body.cycleId,
     name: body.name,
     type: body.type || 'exam',
     projectId: body.projectId,
     initialFormId: body.initialFormId,
-    active: body.active !== false
+    active: body.active !== false,
+    rounds
   })
 
   const stages = parsedStages.map((stage: any) => ({

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AnyBulkWriteOperation } from 'mongoose'
-import { CycleModel } from '../models/Cycle'
+import { ApplicationModel } from '../models/Application'
 import { GpaRecordModel, type GpaRecord } from '../models/GpaRecord'
 import { resolveSubmissionRound } from './cycleRounds'
 import { ReviewModel } from '../models/Review'
@@ -93,10 +93,10 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
   const submissionFilter: Record<string, unknown> = { cycleId: options.cycleId }
   if (options.applicationId) submissionFilter.applicationId = options.applicationId
 
-  const cycle = await CycleModel.findById(options.cycleId).lean()
-  const rounds = cycle?.rounds || []
   const total = await SubmissionModel.countDocuments(submissionFilter)
   const applicationIds = await SubmissionModel.distinct('applicationId', submissionFilter)
+  const applicationDocs = await ApplicationModel.find({ _id: { $in: applicationIds } }).select('rounds').lean()
+  const roundsByApplication = new Map(applicationDocs.map(application => [String(application._id), application.rounds || []]))
   const stageDocs = await ReviewStageModel.find({ cycleId: options.cycleId, applicationId: { $in: applicationIds } }).lean()
   const stagesByApplication = new Map<string, Array<Record<string, any>>>()
   for (const stage of stageDocs) {
@@ -132,7 +132,7 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
 
     for (const submission of submissions) {
       const stages = stagesByApplication.get(String(submission.applicationId)) || []
-      const round = resolveSubmissionRound(submission, rounds)
+      const round = resolveSubmissionRound(submission, roundsByApplication.get(String(submission.applicationId)) || [])
       const completion = buildReviewCompletionForSubmission(
         submission as Record<string, any>,
         stages,

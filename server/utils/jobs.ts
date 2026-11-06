@@ -150,9 +150,14 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
       await MetadataModel.bulkWrite(operations.slice(index, index + batchSize))
       await setProgress({ processed: Math.min(index + batchSize, operations.length) })
     }
+    await setProgress({ phase: 'reconciling_stages', message: 'Reconciling review stage IDs' })
+    const { applyStageReconcile } = await import('./stageReconcile')
+    const reconcile = await applyStageReconcile(job.cycleId, rawProjects, job.createdBy)
+    if (reconcile.remappedCount) await queueReviewCompletionRefresh(job)
+
     await setProgress({ phase: 'completed', processed: operations.length, total: operations.length, percent: 100, message: 'Metadata sync complete' })
 
-    return { result: { projects: projects.length, forms: forms.length, labels: labels.length, team: team.length } }
+    return { result: { projects: projects.length, forms: forms.length, labels: labels.length, team: team.length, stageReconcile: reconcile.reports.filter(report => report.remapped.length || report.ambiguous.length || report.orphanStageIds.length || report.newRemoteStages.length) } }
   },
 
   submission_extraction: async (job, { setProgress }) => {

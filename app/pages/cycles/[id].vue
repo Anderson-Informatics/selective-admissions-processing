@@ -6,16 +6,6 @@ interface Cycle {
   active: boolean
   startDate?: string
   endDate?: string
-  rounds?: CycleRound[]
-}
-
-interface CycleRound {
-  key: string
-  name: string
-  order: number
-  startDate: string
-  endDate: string
-  active: boolean
 }
 
 const route = useRoute()
@@ -30,8 +20,7 @@ const state = reactive({
   name: '',
   active: false,
   startDate: '',
-  endDate: '',
-  rounds: [] as CycleRound[]
+  endDate: ''
 })
 
 function formatDate(value?: string): string {
@@ -46,28 +35,8 @@ watchEffect(() => {
     state.active = cycle.value.active
     state.startDate = formatDate(cycle.value.startDate)
     state.endDate = formatDate(cycle.value.endDate)
-    state.rounds = (cycle.value.rounds || []).map(round => ({
-      key: round.key,
-      name: round.name,
-      order: round.order,
-      startDate: formatDate(round.startDate),
-      endDate: formatDate(round.endDate),
-      active: round.active !== false
-    }))
   }
 })
-
-function addRound() {
-  const order = state.rounds.length + 1
-  state.rounds.push({ key: `round-${order}`, name: `Round ${order}`, order, startDate: '', endDate: '', active: true })
-}
-
-function removeRound(index: number) {
-  state.rounds.splice(index, 1)
-  state.rounds.forEach((round, roundIndex) => {
-    round.order = roundIndex + 1
-  })
-}
 
 async function onSubmit() {
   loading.value = true
@@ -79,8 +48,7 @@ async function onSubmit() {
         name: state.name,
         active: state.active,
         startDate: state.startDate || undefined,
-        endDate: state.endDate || undefined,
-        rounds: state.rounds
+        endDate: state.endDate || undefined
       }
     })
     toast.add({ title: 'Cycle updated', color: 'success' })
@@ -173,90 +141,6 @@ async function onDelete() {
           type="date"
         />
       </UFormField>
-
-      <div class="space-y-5 rounded-lg border p-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="font-medium">
-              Admission rounds
-            </h2>
-            <p class="text-sm text-muted">
-              Inclusive date ranges determine a submission's routing round from submissionDate.
-            </p>
-          </div>
-          <UButton
-            label="Add round"
-            color="neutral"
-            variant="outline"
-            @click="addRound"
-          />
-        </div>
-        <div
-          v-if="!state.rounds.length"
-          class="text-sm text-muted"
-        >
-          No rounds configured.
-        </div>
-        <div
-          v-for="(round, index) in state.rounds"
-          :key="round.key"
-          class="grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-2 xl:grid-cols-4"
-        >
-          <UFormField
-            label="Key"
-            class="min-w-0"
-          >
-            <UInput
-              v-model="round.key"
-              placeholder="round-1"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField
-            label="Name"
-            class="min-w-0"
-          >
-            <UInput
-              v-model="round.name"
-              placeholder="Round 1"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField
-            label="Start"
-            class="min-w-0"
-          >
-            <UInput
-              v-model="round.startDate"
-              type="date"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField
-            label="End"
-            class="min-w-0"
-          >
-            <UInput
-              v-model="round.endDate"
-              type="date"
-              class="w-full"
-            />
-          </UFormField>
-          <div class="col-span-full flex items-center justify-end gap-2">
-            <UCheckbox
-              v-model="round.active"
-              label="Active"
-            />
-            <UButton
-              icon="i-lucide-trash-2"
-              color="error"
-              variant="ghost"
-              aria-label="Remove round"
-              @click="removeRound(index)"
-            />
-          </div>
-        </div>
-      </div>
 
       <div class="flex gap-2 pt-2">
         <UButton

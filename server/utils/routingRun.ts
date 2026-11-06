@@ -1,5 +1,4 @@
 import { ApplicationModel } from '../models/Application'
-import { CycleModel } from '../models/Cycle'
 import { FieldMappingModel } from '../models/FieldMapping'
 import { GpaRecordModel } from '../models/GpaRecord'
 import { MetadataModel } from '../models/Metadata'
@@ -89,8 +88,6 @@ export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions
     filter.submissionId = { $in: options.submissionIds }
   }
   const limit = Math.max(1, Math.min(options.limit || 250, options.maxLimit || 500))
-  const cycle = await CycleModel.findById(options.cycleId).lean()
-  const rounds = cycle?.rounds || []
   const submissions = await SubmissionModel.find(filter).sort({ _id: 1 }).limit(limit).lean()
   const applicationIds = [...new Set(submissions.map(submission => String(submission.applicationId)))]
   const [stages, reviews, gpaRecords, applications] = await Promise.all([
@@ -116,12 +113,13 @@ export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions
   }
   const gpaBySubmission = new Map(gpaRecords.map(record => [record.submissionId, record]))
   const applicationNames = new Map(applications.map(application => [String(application._id), application.name]))
+  const roundsByApplication = new Map(applications.map(application => [String(application._id), application.rounds || []]))
 
   const evaluations: SubmissionEvaluation[] = []
   for (const submission of submissions) {
     const routingStages = stagesByApplication.get(String(submission.applicationId)) || []
     const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
-    const round = resolveSubmissionRound(submission, rounds)
+    const round = resolveSubmissionRound(submission, roundsByApplication.get(String(submission.applicationId)) || [])
     const context = buildRoutingContext(
       submission,
       routingStages,

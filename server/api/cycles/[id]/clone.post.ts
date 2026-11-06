@@ -1,5 +1,4 @@
 import { CycleModel } from '~~/server/models/Cycle'
-import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event)
@@ -26,20 +25,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Source cycle not found' })
   }
 
-  let rounds
-  try {
-    rounds = body.rounds !== undefined ? normalizeCycleRounds(body.rounds) : source.rounds || []
-  } catch (error: unknown) {
-    throw createError({ statusCode: 400, statusMessage: error instanceof Error ? error.message : 'Invalid cycle rounds' })
-  }
-
   const clone = await CycleModel.create({
     year: body.year,
     name: body.name,
     active: false,
     startDate: body.startDate ? new Date(body.startDate) : source.startDate,
     endDate: body.endDate ? new Date(body.endDate) : source.endDate,
-    rounds,
     scoreWeights: source.scoreWeights || {}
   })
 

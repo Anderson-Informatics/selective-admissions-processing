@@ -125,3 +125,29 @@ export function collectReferencedStageIds(value: unknown): string[] {
   visit(value)
   return [...ids]
 }
+
+/**
+ * Returns a copy of `value` with every stageId reference rewritten through `remap`
+ * (`stageId`, `stageIds[]`, and `moveToStageId`). Unmapped ids are left as-is.
+ * Returns the original value when nothing changed.
+ */
+export function rewriteReferencedStageIds<T>(value: T, remap: ReadonlyMap<string, string>): T {
+  const visit = (node: unknown): unknown => {
+    if (!node || typeof node !== 'object') return node
+    if (Array.isArray(node)) return node.map(visit)
+    const record = node as Record<string, unknown>
+    const result: Record<string, unknown> = {}
+    for (const [key, child] of Object.entries(record)) {
+      if ((key === 'stageId' || key === 'moveToStageId') && typeof child === 'string') {
+        result[key] = remap.get(child) || child
+      } else if (key === 'stageIds' && Array.isArray(child)) {
+        result[key] = child.map(id => (typeof id === 'string' ? remap.get(id) || id : id))
+      } else {
+        result[key] = visit(child)
+      }
+    }
+    return result
+  }
+  const rewritten = visit(value) as T
+  return JSON.stringify(rewritten) === JSON.stringify(value) ? value : rewritten
+}

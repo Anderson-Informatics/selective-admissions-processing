@@ -1,5 +1,4 @@
 import { CycleModel } from '~~/server/models/Cycle'
-import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event)
@@ -16,20 +15,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 409, statusMessage: `A cycle for year ${body.year} already exists` })
   }
 
-  let rounds
-  try {
-    rounds = normalizeCycleRounds(body.rounds)
-  } catch (error: unknown) {
-    throw createError({ statusCode: 400, statusMessage: error instanceof Error ? error.message : 'Invalid cycle rounds' })
-  }
-
   const cycle = await CycleModel.create({
     year: body.year,
     name: body.name,
     active: body.active === true,
     startDate: body.startDate ? new Date(body.startDate) : undefined,
     endDate: body.endDate ? new Date(body.endDate) : undefined,
-    rounds,
     scoreWeights: body.scoreWeights || {}
   })
 

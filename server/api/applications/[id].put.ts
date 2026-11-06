@@ -3,6 +3,7 @@ import { ApplicationModel } from '~~/server/models/Application'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
 import { routingConfigSchema, reviewStageRoleSchema, defaultRoutingConfig, collectReferencedStageIds } from '~~/server/utils/routingConfig'
 import { dashboardConfigSchema } from '~~/server/utils/dashboardConfig'
+import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 import { recordConfigAudit } from '~~/server/utils/configAudit'
 
 export default defineEventHandler(async (event) => {
@@ -38,6 +39,13 @@ export default defineEventHandler(async (event) => {
   if (body.type !== undefined) application.type = body.type
   if (body.initialFormId !== undefined) application.initialFormId = body.initialFormId
   if (body.active !== undefined) application.active = body.active === true
+  if (body.rounds !== undefined) {
+    try {
+      application.rounds = normalizeCycleRounds(body.rounds)
+    } catch (error: unknown) {
+      throw createError({ statusCode: 400, statusMessage: error instanceof Error ? error.message : 'Invalid application rounds' })
+    }
+  }
   if (body.dashboard !== undefined) {
     const parsed = dashboardConfigSchema.safeParse(body.dashboard)
     if (!parsed.success) {

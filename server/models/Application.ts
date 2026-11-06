@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose'
 import type { DashboardConfig } from '../utils/dashboardConfig'
+import type { CycleRound } from './Cycle'
 
 export interface Application {
   cycleId: string
@@ -8,6 +9,7 @@ export interface Application {
   projectId: string
   initialFormId?: string
   active: boolean
+  rounds: CycleRound[]
   dashboard?: DashboardConfig
   createdAt?: Date
   updatedAt?: Date
@@ -20,6 +22,17 @@ const applicationSchema = new Schema<Application>({
   projectId: { type: String, required: true },
   initialFormId: String,
   active: { type: Boolean, default: true },
+  rounds: {
+    type: [{
+      key: { type: String, required: true },
+      name: { type: String, required: true },
+      order: { type: Number, required: true },
+      startDate: { type: Date, required: true },
+      endDate: { type: Date, required: true },
+      active: { type: Boolean, default: true }
+    }],
+    default: []
+  },
   dashboard: { type: Schema.Types.Mixed }
 }, { timestamps: true })
 

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CycleModel } from '../models/Cycle'
+import { ApplicationModel } from '../models/Application'
 import { GpaRecordModel } from '../models/GpaRecord'
 import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
 
-vi.mock('../models/Cycle', () => ({ CycleModel: { findById: vi.fn() } }))
+vi.mock('../models/Application', () => ({ ApplicationModel: { find: vi.fn() } }))
 vi.mock('../models/GpaRecord', () => ({ GpaRecordModel: { find: vi.fn(), bulkWrite: vi.fn() } }))
 vi.mock('../models/Review', () => ({ ReviewModel: { find: vi.fn() } }))
 vi.mock('../models/ReviewStage', () => ({ ReviewStageModel: { find: vi.fn() } }))
@@ -26,7 +26,9 @@ describe('review completion GPA resolution', () => {
     vi.clearAllMocks()
     reviews = []
     gpaRecords = []
-    vi.mocked(CycleModel.findById).mockReturnValue({ lean: async () => ({ rounds: [] }) } as never)
+    vi.mocked(ApplicationModel.find).mockReturnValue({
+      select: () => ({ lean: async () => [{ _id: 'app-1', rounds: [] }] })
+    } as never)
     vi.mocked(SubmissionModel.countDocuments).mockResolvedValue(1)
     vi.mocked(SubmissionModel.distinct).mockResolvedValue(['app-1'])
     vi.mocked(SubmissionModel.find).mockReturnValue({
