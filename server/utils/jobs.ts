@@ -78,10 +78,9 @@ export async function runJob(job: HydratedDocument<Job>, options: { submittable?
       $set: {
         status,
         result: output.result,
-        error: undefined,
-        leaseExpiresAt: undefined,
         ...(completedAt ? { completedAt } : {})
-      }
+      },
+      $unset: { leaseExpiresAt: 1, error: 1, ...(completedAt ? { routingLock: 1 } : { completedAt: 1 }) }
     })
     return { status, result: output.result }
   } catch (error: unknown) {
@@ -334,6 +333,12 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
   },
 
   run_routing: async (job, { setProgress, submittable }) => {
+    if (job.payload?.scope) {
+      const { runRoutingBatches } = await import('./routingBatches')
+      const output = await runRoutingBatches(job, submittable)
+      if (output.status === 'completed') await queueReviewCompletionRefresh(job)
+      return output
+    }
     const { executeRoutingRun } = await import('./routingExecutor')
     const result = await executeRoutingRun({
       cycleId: job.cycleId,

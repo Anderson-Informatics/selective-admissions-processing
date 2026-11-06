@@ -84,7 +84,10 @@ export async function loadListOptionLabels(cycleId: string): Promise<Record<stri
 
 export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions): Promise<CycleEvaluation> {
   const filter: Record<string, unknown> = routingPreviewFilter(options.cycleId, options.applicationId, options.labelId)
-  if (options.submissionIds) filter.submissionId = { $in: options.submissionIds }
+  if (options.submissionIds) {
+    delete filter.labelIds
+    filter.submissionId = { $in: options.submissionIds }
+  }
   const limit = Math.max(1, Math.min(options.limit || 250, options.maxLimit || 500))
   const cycle = await CycleModel.findById(options.cycleId).lean()
   const rounds = cycle?.rounds || []

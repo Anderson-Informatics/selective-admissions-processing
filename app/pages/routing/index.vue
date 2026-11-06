@@ -25,6 +25,7 @@ const ALL_LABELS = '__all__'
 const selectedApplicationId = ref(ALL_APPLICATIONS)
 const selectedLabelId = ref(ALL_LABELS)
 const limit = ref(250)
+const executionScope = ref<'limited' | 'all'>('limited')
 const loading = ref(false)
 const result = ref<PreviewResult | null>(null)
 const selectedDetail = ref<SubmissionDetail | null>(null)
@@ -104,6 +105,7 @@ async function executeRouting() {
         payload: {
           applicationId: selectedApplicationId.value === ALL_APPLICATIONS ? undefined : selectedApplicationId.value,
           labelId: selectedLabelId.value === ALL_LABELS ? undefined : selectedLabelId.value,
+          scope: executionScope.value,
           limit: limit.value,
           dryRun: dryRun.value
         }
@@ -167,7 +169,7 @@ function openDetail(detail: SubmissionDetail) {
       Routing Preview
     </h1>
     <p class="text-muted mb-6">
-      Read-only evaluation of the configured routing rules. This does not move submissions or modify Submittable.
+      Preview is a read-only sample of up to 500 submissions, not the entire application. Choose All matching submissions and queue a dry run to evaluate the full selection without Submittable writes.
     </p>
 
     <div class="flex flex-wrap items-end gap-4 mb-6">
@@ -192,7 +194,7 @@ function openDetail(detail: SubmissionDetail) {
           class="w-72"
         />
       </UFormField>
-      <UFormField label="Maximum submissions">
+      <UFormField label="Preview / limited-run size">
         <UInput
           v-model.number="limit"
           type="number"
@@ -207,6 +209,13 @@ function openDetail(detail: SubmissionDetail) {
         :disabled="!selectedCycleId"
         @click="previewRouting"
       />
+      <UFormField label="Execution scope">
+        <USelect
+          v-model="executionScope"
+          :items="[{ label: 'Limited submissions', value: 'limited' }, { label: 'All matching submissions', value: 'all' }]"
+          class="w-64"
+        />
+      </UFormField>
       <UButton
         label="Execute routing"
         color="warning"
@@ -368,7 +377,7 @@ function openDetail(detail: SubmissionDetail) {
       <template #body>
         <div class="space-y-3 text-sm">
           <p>
-            This queues a routing job for the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ' and label' : '' }}. The job re-evaluates live data, so results may differ from the last preview.
+            This queues a routing job for {{ executionScope === 'all' ? 'all matching submissions' : `up to ${limit} submissions` }} in the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ' and label' : '' }}. Submissions are selected when processing starts and handled in batches. The job refreshes live data, so results may differ from the sample preview.
           </p>
           <UAlert
             color="warning"

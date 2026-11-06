@@ -135,8 +135,11 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
   const inScopeFilter: Record<string, unknown> = { cycleId: options.cycleId }
   if (options.applicationId) inScopeFilter.applicationId = options.applicationId
   if (options.labelId) inScopeFilter.labelIds = options.labelId
-  if (options.submissionIds) inScopeFilter.submissionId = { $in: options.submissionIds }
-  const scoped = await SubmissionModel.find(inScopeFilter).select('submissionId projectId applicationId').limit(2000).lean()
+  if (options.submissionIds) {
+    delete inScopeFilter.labelIds
+    inScopeFilter.submissionId = { $in: options.submissionIds }
+  }
+  const scoped = await SubmissionModel.find(inScopeFilter).sort({ _id: 1 }).select('submissionId projectId applicationId').limit(Math.max(1, Math.min(options.limit || 250, 5000))).lean()
   if (scoped.length) {
     await setProgress({ phase: 'refreshing_stages', processed: 0, total: scoped.length, percent: 0, message: 'Refreshing current stages from Submittable' })
     await refreshCurrentStages(options.cycleId, scoped as Submission[], setProgress, options.submittable)
@@ -199,7 +202,18 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
       ? `Dry run: ${movers.length} moves, ${result.noAction} unchanged`
       : `Executing ${movers.length} moves`
   })
-  if (dryRun) return result
+  if (dryRun) {
+    result.movedSubmissions = movers.map(item => ({
+      submissionId: item.submission.submissionId,
+      applicantName: item.applicantName,
+      applicationName: item.applicationName,
+      fromStage: item.submission.currentStageName,
+      toStage: evaluation.stageNameById.get(item.actions.move!.toStageId!),
+      reason: item.actions.move!.reason,
+      backward: item.actions.move!.backward
+    }))
+    return result
+  }
 
   // Stage moves — bulk per target stage, falling back to per-submission on batch failure.
   const movesByStage = new Map<string, EvaluatedSubmission[]>()

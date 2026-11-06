@@ -50,6 +50,14 @@ describe('job worker', () => {
     expect(JobModel.findByIdAndUpdate).not.toHaveBeenCalled()
   })
 
+  it('releases the cycle routing lock after exhausted retries', async () => {
+    vi.spyOn(JobModel, 'updateOne').mockResolvedValue({} as never)
+    vi.mocked(JobModel.findOneAndUpdate).mockResolvedValue({ _id: 'job-1', attempts: 3, routingLock: 'cycle-1' } as never)
+    vi.mocked(runJob).mockRejectedValueOnce(new Error('permanent failure'))
+    await processQueuedJob('job-1', config)
+    expect(JobModel.updateOne).toHaveBeenCalledWith({ _id: 'job-1' }, { $unset: { routingLock: 1 } })
+  })
+
   it.each([
     ['hspt_upload_preview', HSPTUploadModel, 'previewJobId', 'previewing'],
     ['hspt_upload_commit', HSPTUploadModel, 'commitJobId', 'confirming'],

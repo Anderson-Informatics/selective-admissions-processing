@@ -19,7 +19,7 @@ export async function leasePendingChildJobs(limit: number, leaseMinutes = 16, ma
   if (exhausted.length) {
     await JobModel.updateMany(
       { _id: { $in: exhausted.map(job => job._id) } },
-      { $set: { status: 'failed', completedAt: now, error: 'Worker lease expired after maximum retry attempts' } }
+      { $set: { status: 'failed', completedAt: now, error: 'Worker lease expired after maximum retry attempts' }, $unset: { routingLock: 1 } }
     )
     const parentIds = [...new Set(exhausted.map(job => job.parentJobId && String(job.parentJobId)).filter(Boolean))]
     await Promise.all(parentIds.map(parentJobId => updateParentJob(parentJobId!)))

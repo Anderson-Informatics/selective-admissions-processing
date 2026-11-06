@@ -104,6 +104,7 @@ export async function processQueuedJob(jobId: string, config: JobWorkerConfig) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     const exhausted = job.attempts >= (config.maxAttempts || 3)
+    if (exhausted && job.routingLock) await JobModel.updateOne({ _id: job._id }, { $unset: { routingLock: 1 } })
     if (!exhausted) {
       await JobModel.findByIdAndUpdate(job._id, {
         $set: {

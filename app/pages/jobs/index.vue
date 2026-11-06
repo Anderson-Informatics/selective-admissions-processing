@@ -164,6 +164,11 @@ function formatResult(job: Job) {
     const { processed = 0, updated = 0, diagnostics = 0, dryRun = false } = job.result
     return `${processed} processed — ${dryRun ? 'dry run' : `${updated} updated`}, ${diagnostics} diagnostics`
   }
+  if (job.type === 'run_routing') {
+    const { evaluated = 0, moves = 0, noAction = 0, failures = 0, dryRun = false, requiresReview = false, message = '' } = job.result
+    if (requiresReview) return String(message)
+    return `${evaluated} evaluated — ${moves} ${dryRun ? 'proposed moves' : 'moves'}, ${noAction} unchanged, ${Array.isArray(failures) ? failures.length : failures} failures`
+  }
   if (job.type === 'essay_begin_scoring') {
     const { moved = 0, alreadyInStage = 0, complete = 0 } = job.result
     return `${moved} moved to essay stage — ${alreadyInStage} already there, ${complete} complete`
@@ -209,8 +214,27 @@ const columns: TableColumn<Job>[] = [
 const selectedJob = ref<Job | null>(null)
 const modalOpen = ref(false)
 
+const routingBatchIndex = ref(0)
+const routingBatchDetail = ref<unknown>(null)
+const loadingRoutingBatch = ref(false)
+
+async function loadRoutingBatch() {
+  if (!selectedJob.value) return
+  loadingRoutingBatch.value = true
+  routingBatchDetail.value = null
+  try {
+    routingBatchDetail.value = await $fetch(`/api/jobs/${selectedJob.value._id}`, { query: { batch: routingBatchIndex.value } })
+  } catch {
+    toast.add({ title: 'Batch not available. It may not have been selected yet.', color: 'error' })
+  } finally {
+    loadingRoutingBatch.value = false
+  }
+}
+
 function openDetails(job: Job) {
   selectedJob.value = job
+  routingBatchIndex.value = 0
+  routingBatchDetail.value = null
   modalOpen.value = true
 }
 </script>
@@ -401,6 +425,33 @@ function openDetails(job: Job) {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div
+          v-if="selectedJob?.type === 'run_routing'"
+          class="space-y-3 mb-4"
+        >
+          <p class="text-sm text-muted">
+            Inspect saved batches (numbered from 0, up to 250 submissions each) for proposed moves, diagnostics, and failures.
+          </p>
+          <div class="flex items-end gap-3">
+            <UFormField label="Batch number">
+              <UInput
+                v-model.number="routingBatchIndex"
+                type="number"
+                min="0"
+                class="w-28"
+              />
+            </UFormField>
+            <UButton
+              label="Load batch"
+              :loading="loadingRoutingBatch"
+              @click="loadRoutingBatch"
+            />
+          </div>
+          <pre
+            v-if="routingBatchDetail"
+            class="text-xs bg-muted p-4 rounded overflow-auto max-h-96"
+          >{{ JSON.stringify(routingBatchDetail, null, 2) }}</pre>
         </div>
         <pre
           v-if="selectedJob"

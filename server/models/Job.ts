@@ -27,6 +27,7 @@ export interface Job {
   status: JobStatus
   cycleId: string
   createdBy: string
+  routingLock?: string
   parentJobId?: Types.ObjectId
   formId?: string
   formName?: string
@@ -34,6 +35,8 @@ export interface Job {
     uploadId?: string
     applicationId?: string
     labelId?: string
+    scope?: 'limited' | 'all'
+    routingInitialized?: boolean
     limit?: number
     excludeSubmissionIds?: string[]
     batchSize?: number
@@ -56,6 +59,7 @@ const jobSchema = new Schema<Job>({
   status: { type: String, required: true, default: 'pending', index: true },
   cycleId: { type: String, required: true, index: true },
   createdBy: { type: String, required: true },
+  routingLock: { type: String, unique: true, sparse: true },
   parentJobId: { type: Schema.Types.ObjectId, ref: 'Job', index: true },
   formId: { type: String, index: true },
   formName: String,
