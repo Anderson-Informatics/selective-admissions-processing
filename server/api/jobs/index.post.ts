@@ -1,4 +1,4 @@
-import { JobModel, type JobType } from '../../models/Job'
+import { ESSAY_JOB_TYPES, JobModel, type JobType } from '../../models/Job'
 
 const allowedTypes: JobType[] = [
   'metadata_sync',
@@ -8,7 +8,8 @@ const allowedTypes: JobType[] = [
   'refresh_review_completion',
   'catchment_lookup',
   'run_routing',
-  'score_compilation'
+  'score_compilation',
+  ...ESSAY_JOB_TYPES
 ]
 
 export default defineEventHandler(async (event) => {
@@ -18,6 +19,17 @@ export default defineEventHandler(async (event) => {
 
   if (!allowedTypes.includes(body.type) || !body.cycleId) {
     throw createError({ statusCode: 400, statusMessage: 'A valid type and cycleId are required' })
+  }
+
+  if (ESSAY_JOB_TYPES.includes(body.type)) {
+    const active = await JobModel.exists({
+      cycleId: body.cycleId,
+      type: { $in: ESSAY_JOB_TYPES },
+      status: { $in: ['pending', 'waiting', 'running'] }
+    })
+    if (active) {
+      throw createError({ statusCode: 409, statusMessage: 'An essay scoring job is already in progress for this cycle' })
+    }
   }
 
   const job = await JobModel.create({

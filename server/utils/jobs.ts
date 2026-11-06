@@ -25,7 +25,10 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'optin_gpa_preview', label: 'Opt-In GPA preview' },
   { value: 'optin_gpa_commit', label: 'Opt-In GPA commit' },
   { value: 'run_routing', label: 'Run routing' },
-  { value: 'score_compilation', label: 'Score compilation' }
+  { value: 'score_compilation', label: 'Score compilation' },
+  { value: 'essay_begin_scoring', label: 'Essay — Begin Scoring' },
+  { value: 'essay_update_scoring', label: 'Essay — Update Scoring' },
+  { value: 'essay_finish_scoring', label: 'Essay — Finish Scoring' }
 ]
 
 interface HandlerResult {
@@ -350,5 +353,41 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
 
   score_compilation: async () => {
     throw new Error('Score compilation is not implemented yet')
+  },
+
+  essay_begin_scoring: async (job, { setProgress, submittable }) => {
+    const { runEssayBeginScoring } = await import('./essayScoring')
+    const result = await runEssayBeginScoring({
+      cycleId: job.cycleId,
+      actor: job.createdBy,
+      jobId: String(job._id),
+      setProgress,
+      submittable
+    })
+    return { result }
+  },
+
+  essay_update_scoring: async (job, { setProgress, submittable }) => {
+    const { runEssayUpdateScoring } = await import('./essayScoring')
+    const result = await runEssayUpdateScoring({
+      cycleId: job.cycleId,
+      actor: job.createdBy,
+      jobId: String(job._id),
+      setProgress,
+      submittable
+    })
+    return { result }
+  },
+
+  essay_finish_scoring: async (job, { setProgress, submittable }) => {
+    const { runEssayFinishScoring } = await import('./essayScoring')
+    const result = await runEssayFinishScoring({
+      cycleId: job.cycleId,
+      actor: job.createdBy,
+      jobId: String(job._id),
+      setProgress,
+      submittable
+    })
+    return { result }
   }
 }

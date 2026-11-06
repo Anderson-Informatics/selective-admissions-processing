@@ -25,6 +25,7 @@ export interface RoutingExecutionOptions {
   cycleId: string
   applicationId?: string
   labelId?: string
+  submissionIds?: string[]
   limit?: number
   excludeSubmissionIds?: string[]
   dryRun?: boolean
@@ -134,6 +135,7 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
   const inScopeFilter: Record<string, unknown> = { cycleId: options.cycleId }
   if (options.applicationId) inScopeFilter.applicationId = options.applicationId
   if (options.labelId) inScopeFilter.labelIds = options.labelId
+  if (options.submissionIds) inScopeFilter.submissionId = { $in: options.submissionIds }
   const scoped = await SubmissionModel.find(inScopeFilter).select('submissionId projectId applicationId').limit(2000).lean()
   if (scoped.length) {
     await setProgress({ phase: 'refreshing_stages', processed: 0, total: scoped.length, percent: 0, message: 'Refreshing current stages from Submittable' })
@@ -144,6 +146,7 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
     cycleId: options.cycleId,
     applicationId: options.applicationId,
     labelId: options.labelId,
+    submissionIds: options.submissionIds,
     limit: options.limit,
     maxLimit: 5000
   })

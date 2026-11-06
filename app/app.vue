@@ -83,6 +83,14 @@ const auth = useAuth()
           </UButton>
           <UButton
             v-if="auth.user"
+            to="/essays"
+            color="neutral"
+            variant="ghost"
+          >
+            Essays
+          </UButton>
+          <UButton
+            v-if="auth.user"
             to="/hspt"
             color="neutral"
             variant="ghost"

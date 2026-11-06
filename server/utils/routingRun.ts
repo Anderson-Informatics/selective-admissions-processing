@@ -16,6 +16,7 @@ export interface RoutingEvaluationOptions {
   cycleId: string
   applicationId?: string
   labelId?: string
+  submissionIds?: string[]
   limit?: number
   maxLimit?: number
 }
@@ -82,7 +83,8 @@ export async function loadListOptionLabels(cycleId: string): Promise<Record<stri
 }
 
 export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions): Promise<CycleEvaluation> {
-  const filter = routingPreviewFilter(options.cycleId, options.applicationId, options.labelId)
+  const filter: Record<string, unknown> = routingPreviewFilter(options.cycleId, options.applicationId, options.labelId)
+  if (options.submissionIds) filter.submissionId = { $in: options.submissionIds }
   const limit = Math.max(1, Math.min(options.limit || 250, options.maxLimit || 500))
   const cycle = await CycleModel.findById(options.cycleId).lean()
   const rounds = cycle?.rounds || []

@@ -164,6 +164,18 @@ function formatResult(job: Job) {
     const { processed = 0, updated = 0, diagnostics = 0, dryRun = false } = job.result
     return `${processed} processed — ${dryRun ? 'dry run' : `${updated} updated`}, ${diagnostics} diagnostics`
   }
+  if (job.type === 'essay_begin_scoring') {
+    const { moved = 0, alreadyInStage = 0, complete = 0 } = job.result
+    return `${moved} moved to essay stage — ${alreadyInStage} already there, ${complete} complete`
+  }
+  if (job.type === 'essay_update_scoring') {
+    const { evaluated = 0, labelSync = {} } = job.result as { evaluated?: number, labelSync?: { added?: number, removed?: number } }
+    return `${evaluated} evaluated — ${labelSync.added || 0} labels added, ${labelSync.removed || 0} removed`
+  }
+  if (job.type === 'essay_finish_scoring') {
+    const { inEssayStage = 0, routing = {} } = job.result as { inEssayStage?: number, routing?: { moves?: number, noAction?: number } }
+    return `${inEssayStage} in essay stage — ${routing.moves || 0} moved, ${routing.noAction || 0} unchanged`
+  }
   return JSON.stringify(job.result).slice(0, 100)
 }
 
