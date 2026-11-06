@@ -161,15 +161,21 @@ export async function syncEssayStatusLabels(
   return result
 }
 
-async function loadReviewerNames(cycleId: string, reviewerIds: string[]): Promise<Map<string, string>> {
-  if (!reviewerIds.length) return new Map()
-  const team = await MetadataModel.find({ type: 'team', externalId: { $in: reviewerIds } }).select('externalId name cycleId').lean()
-  // Newer cycles win when the same userId exists across cycles.
-  const byId = new Map<string, string>()
+async function loadReviewerNames(reviewerKeys: string[]): Promise<Map<string, string>> {
+  if (!reviewerKeys.length) return new Map()
+  const team = await MetadataModel.find({
+    type: 'team',
+    $or: [{ externalId: { $in: reviewerKeys } }, { 'data.email': { $in: reviewerKeys } }]
+  }).select('externalId name data').lean()
+  const byKey = new Map<string, string>()
   for (const member of team) {
-    if (member.name) byId.set(member.externalId, member.name)
+    const data = (member.data || {}) as { email?: string, name?: { full?: string } }
+    const name = data.name?.full?.trim() || member.name
+    if (!name) continue
+    byKey.set(member.externalId, name)
+    if (data.email) byKey.set(data.email, name)
   }
-  return byId
+  return byKey
 }
 
 async function computeEssayStats(ctx: EssayContext, cycleId: string, includeOverall: boolean): Promise<EssayStats> {
@@ -182,7 +188,7 @@ async function computeEssayStats(ctx: EssayContext, cycleId: string, includeOver
       .lean()
   ])
   const reviewerIds = [...new Set(reviews.map(review => reviewerKey(review)).filter(id => id !== 'unknown'))]
-  const reviewerNames = await loadReviewerNames(cycleId, reviewerIds)
+  const reviewerNames = await loadReviewerNames(reviewerIds)
   const counts = new Map<string, number>()
   for (const submission of submissions) {
     const entry = (submission.reviewCompletion || []).find(item => item.stageId === ctx.essayStageId)

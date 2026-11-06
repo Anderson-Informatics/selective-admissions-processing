@@ -334,15 +334,9 @@ const reviewerColumns: TableColumn<ReviewerStat>[] = [
         Reviews per 15 minutes
       </h2>
       <div class="rounded-lg border p-4 mb-6">
-        <UChart
+        <EssaysReviewLineChart
           v-if="stats.buckets.length"
           :data="stats.buckets"
-          index="time"
-          :categories="[{ key: 'count', label: 'Reviews' }]"
-          type="line"
-          :points="true"
-          x-label="Time (Detroit)"
-          y-label="Reviews"
         />
         <p
           v-else
