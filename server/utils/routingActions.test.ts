@@ -227,3 +227,84 @@ describe('splitListValue', () => {
     expect(splitListValue(undefined)).toEqual([])
   })
 })
+
+describe('renderMergeFields link tokens', () => {
+  const linked = () => context({ submission: { submissionId: 'sub-1', submissionIdInt: 12345678, mappedFields: {}, isMapped: true } })
+
+  it('renders applicant portal links from submissionIdInt', () => {
+    expect(renderMergeFields('{{links.submission}}', linked()).text)
+      .toBe('https://manager.submittable.com/user/submissions/12345678')
+    expect(renderMergeFields('{{links.submissionForms}}', linked()).text)
+      .toBe('https://manager.submittable.com/user/submissions/12345678#forms')
+  })
+
+  it('reports unresolved when submissionIdInt is missing', () => {
+    const { text, unresolved } = renderMergeFields('Go: {{links.submission}}', context())
+    expect(text).toBe('Go: ')
+    expect(unresolved).toEqual(['links.submission'])
+  })
+})
+
+describe('renderMergeFields deadline tokens', () => {
+  const NOW = new Date('2026-11-06T15:00:00Z') // Friday, November 6, 2026 in Detroit
+
+  it('renders offsets from send time', () => {
+    expect(renderMergeFields('Due {{deadline}}', context(), { now: NOW }).text).toBe('Due Friday, November 6, 2026')
+    expect(renderMergeFields('Due {{deadline | 2 weeks}}', context(), { now: NOW }).text).toBe('Due Friday, November 20, 2026')
+    expect(renderMergeFields('Due {{deadline | 10 business days}}', context(), { now: NOW }).text).toBe('Due Friday, November 20, 2026')
+  })
+
+  it('snaps to a configurable weekday', () => {
+    expect(renderMergeFields('{{deadline | 1 day | snap friday}}', context(), { now: NOW }).text).toBe('Friday, November 13, 2026')
+    expect(renderMergeFields('{{deadline | 2 weeks | snap friday}}', context(), { now: NOW }).text).toBe('Friday, November 20, 2026')
+  })
+
+  it('flags invalid specs as unknown formats', () => {
+    const { text, unknownFormats } = renderMergeFields('{{deadline | bogus}}', context(), { now: NOW })
+    expect(text).toBe('')
+    expect(unknownFormats).toEqual(['deadline | bogus'])
+  })
+})
+
+describe('renderMergeFields response libraries', () => {
+  const issuesContext = (issues: unknown) => context({
+    reviews: [{ stageId: 'gpa', stageName: 'GPA Completion', status: 'complete', completedAt: new Date('2026-10-01'), mappedData: { Issues: issues, IssuesOther: 'Free-form note' } }]
+  })
+  const libraries = {
+    'gpa-issues': [
+      { match: 'Progress Report(s) submitted', text: 'You submitted progress reports instead of end-of-term grades.' },
+      { match: 'Other', text: '{{GPA Completion.IssuesOther}}' }
+    ]
+  }
+
+  it('maps option labels to library text and drops unmatched options', () => {
+    const ctx = issuesContext('Progress Report(s) submitted; Unmapped Option')
+    const { text } = renderMergeFields('<p>{{GPA Completion.Issues | list | lib:gpa-issues}}</p>', ctx, { mode: 'html', libraries })
+    expect(text).toBe('<ul><li>You submitted progress reports instead of end-of-term grades.</li></ul>')
+  })
+
+  it('renders merge tokens inside library entry text', () => {
+    const ctx = issuesContext('Other')
+    const { text } = renderMergeFields('<p>{{GPA Completion.Issues | list | lib:gpa-issues}}</p>', ctx, { mode: 'html', libraries })
+    expect(text).toBe('<ul><li>Free-form note</li></ul>')
+  })
+
+  it('matches entries case-insensitively and trims whitespace', () => {
+    const ctx = issuesContext('progress report(s) submitted')
+    const { text } = renderMergeFields('{{GPA Completion.Issues | comma | lib:gpa-issues}}', ctx, { libraries })
+    expect(text).toBe('You submitted progress reports instead of end-of-term grades.')
+  })
+
+  it('falls back to raw labels and reports unknown library keys', () => {
+    const ctx = issuesContext('A; B')
+    const { text, unknownLibraries } = renderMergeFields('<p>{{GPA Completion.Issues | list | lib:missing}}</p>', ctx, { mode: 'html', libraries })
+    expect(text).toBe('<ul><li>A</li><li>B</li></ul>')
+    expect(unknownLibraries).toEqual(['missing'])
+  })
+
+  it('removes the paragraph when every option is unmapped', () => {
+    const ctx = issuesContext('Unmapped Option')
+    const { text } = renderMergeFields('<p>Hi</p><p>{{GPA Completion.Issues | list | lib:gpa-issues}}</p>', ctx, { mode: 'html', libraries })
+    expect(text).toBe('<p>Hi</p>')
+  })
+})

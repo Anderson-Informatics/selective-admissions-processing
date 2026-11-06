@@ -36,6 +36,7 @@ export interface RoutingGpaRecord {
 
 export interface RoutingSubmission {
   submissionId: string
+  submissionIdInt?: number
   mappedFields: Record<string, unknown>
   isMapped: boolean
   labelIds?: string[]

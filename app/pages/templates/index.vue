@@ -8,10 +8,12 @@ interface MessageTemplate { _id: string, name: string, description?: string, sub
 interface MergeFieldSource {
   key: string
   label: string
-  kind: 'submission' | 'review'
+  kind: 'submission' | 'review' | 'builtin'
   stageName?: string
   fields: Array<{ value: string, label: string, questionText?: string, fieldType?: string, token: string }>
 }
+
+interface ResponseLibraryOption { _id: string, name: string, key: string }
 
 type InsertFormat = 'list' | 'numbered' | 'comma' | 'raw'
 
@@ -22,6 +24,8 @@ interface CycleOption { _id: string, name: string, year: string, active: boolean
 const toast = useToast()
 const { data: templates, refresh } = await useFetch<MessageTemplate[]>('/api/templates', { default: () => [] })
 const { data: cycles } = await useFetch<CycleOption[]>('/api/cycles', { default: () => [] })
+const { data: responseLibraries } = await useFetch<ResponseLibraryOption[]>('/api/response-libraries', { default: () => [] })
+const libraryItems = computed(() => (responseLibraries.value || []).map(library => ({ label: library.name, value: library.key })))
 
 const mergeCycleId = ref<string | undefined>()
 const { data: mergeFieldData } = await useFetch<{ cycleId: string | null, sources: MergeFieldSource[] }>('/api/templates/merge-fields', {
@@ -49,6 +53,7 @@ watch(() => mergeFieldData.value.sources, (sources) => {
 watch(mergeSourceKey, () => {
   mergeFieldValue.value = undefined
   pendingListToken.value = undefined
+  pendingDeadline.value = false
 })
 
 const insertFormatItems = [
@@ -59,9 +64,40 @@ const insertFormatItems = [
 ]
 const pendingListToken = ref<string | undefined>()
 const insertFormat = ref<InsertFormat>('list')
+const insertLibrary = ref<string | undefined>()
+
+const pendingDeadline = ref(false)
+const deadlineCount = ref(2)
+const deadlineUnit = ref<'days' | 'weeks' | 'business-days'>('weeks')
+const deadlineSnap = ref<string | undefined>()
+const deadlineUnitItems = [
+  { label: 'calendar days', value: 'days' },
+  { label: 'calendar weeks', value: 'weeks' },
+  { label: 'business days', value: 'business-days' }
+]
+const deadlineSnapItems = [
+  { label: 'No snap', value: '' },
+  { label: 'Snap to Monday', value: 'monday' },
+  { label: 'Snap to Tuesday', value: 'tuesday' },
+  { label: 'Snap to Wednesday', value: 'wednesday' },
+  { label: 'Snap to Thursday', value: 'thursday' },
+  { label: 'Snap to Friday', value: 'friday' },
+  { label: 'Snap to Saturday', value: 'saturday' },
+  { label: 'Snap to Sunday', value: 'sunday' }
+]
+const deadlineToken = computed(() => {
+  const count = Math.max(0, Number(deadlineCount.value) || 0)
+  const spec = deadlineUnit.value === 'business-days' ? `${count} business days` : `${count} ${deadlineUnit.value}`
+  const snap = deadlineSnap.value ? ` | snap ${deadlineSnap.value}` : ''
+  return `{{deadline | ${spec}${snap}}}`
+})
 
 function onFieldSelected(token: string | undefined) {
   if (!token) return
+  if (token === '{{deadline}}') {
+    pendingDeadline.value = true
+    return
+  }
   if (fieldItems.value.find(item => item.value === token)?.multi) {
     pendingListToken.value = token
     insertFormat.value = 'list'
@@ -70,16 +106,32 @@ function onFieldSelected(token: string | undefined) {
   insertMergeField(token)
 }
 
+function insertPendingDeadline() {
+  insertMergeField(deadlineToken.value)
+  pendingDeadline.value = false
+  mergeFieldValue.value = undefined
+}
+
+function cancelPendingDeadline() {
+  pendingDeadline.value = false
+  mergeFieldValue.value = undefined
+}
+
 function insertPendingListField() {
   const token = pendingListToken.value
   if (!token) return
   const format = insertFormat.value
-  insertMergeField(format === 'raw' ? token : `${token.slice(0, -2)} | ${format}}}`, format === 'list' || format === 'numbered')
+  let body = token.slice(0, -2)
+  if (format !== 'raw') body += ` | ${format}`
+  if (insertLibrary.value) body += ` | lib:${insertLibrary.value}`
+  insertMergeField(`${body}}}`, format === 'list' || format === 'numbered')
   pendingListToken.value = undefined
+  insertLibrary.value = undefined
 }
 
 function cancelPendingListField() {
   pendingListToken.value = undefined
+  insertLibrary.value = undefined
   mergeFieldValue.value = undefined
 }
 
@@ -222,7 +274,7 @@ async function remove() {
 
 const previewSubmissionId = ref('')
 const previewLoading = ref(false)
-const preview = ref<{ subject: string, bodyHtml: string, unresolved: string[], unknownFormats: string[] } | null>(null)
+const preview = ref<{ subject: string, bodyHtml: string, unresolved: string[], unknownFormats: string[], unknownLibraries: string[] } | null>(null)
 
 async function renderPreview() {
   if (!previewSubmissionId.value.trim()) return
@@ -247,7 +299,7 @@ async function renderPreview() {
       Message Templates
     </h1>
     <p class="text-muted mb-6">
-      Reusable email messages for routing Open-for-Editing actions. Use <code v-pre>{{Field}}</code> for submission fields and <code v-pre>{{Stage Name.Field}}</code> for review form fields.
+      Reusable email messages for routing Open-for-Editing actions. Use <code v-pre>{{Field}}</code> for submission fields and <code v-pre>{{Stage Name.Field}}</code> for review form fields. The Computed source adds link and deadline tokens.
     </p>
 
     <div class="grid md:grid-cols-[240px_1fr] xl:grid-cols-[240px_1fr_300px] gap-6">
@@ -352,25 +404,77 @@ async function renderPreview() {
             </USelectMenu>
             <div
               v-if="pendingListToken"
-              class="flex items-center gap-2"
+              class="space-y-2"
             >
-              <span class="text-sm text-muted whitespace-nowrap">Insert as:</span>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted whitespace-nowrap">Insert as:</span>
+                <USelect
+                  v-model="insertFormat"
+                  :items="insertFormatItems"
+                  class="flex-1"
+                />
+                <UButton
+                  label="Insert"
+                  icon="i-lucide-plus"
+                  @click="insertPendingListField"
+                />
+                <UButton
+                  label="Cancel"
+                  color="neutral"
+                  variant="ghost"
+                  @click="cancelPendingListField"
+                />
+              </div>
+              <div
+                v-if="libraryItems.length"
+                class="flex items-center gap-2"
+              >
+                <span class="text-sm text-muted whitespace-nowrap">Response library (optional):</span>
+                <USelect
+                  v-model="insertLibrary"
+                  :items="libraryItems"
+                  placeholder="Map option labels via a library"
+                  class="flex-1"
+                />
+              </div>
+            </div>
+            <div
+              v-if="pendingDeadline"
+              class="space-y-2 rounded-lg border p-3"
+            >
+              <div class="flex items-center gap-2">
+                <UInput
+                  v-model.number="deadlineCount"
+                  type="number"
+                  :min="0"
+                  class="w-20"
+                />
+                <USelect
+                  v-model="deadlineUnit"
+                  :items="deadlineUnitItems"
+                  class="flex-1"
+                />
+              </div>
               <USelect
-                v-model="insertFormat"
-                :items="insertFormatItems"
-                class="flex-1"
+                v-model="deadlineSnap"
+                :items="deadlineSnapItems"
+                placeholder="Snap to weekday (optional)"
+                class="w-full"
               />
-              <UButton
-                label="Insert"
-                icon="i-lucide-plus"
-                @click="insertPendingListField"
-              />
-              <UButton
-                label="Cancel"
-                color="neutral"
-                variant="ghost"
-                @click="cancelPendingListField"
-              />
+              <div class="flex items-center gap-2">
+                <code class="text-xs bg-elevated rounded px-2 py-1 flex-1 truncate">{{ deadlineToken }}</code>
+                <UButton
+                  label="Insert"
+                  icon="i-lucide-plus"
+                  @click="insertPendingDeadline"
+                />
+                <UButton
+                  label="Cancel"
+                  color="neutral"
+                  variant="ghost"
+                  @click="cancelPendingDeadline"
+                />
+              </div>
             </div>
           </div>
           <UEditor
@@ -457,6 +561,14 @@ async function renderPreview() {
               variant="subtle"
               :title="`Unknown formats (rendered as raw text): ${preview.unknownFormats.join(', ')}`"
               description="Supported formats are list, numbered, and comma."
+              class="mb-4"
+            />
+            <UAlert
+              v-if="preview.unknownLibraries?.length"
+              color="warning"
+              variant="subtle"
+              :title="`Unknown response libraries: ${preview.unknownLibraries.join(', ')}`"
+              description="Raw option labels were rendered for those tokens. Check the lib:key reference."
               class="mb-4"
             />
             <p class="text-sm font-medium mb-2">
@@ -549,6 +661,39 @@ async function renderPreview() {
             </ul>
             <p class="text-muted mt-1">
               Fields come from the active cycle's field mappings. You can also type tokens directly, including in the subject. Unresolved fields are flagged in Preview.
+            </p>
+            <p class="text-muted mt-1">
+              The <strong>Computed</strong> source provides built-in tokens:
+            </p>
+            <ul class="list-disc pl-5 text-muted mt-1 space-y-1">
+              <li><code v-pre>{{links.submission}}</code> — applicant link to the submission</li>
+              <li><code v-pre>{{links.submissionForms}}</code> — same link, straight to the Forms tab</li>
+              <li><code v-pre>{{deadline | 2 weeks}}</code> — date offset from send time</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3 class="font-medium mb-1">
+              Deadlines
+            </h3>
+            <p class="text-muted">
+              <code v-pre>{{deadline | N calendar|business days|weeks}}</code> renders the date (e.g. "Friday, January 16, 2026") N calendar days, business days, or weeks after send time. Add <code v-pre>| snap friday</code> (any weekday) to push the date to the next occurrence of that weekday.
+            </p>
+            <ul class="list-disc pl-5 text-muted mt-1 space-y-1">
+              <li><code v-pre>{{deadline | 10 business days}}</code></li>
+              <li><code v-pre>{{deadline | 2 weeks | snap friday}}</code></li>
+            </ul>
+          </section>
+
+          <section>
+            <h3 class="font-medium mb-1">
+              Response libraries
+            </h3>
+            <p class="text-muted">
+              Add <code v-pre>| lib:key</code> to a merge field to replace each selected option label with mapped text from a <ULink
+                to="/response-libraries"
+                class="underline"
+              >response library</ULink>: <code v-pre>{{Stage.Field | list | lib:gpa-issues}}</code>. Options without a matching entry are omitted.
             </p>
           </section>
 

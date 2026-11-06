@@ -33,6 +33,7 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Applications', to: '/applications', icon: 'i-lucide-files' },
       { label: 'Mappings', to: '/mappings', icon: 'i-lucide-map' },
       { label: 'Templates', to: '/templates', icon: 'i-lucide-file-text' },
+      { label: 'Response Libraries', to: '/response-libraries', icon: 'i-lucide-list-tree' },
       { label: 'Routing', to: '/routing', icon: 'i-lucide-git-branch' }
     ]
   }

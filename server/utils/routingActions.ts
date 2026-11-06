@@ -1,3 +1,4 @@
+import { renderDeadline } from './deadlineDate'
 import { evaluateConditionGroup, type RoutingContext, type RoutingDecision, type RoutingStage } from './routingEvaluator'
 import type { ConditionGroup } from './routingConfig'
 
@@ -176,17 +177,26 @@ function resolveMergeToken(token: string, context: RoutingContext): unknown {
 export const MERGE_FORMATS = ['list', 'numbered', 'comma'] as const
 export type MergeFormat = typeof MERGE_FORMATS[number]
 
+export type ResponseLibraryEntries = { match: string, text: string }[]
+
 export interface MergeRenderOptions {
   /** `html` escapes values and renders list blocks; `text` (default) is plain text for subjects and notes. */
   mode?: 'html' | 'text'
   /** Canonical field name → known option labels for multi-select fields. */
   optionLabels?: Record<string, string[]>
+  /** Response library key → entries, applied via `{{Field | format | lib:key}}`. */
+  libraries?: Record<string, ResponseLibraryEntries>
+  /** Send time used by `{{deadline}}` tokens; defaults to now. */
+  now?: Date
+  /** Internal recursion depth for nested library text. */
+  depth?: number
 }
 
 export interface MergeRenderResult {
   text: string
   unresolved: string[]
   unknownFormats: string[]
+  unknownLibraries: string[]
 }
 
 const LIST_BLOCK = /<p\b[^>]*>\s*\{\{\s*([^{}]+?)\s*\}\}\s*<\/p>/gi
@@ -195,10 +205,24 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
-function parseToken(rawToken: string): { name: string, format?: string } {
-  const pipe = rawToken.indexOf('|')
-  if (pipe < 0) return { name: rawToken.trim() }
-  return { name: rawToken.slice(0, pipe).trim(), format: rawToken.slice(pipe + 1).trim().toLowerCase() || undefined }
+const LIBRARY_MODIFIER = /^lib(?:rary)?\s*:\s*(.+)$/i
+const LINK_TOKEN = /^links\.(submission|submissionforms)$/i
+const MAX_LIBRARY_DEPTH = 3
+
+function parseToken(rawToken: string): { name: string, format?: string, modifiers: string[] } {
+  const segments = rawToken.split('|')
+  const name = (segments[0] || '').trim()
+  const format = segments[1]?.trim().toLowerCase() || undefined
+  const modifiers = segments.slice(2).map(segment => segment.trim()).filter(Boolean)
+  return { name, format, modifiers }
+}
+
+function extractLibraryKey(modifiers: string[]): string | undefined {
+  for (const modifier of modifiers) {
+    const match = LIBRARY_MODIFIER.exec(modifier)
+    if (match) return (match[1] || '').trim().toLowerCase()
+  }
+  return undefined
 }
 
 /** Splits a stored multi-value answer into items, preferring known option labels (which may contain "; "). */
@@ -231,18 +255,59 @@ export function renderMergeFields(
   options: MergeRenderOptions = {}
 ): MergeRenderResult {
   const html = options.mode === 'html'
+  const depth = options.depth ?? 0
   const unresolved = new Set<string>()
   const unknownFormats = new Set<string>()
+  const unknownLibraries = new Set<string>()
   const escape = (value: string) => (html ? escapeHtml(value) : value)
 
+  /** Renders authored library entry text against the same context; escapes merge values but keeps authored markup. */
+  const renderNested = (entryText: string): string => {
+    if (depth >= MAX_LIBRARY_DEPTH) return entryText
+    const nested = renderMergeFields(entryText, context, { ...options, depth: depth + 1 })
+    nested.unresolved.forEach(token => unresolved.add(token))
+    nested.unknownFormats.forEach(token => unknownFormats.add(token))
+    nested.unknownLibraries.forEach(key => unknownLibraries.add(key))
+    return nested.text
+  }
+
   const resolve = (rawToken: string) => {
-    const { name, format } = parseToken(rawToken)
+    const { name, format, modifiers } = parseToken(rawToken)
+    if (name.toLowerCase() === 'deadline') {
+      const spec = [format, ...modifiers].filter(Boolean).join(' | ')
+      const rendered = renderDeadline(spec, options.now || new Date())
+      if (rendered === null) unknownFormats.add(spec ? `deadline | ${spec}` : 'deadline')
+      return { kind: 'deadline' as const, text: rendered }
+    }
+    const link = LINK_TOKEN.exec(name)
+    if (link) {
+      const idInt = context.submission.submissionIdInt
+      let url: string | undefined
+      if (idInt !== undefined && idInt !== null) {
+        url = `https://manager.submittable.com/user/submissions/${idInt}${(link[1] || '').toLowerCase() === 'submissionforms' ? '#forms' : ''}`
+      }
+      if (url === undefined) unresolved.add(name)
+      return { kind: 'link' as const, url }
+    }
     const value = resolveMergeToken(name, context)
     if (value === undefined) unresolved.add(name)
     if (format && !(MERGE_FORMATS as readonly string[]).includes(format)) unknownFormats.add(`${name} | ${format}`)
     const fieldName = name.slice(name.lastIndexOf('.') + 1)
     const items = () => splitListValue(value, options.optionLabels?.[fieldName] || options.optionLabels?.[name])
-    return { value, format: format as MergeFormat | undefined, items }
+    const libraryKey = extractLibraryKey(modifiers)
+    let libraryEntries: ResponseLibraryEntries | undefined
+    if (libraryKey) {
+      libraryEntries = options.libraries?.[libraryKey]
+      if (!libraryEntries) unknownLibraries.add(libraryKey)
+    }
+    const libraryIndex = new Map((libraryEntries || []).map(entry => [entry.match.trim().toLowerCase(), entry.text]))
+    const mappedItems = () => items()
+      .map((item) => {
+        const entryText = libraryIndex.get(item.trim().toLowerCase())
+        return entryText === undefined ? null : renderNested(entryText)
+      })
+      .filter((item): item is string => item !== null)
+    return { kind: 'field' as const, value, format: format as MergeFormat | undefined, items, mappedItems, hasLibrary: libraryEntries !== undefined }
   }
 
   // List blocks are swapped for placeholders so rendered values are never re-scanned for tokens.
@@ -251,20 +316,23 @@ export function renderMergeFields(
   if (html) {
     output = output.replace(LIST_BLOCK, (match, rawToken: string) => {
       const token = resolve(rawToken)
-      if (token.format !== 'list' && token.format !== 'numbered') return match
-      const items = token.value === undefined ? [] : token.items()
+      if (token.kind !== 'field' || (token.format !== 'list' && token.format !== 'numbered')) return match
+      const items = token.value === undefined ? [] : token.hasLibrary ? token.mappedItems() : token.items().map(escapeHtml)
       const tag = token.format === 'numbered' ? 'ol' : 'ul'
-      blocks.push(items.length ? `<${tag}>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</${tag}>` : '')
+      blocks.push(items.length ? `<${tag}>${items.map(item => `<li>${item}</li>`).join('')}</${tag}>` : '')
       return `\uE000${blocks.length - 1}\uE000`
     })
   }
 
   output = output.replace(MERGE_TOKEN, (_, rawToken: string) => {
     const token = resolve(rawToken)
+    if (token.kind === 'deadline') return escape(token.text || '')
+    if (token.kind === 'link') return token.url === undefined ? '' : escape(token.url)
     if (token.value === undefined) return ''
+    if (token.hasLibrary) return joinComma(token.mappedItems())
     if (token.format && (MERGE_FORMATS as readonly string[]).includes(token.format)) return escape(joinComma(token.items()))
     return escape(stringifyValue(token.value))
   })
   output = output.replace(/\uE000(\d+)\uE000/g, (_, index: string) => blocks[Number(index)] ?? '')
-  return { text: output, unresolved: [...unresolved], unknownFormats: [...unknownFormats] }
+  return { text: output, unresolved: [...unresolved], unknownFormats: [...unknownFormats], unknownLibraries: [...unknownLibraries] }
 }

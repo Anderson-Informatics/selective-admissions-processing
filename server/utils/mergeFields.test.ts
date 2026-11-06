@@ -20,7 +20,7 @@ describe('buildMergeFieldSources', () => {
       mappings,
       forms
     })
-    expect(sources.map(source => source.label)).toEqual(['Submission', 'Essay Review Form (Essay Review)'])
+    expect(sources.map(source => source.label)).toEqual(['Submission', 'Essay Review Form (Essay Review)', 'Computed'])
     expect(sources[0]!.fields).toEqual([{ value: 'First Name', label: 'First Name', questionText: 'First name?', token: '{{First Name}}' }])
     expect(sources[1]!.fields.map(field => field.token)).toEqual(['{{Essay Review.Essay Comments}}', '{{Essay Review.Essay Score}}'])
   })
@@ -32,13 +32,25 @@ describe('buildMergeFieldSources', () => {
       mappings,
       forms
     })
-    expect(sources).toHaveLength(2)
+    expect(sources).toHaveLength(3)
     expect(sources[0]!.fields).toHaveLength(1)
   })
 
   it('falls back to static fields when nothing is mapped', () => {
     const sources = buildMergeFieldSources({ applications: [], stages: [], mappings: [], forms: [], fallbackFields: ['Last Name'] })
-    expect(sources).toEqual([{ key: 'submission', label: 'Submission', kind: 'submission', fields: [{ value: 'Last Name', label: 'Last Name', token: '{{Last Name}}' }] }])
+    expect(sources).toEqual([
+      { key: 'submission', label: 'Submission', kind: 'submission', fields: [{ value: 'Last Name', label: 'Last Name', token: '{{Last Name}}' }] },
+      {
+        key: 'builtin',
+        label: 'Computed',
+        kind: 'builtin',
+        fields: [
+          { value: 'links.submission', label: 'Link to Submission', token: '{{links.submission}}' },
+          { value: 'links.submissionForms', label: 'Link to Submission Forms Page', token: '{{links.submissionForms}}' },
+          { value: 'deadline', label: 'Deadline', token: '{{deadline}}' }
+        ]
+      }
+    ])
   })
 
   it('exposes field types and multi-select option labels', () => {

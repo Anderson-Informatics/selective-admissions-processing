@@ -11,10 +11,16 @@ export const LIST_FIELD_TYPES = new Set(['multiple_response', 'file_upload'])
 export interface MergeFieldSource {
   key: string
   label: string
-  kind: 'submission' | 'review'
+  kind: 'submission' | 'review' | 'builtin'
   stageName?: string
   fields: MergeFieldOption[]
 }
+
+const BUILTIN_FIELDS: MergeFieldOption[] = [
+  { value: 'links.submission', label: 'Link to Submission' },
+  { value: 'links.submissionForms', label: 'Link to Submission Forms Page' },
+  { value: 'deadline', label: 'Deadline' }
+]
 
 interface MappingInput { formId: string, fieldId: string, label: string, canonicalName?: string }
 interface FormInput { externalId: string, name?: string, data?: { fields?: unknown } }
@@ -108,7 +114,8 @@ export function buildMergeFieldSources(input: {
     { key: 'submission', label: 'Submission', kind: 'submission', fields: sortOptions(submissionFields.values()) },
     ...[...reviewSources.values()]
       .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
-      .map(({ order: _order, ...source }) => source)
+      .map(({ order: _order, ...source }) => source),
+    { key: 'builtin', label: 'Computed', kind: 'builtin', fields: BUILTIN_FIELDS }
   ]
   return sources.map(source => ({
     ...source,

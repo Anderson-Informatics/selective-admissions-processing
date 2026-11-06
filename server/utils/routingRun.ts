@@ -2,6 +2,7 @@ import { ApplicationModel } from '../models/Application'
 import { FieldMappingModel } from '../models/FieldMapping'
 import { GpaRecordModel } from '../models/GpaRecord'
 import { MetadataModel } from '../models/Metadata'
+import { ResponseLibraryModel } from '../models/ResponseLibrary'
 import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel, type Submission } from '../models/Submission'
@@ -47,6 +48,7 @@ export function buildRoutingContext(
   const context: RoutingContext = {
     submission: {
       submissionId: submission.submissionId,
+      submissionIdInt: submission.submissionIdInt,
       mappedFields: submission.mappedFields || {},
       isMapped: submission.isMapped === true,
       labelIds: submission.labelIds || [],
@@ -79,6 +81,16 @@ export async function loadListOptionLabels(cycleId: string): Promise<Record<stri
   if (!formIds.length) return {}
   const forms = await MetadataModel.find({ type: 'form', externalId: { $in: formIds } }).select('externalId name data.fields').lean()
   return buildListOptionLabels(mappings, forms)
+}
+
+export async function loadResponseLibraries(): Promise<Record<string, { match: string, text: string }[]>> {
+  const docs = await ResponseLibraryModel.find().lean()
+  const libraries: Record<string, { match: string, text: string }[]> = {}
+  for (const doc of docs) {
+    if (!doc.key) continue
+    libraries[doc.key] = (doc.entries || []).map(entry => ({ match: entry.match, text: entry.text }))
+  }
+  return libraries
 }
 
 export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions): Promise<CycleEvaluation> {

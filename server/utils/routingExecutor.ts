@@ -5,7 +5,7 @@ import { MessageTemplateModel, type MessageTemplate } from '../models/MessageTem
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel, type Submission } from '../models/Submission'
 import { mapWithConcurrency } from './concurrency'
-import { evaluateCycleSubmissions, loadListOptionLabels, type SubmissionEvaluation } from './routingRun'
+import { evaluateCycleSubmissions, loadListOptionLabels, loadResponseLibraries, type SubmissionEvaluation } from './routingRun'
 import { renderMergeFields, resolveRoutingActions, type ResolvedRoutingActions } from './routingActions'
 import {
   addSubmissionLabelBulk,
@@ -345,6 +345,7 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
   // Open/close for editing — grouped by identical rendered content.
   const hasEditingActions = moved.some(item => item.actions.openForEditing || item.actions.closeForEditing)
   const optionLabels = hasEditingActions ? await loadListOptionLabels(options.cycleId) : {}
+  const libraries = hasEditingActions ? await loadResponseLibraries() : {}
   const editingGroups = new Map<string, { kind: 'open' | 'close', subject: string, body: string, internalNote?: string, submissionIds: string[] }>()
   for (const item of moved) {
     for (const kind of ['open', 'close'] as const) {
@@ -354,14 +355,17 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
       const template = config.templateId ? templates.get(config.templateId) : undefined
       const subjectSource = template?.subject ?? config.subjectTemplate ?? ''
       const bodySource = template?.bodyHtml ?? config.messageTemplate ?? ''
-      const subject = renderMergeFields(subjectSource, item.context, { optionLabels })
-      const body = renderMergeFields(bodySource, item.context, { mode: 'html', optionLabels })
-      const internalNote = config.internalNoteTemplate ? renderMergeFields(config.internalNoteTemplate, item.context, { optionLabels }).text : undefined
+      const subject = renderMergeFields(subjectSource, item.context, { optionLabels, libraries })
+      const body = renderMergeFields(bodySource, item.context, { mode: 'html', optionLabels, libraries })
+      const internalNote = config.internalNoteTemplate ? renderMergeFields(config.internalNoteTemplate, item.context, { optionLabels, libraries }).text : undefined
       for (const token of [...subject.unresolved, ...body.unresolved]) {
         result.diagnostics.push({ submissionId: item.submission.submissionId, code: 'unresolved_merge_field', message: `Merge field {{${token}}} had no value` })
       }
       for (const token of new Set([...subject.unknownFormats, ...body.unknownFormats])) {
         result.diagnostics.push({ submissionId: item.submission.submissionId, code: 'unknown_merge_format', message: `Unknown merge field format in {{${token}}}; rendered as raw text` })
+      }
+      for (const key of new Set([...subject.unknownLibraries, ...body.unknownLibraries])) {
+        result.diagnostics.push({ submissionId: item.submission.submissionId, code: 'unknown_response_library', message: `Response library '${key}' was not found; raw option values were rendered` })
       }
       const key = `${kind}::${subject.text}::${body.text}::${internalNote || ''}`
       const group = editingGroups.get(key) || { kind, subject: subject.text, body: body.text, internalNote, submissionIds: [] }
