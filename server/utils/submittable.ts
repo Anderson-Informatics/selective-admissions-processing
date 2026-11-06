@@ -353,6 +353,29 @@ export async function openSubmissionsForEditing(
   }
 }
 
+export async function sendSubmissionMessage(
+  input: { submissionIds: string[], subject: string, body: string },
+  clientConfig?: SubmittableClientConfig
+): Promise<void> {
+  const uniqueIds = [...new Set(input.submissionIds)]
+  if (!uniqueIds.length) return
+  await submittableRequest<unknown>(
+    '/submissions/message',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        message: {
+          body: input.body,
+          subject: input.subject,
+          shouldUseOrganizationEmailAsFromAddress: true
+        },
+        submissionIds: uniqueIds
+      })
+    },
+    clientConfig
+  )
+}
+
 export async function closeSubmissionsForEditing(
   input: EditingMessageInput,
   clientConfig?: SubmittableClientConfig

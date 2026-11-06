@@ -281,6 +281,7 @@ async function remove() {
 
 const previewSubmissionId = ref('')
 const previewLoading = ref(false)
+const sendLoading = ref(false)
 const preview = ref<{ subject: string, bodyHtml: string, unresolved: string[], unknownFormats: string[], unknownLibraries: string[] } | null>(null)
 
 async function renderPreview() {
@@ -296,6 +297,27 @@ async function renderPreview() {
     toast.add({ title: (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Preview failed', color: 'error' })
   } finally {
     previewLoading.value = false
+  }
+}
+
+async function sendTest() {
+  if (!previewSubmissionId.value.trim()) return
+  sendLoading.value = true
+  try {
+    const result = await $fetch<{ sent: boolean, subject: string, unresolved: string[], unknownFormats: string[], unknownLibraries: string[] }>('/api/templates/send', {
+      method: 'POST',
+      body: { submissionId: previewSubmissionId.value.trim(), subject: form.subject, bodyHtml: form.bodyHtml }
+    })
+    const warnings = [...result.unresolved, ...result.unknownFormats, ...result.unknownLibraries]
+    toast.add({
+      title: `Message sent to submission ${previewSubmissionId.value.trim()}`,
+      description: warnings.length ? `Sent with warnings: ${warnings.join(', ')}` : undefined,
+      color: warnings.length ? 'warning' : 'success'
+    })
+  } catch (error: unknown) {
+    toast.add({ title: (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Send failed', color: 'error' })
+  } finally {
+    sendLoading.value = false
   }
 }
 </script>
@@ -559,6 +581,14 @@ async function renderPreview() {
               :loading="previewLoading"
               @click="renderPreview"
             />
+            <UButton
+              label="Send test message"
+              icon="i-lucide-send"
+              color="warning"
+              variant="outline"
+              :loading="sendLoading"
+              @click="sendTest"
+            />
           </div>
           <template v-if="preview">
             <UAlert
@@ -598,7 +628,7 @@ async function renderPreview() {
             v-else
             class="text-sm text-muted"
           >
-            Enter a submission ID to render this template against real submission and review data.
+            Enter a submission ID to render this template against real submission and review data. <strong>Send test message</strong> sends the rendered email to that submission's submitter via Submittable.
           </p>
         </UCard>
       </div>
