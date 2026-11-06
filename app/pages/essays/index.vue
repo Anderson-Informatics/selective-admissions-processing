@@ -185,14 +185,42 @@ function formatDate(value?: string) {
   return value ? new Date(value).toLocaleString() : '—'
 }
 
+const UButton = resolveComponent('UButton')
+
+function sortableColumn(key: keyof ReviewerStat, label: string, numeric = true): TableColumn<ReviewerStat> {
+  return {
+    id: key,
+    // Missing scores become undefined so sortUndefined keeps them last in either direction.
+    accessorFn: row => row[key] ?? undefined,
+    enableSorting: true,
+    header: ({ column }) => {
+      const sorted = column.getIsSorted()
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label,
+        icon: sorted ? (sorted === 'asc' ? 'i-lucide-arrow-up-narrow-wide' : 'i-lucide-arrow-down-wide-narrow') : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(sorted === 'asc')
+      })
+    },
+    sortUndefined: 'last',
+    sortingFn: numeric ? 'basic' : 'alphanumeric',
+    cell: ({ row }) => row.getValue<string | number | undefined>(key) ?? '—'
+  }
+}
+
 const reviewerColumns: TableColumn<ReviewerStat>[] = [
-  { accessorKey: 'name', header: 'Reviewer' },
-  { accessorKey: 'completed', header: 'Completed' },
-  { accessorKey: 'perHour', header: 'Per hour' },
-  { accessorKey: 'minScore', header: 'Min score' },
-  { accessorKey: 'maxScore', header: 'Max score' },
-  { accessorKey: 'avgScore', header: 'Avg score' }
+  sortableColumn('name', 'Reviewer', false),
+  sortableColumn('completed', 'Completed'),
+  sortableColumn('perHour', 'Per hour'),
+  sortableColumn('minScore', 'Min score'),
+  sortableColumn('maxScore', 'Max score'),
+  sortableColumn('avgScore', 'Avg score')
 ]
+
+const dailySorting = ref([{ id: 'completed', desc: true }])
+const overallSorting = ref([{ id: 'completed', desc: true }])
 </script>
 
 <template>
@@ -370,6 +398,7 @@ const reviewerColumns: TableColumn<ReviewerStat>[] = [
         Reviewer stats — today
       </h2>
       <UTable
+        v-model:sorting="dailySorting"
         :data="stats.reviewers"
         :columns="reviewerColumns"
         class="mb-6"
@@ -418,6 +447,7 @@ const reviewerColumns: TableColumn<ReviewerStat>[] = [
           Reviewer stats — all days
         </h2>
         <UTable
+          v-model:sorting="overallSorting"
           :data="stats.overallReviewers || []"
           :columns="reviewerColumns"
           class="mb-6"
