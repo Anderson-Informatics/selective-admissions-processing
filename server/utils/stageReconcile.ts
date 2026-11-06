@@ -4,7 +4,7 @@ import { ReviewModel, type Review } from '../models/Review'
 import { ReviewStageModel, type ReviewStage } from '../models/ReviewStage'
 import { SubmissionModel, type Submission } from '../models/Submission'
 import { recordConfigAudit } from './configAudit'
-import { normalizeRoutingConfig, rewriteReferencedStageIds } from './routingConfig'
+import { rewriteReferencedStageIds } from './routingConfig'
 import type { SubmittableProject, SubmittableReviewStage } from './submittable'
 
 export interface StageRemap {
@@ -122,7 +122,7 @@ export async function applyStageReconcile(
     const remote = projectById.get(application.projectId)
     if (!remote || !Array.isArray(remote.reviewStages)) continue
 
-    const stageDocs = await ReviewStageModel.find({ applicationId: String(application._id) }).sort({ order: 1 })
+    const stageDocs = await ReviewStageModel.find({ applicationId: String(application._id) }).sort({ order: 1 }).lean()
     const diff = diffStages(stageDocs, remote.reviewStages)
     const orphanSubmissions = diff.orphanStageIds.length
       ? await SubmissionModel.countDocuments({ applicationId: String(application._id), currentStageId: { $in: diff.orphanStageIds } })
@@ -158,12 +158,10 @@ export async function applyStageReconcile(
         if (stage.formId !== doc.formId) $set.formId = stage.formId
         if (order !== doc.order) $set.order = order
       }
-      const normalizedRouting = doc.routing ? normalizeRoutingConfig(doc.routing) : undefined
-      const routing = normalizedRouting ? rewriteReferencedStageIds(normalizedRouting, remap) : undefined
-      const normalizedDraft = doc.routingDraft ? normalizeRoutingConfig(doc.routingDraft) : undefined
-      const routingDraft = normalizedDraft ? rewriteReferencedStageIds(normalizedDraft, remap) : undefined
-      if (routing && routing !== normalizedRouting) $set.routing = routing
-      if (routingDraft && routingDraft !== normalizedDraft) $set.routingDraft = routingDraft
+      const routing = doc.routing ? rewriteReferencedStageIds(doc.routing, remap) : undefined
+      const routingDraft = doc.routingDraft ? rewriteReferencedStageIds(doc.routingDraft, remap) : undefined
+      if (routing && routing !== doc.routing) $set.routing = routing
+      if (routingDraft && routingDraft !== doc.routingDraft) $set.routingDraft = routingDraft
       if (Object.keys($set).length) stageWrites.push({ updateOne: { filter: { _id: doc._id }, update: { $set } } })
     }
     if (stageWrites.length) await ReviewStageModel.bulkWrite(stageWrites)
