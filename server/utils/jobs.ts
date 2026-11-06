@@ -24,6 +24,7 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'dpscd_gpa_import', label: 'DPSCD GPA import' },
   { value: 'optin_gpa_preview', label: 'Opt-In GPA preview' },
   { value: 'optin_gpa_commit', label: 'Opt-In GPA commit' },
+  { value: 'run_routing', label: 'Run routing' },
   { value: 'score_compilation', label: 'Score compilation' }
 ]
 
@@ -325,6 +326,24 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
 
   optin_gpa_commit: async (job, { setProgress, submittable }) => {
     const result = await commitOptInGpaUpload(String(job.payload.uploadId), setProgress, submittable)
+    await queueReviewCompletionRefresh(job)
+    return { result }
+  },
+
+  run_routing: async (job, { setProgress, submittable }) => {
+    const { executeRoutingRun } = await import('./routingExecutor')
+    const result = await executeRoutingRun({
+      cycleId: job.cycleId,
+      applicationId: job.payload?.applicationId,
+      labelId: job.payload?.labelId,
+      limit: job.payload?.limit,
+      excludeSubmissionIds: job.payload?.excludeSubmissionIds,
+      dryRun: job.payload?.dryRun === true,
+      actor: job.createdBy,
+      jobId: String(job._id),
+      setProgress,
+      submittable
+    })
     await queueReviewCompletionRefresh(job)
     return { result }
   },

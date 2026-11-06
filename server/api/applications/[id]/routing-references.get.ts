@@ -3,6 +3,7 @@ import { CycleModel } from '~~/server/models/Cycle'
 import { FieldMappingModel } from '~~/server/models/FieldMapping'
 import { MetadataModel } from '~~/server/models/Metadata'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
+import { buildFormFieldOptions } from '~~/server/utils/mergeFields'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
@@ -24,18 +25,11 @@ export default defineEventHandler(async (event) => {
   const formIds = new Set(stages.map(stage => stage.formId).filter(Boolean))
   if (application.initialFormId) formIds.add(application.initialFormId)
   const canonicalFields = [...new Set(mappings.filter(mapping => formIds.has(mapping.formId)).map(mapping => mapping.canonicalName).filter(Boolean))].sort()
-  const reviewFields = stages.map((stage) => {
-    const form = forms.find(item => item.externalId === stage.formId)
-    const formFields = form?.data?.fields
-    const formLabels = new Map<string, string>((Array.isArray(formFields) ? formFields : []).map((field: { formFieldId: string, label?: string }) => [field.formFieldId, field.label || '']))
-    const fields = mappings.filter(mapping => mapping.formId === stage.formId && mapping.canonicalName)
-    const unique = new Map(fields.map((mapping) => {
-      const [fieldId, subField] = mapping.fieldId.split(':')
-      const questionText = [formLabels.get(fieldId || ''), subField].filter(Boolean).join(' - ') || mapping.label
-      return [mapping.canonicalName, { value: mapping.canonicalName, label: mapping.canonicalName, questionText }]
-    }))
-    return { stageId: stage.stageId, stageName: stage.name, fields: [...unique.values()].sort((a, b) => a.label.localeCompare(b.label)) }
-  })
+  const reviewFields = stages.map(stage => ({
+    stageId: stage.stageId,
+    stageName: stage.name,
+    fields: buildFormFieldOptions(stage.formId, mappings, forms)
+  }))
 
   return {
     stages: stages.map(stage => ({ value: stage.stageId, label: stage.name, order: stage.order, role: stage.role })),

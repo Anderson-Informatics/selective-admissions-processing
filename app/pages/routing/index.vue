@@ -88,6 +88,42 @@ async function previewRouting() {
   }
 }
 
+const confirmOpen = ref(false)
+const executing = ref(false)
+const dryRun = ref(false)
+
+async function executeRouting() {
+  if (!selectedCycleId.value) return
+  executing.value = true
+  try {
+    await $fetch('/api/jobs', {
+      method: 'POST',
+      body: {
+        type: 'run_routing',
+        cycleId: selectedCycleId.value,
+        payload: {
+          applicationId: selectedApplicationId.value === ALL_APPLICATIONS ? undefined : selectedApplicationId.value,
+          labelId: selectedLabelId.value === ALL_LABELS ? undefined : selectedLabelId.value,
+          limit: limit.value,
+          dryRun: dryRun.value
+        }
+      }
+    })
+    confirmOpen.value = false
+    toast.add({
+      title: dryRun.value ? 'Routing dry run queued' : 'Routing execution queued',
+      description: 'Track progress on the Jobs page.',
+      color: 'success',
+      actions: [{ label: 'View jobs', to: '/jobs' }]
+    })
+  } catch (error: unknown) {
+    const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Failed to queue routing job'
+    toast.add({ title: message, color: 'error' })
+  } finally {
+    executing.value = false
+  }
+}
+
 const columns: TableColumn<SubmissionDetail>[] = [
   { accessorKey: 'applicantName', header: 'Applicant Name' },
   { accessorKey: 'currentStage', header: 'Current stage' },
@@ -170,6 +206,13 @@ function openDetail(detail: SubmissionDetail) {
         :loading="loading"
         :disabled="!selectedCycleId"
         @click="previewRouting"
+      />
+      <UButton
+        label="Execute routing"
+        color="warning"
+        variant="outline"
+        :disabled="!selectedCycleId"
+        @click="confirmOpen = true"
       />
     </div>
 
@@ -317,6 +360,46 @@ function openDetail(detail: SubmissionDetail) {
         </template>
       </UTable>
     </div>
+
+    <UModal
+      v-model:open="confirmOpen"
+      title="Execute routing?"
+    >
+      <template #body>
+        <div class="space-y-3 text-sm">
+          <p>
+            This queues a routing job for the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ' and label' : '' }}. The job re-evaluates live data, so results may differ from the last preview.
+          </p>
+          <UAlert
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-triangle-alert"
+            title="This writes to Submittable"
+            description="Stage moves, label changes, and reviewer assignments are applied. Stages configured with an Open-for-Editing action will send an email to the applicant."
+          />
+          <UCheckbox
+            v-model="dryRun"
+            label="Dry run — evaluate only, no Submittable writes"
+          />
+        </div>
+      </template>
+      <template #footer="{ close }">
+        <div class="flex justify-end gap-2">
+          <UButton
+            label="Cancel"
+            color="neutral"
+            variant="outline"
+            @click="close"
+          />
+          <UButton
+            :label="dryRun ? 'Queue dry run' : 'Queue routing job'"
+            color="warning"
+            :loading="executing"
+            @click="executeRouting"
+          />
+        </div>
+      </template>
+    </UModal>
 
     <UModal
       v-model:open="detailModalOpen"

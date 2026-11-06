@@ -274,6 +274,99 @@ export async function addSubmissionLabelBulk(submissionIds: string[], labelId: s
   }
 }
 
+export async function moveSubmissionsToStage(reviewStageId: string, submissionIds: string[], clientConfig?: SubmittableClientConfig): Promise<void> {
+  const uniqueIds = [...new Set(submissionIds)]
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    await submittableRequest<unknown>(
+      '/submissions/review_stage',
+      { method: 'PUT', body: JSON.stringify({ reviewStageId, submissionIds: uniqueIds.slice(index, index + 500) }) },
+      clientConfig
+    )
+  }
+}
+
+export async function moveSubmissionToStage(submissionId: string, stageId: string, clientConfig?: SubmittableClientConfig): Promise<string | undefined> {
+  const result = await submittableRequest<{ stageName?: string }>(
+    `/submissions/${encodeURIComponent(submissionId)}/stage/${encodeURIComponent(stageId)}`,
+    { method: 'PUT' },
+    clientConfig
+  )
+  return result?.stageName
+}
+
+export async function assignSubmissionReviewers(
+  input: { submissionIds: string[], assignTeamMemberUserIds?: string[], unAssignTeamMemberUserIds?: string[] },
+  clientConfig?: SubmittableClientConfig
+): Promise<void> {
+  const uniqueIds = [...new Set(input.submissionIds)]
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    await submittableRequest<unknown>(
+      '/submissions/assignments',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          submissionIds: uniqueIds.slice(index, index + 500),
+          assignTeamMemberUserIds: input.assignTeamMemberUserIds || [],
+          unAssignTeamMemberUserIds: input.unAssignTeamMemberUserIds || []
+        })
+      },
+      clientConfig
+    )
+  }
+}
+
+interface EditingMessageInput {
+  submissionIds: string[]
+  internalNote?: string
+  subject?: string
+  body?: string
+}
+
+function editingRequestBody(input: EditingMessageInput, batch: string[]) {
+  const hasMessage = Boolean(input.subject?.trim() && input.body?.trim())
+  return JSON.stringify({
+    internalNote: input.internalNote,
+    ...(hasMessage
+      ? {
+          message: {
+            body: input.body,
+            subject: input.subject,
+            shouldUseOrganizationEmailAsFromAddress: true
+          }
+        }
+      : {}),
+    submissionIds: batch
+  })
+}
+
+export async function openSubmissionsForEditing(
+  input: EditingMessageInput,
+  clientConfig?: SubmittableClientConfig
+): Promise<void> {
+  const uniqueIds = [...new Set(input.submissionIds)]
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    await submittableRequest<unknown>(
+      '/submissions/editing/open',
+      { method: 'PUT', body: editingRequestBody(input, uniqueIds.slice(index, index + 500)) },
+      clientConfig
+    )
+  }
+}
+
+export async function closeSubmissionsForEditing(
+  input: EditingMessageInput,
+  clientConfig?: SubmittableClientConfig
+): Promise<void> {
+  const uniqueIds = [...new Set(input.submissionIds)]
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    await submittableRequest<unknown>(
+      '/submissions/editing/close',
+      { method: 'PUT', body: editingRequestBody(input, uniqueIds.slice(index, index + 500)) },
+      clientConfig
+    )
+  }
+}
+
 export async function fetchSubmission(
   submissionId: string,
   clientConfig?: SubmittableClientConfig

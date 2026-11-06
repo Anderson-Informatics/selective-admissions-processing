@@ -1,13 +1,4 @@
-import { ApplicationModel } from '../../models/Application'
-import { CycleModel } from '../../models/Cycle'
-import { GpaRecordModel } from '../../models/GpaRecord'
-import { ReviewModel } from '../../models/Review'
-import { ReviewStageModel } from '../../models/ReviewStage'
-import { SubmissionModel } from '../../models/Submission'
-import { normalizeRoutingConfig } from '../../utils/routingConfig'
-import { applicantName, routingPreviewFilter } from '../../utils/routingPreview'
-import { resolveSubmissionRound } from '../../utils/cycleRounds'
-import { computeReviewCompletion, routeSubmission, type RoutingContext, type RoutingStage } from '../../utils/routingEvaluator'
+import { evaluateCycleSubmissions } from '../../utils/routingRun'
 
 interface PreviewBody {
   cycleId?: string
@@ -23,97 +14,46 @@ export default defineEventHandler(async (event) => {
   if (!body.cycleId) throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
   if (body.labelId != null && typeof body.labelId !== 'string') throw createError({ statusCode: 400, statusMessage: 'labelId must be a string' })
 
-  const filter = routingPreviewFilter(body.cycleId, body.applicationId, body.labelId)
   const limit = Math.max(1, Math.min(body.limit || 250, 500))
-  const cycle = await CycleModel.findById(body.cycleId).lean()
-  const rounds = cycle?.rounds || []
-  const submissions = await SubmissionModel.find(filter).sort({ _id: 1 }).limit(limit).lean()
-  const applicationIds = [...new Set(submissions.map(submission => String(submission.applicationId)))]
-  const [stages, reviews, gpaRecords] = await Promise.all([
-    ReviewStageModel.find({ cycleId: body.cycleId, applicationId: { $in: applicationIds } }).lean(),
-    ReviewModel.find({ cycleId: body.cycleId, submissionId: { $in: submissions.map(submission => submission.submissionId) } }).lean(),
-    GpaRecordModel.find({ cycleId: body.cycleId, submissionId: { $in: submissions.map(submission => submission.submissionId) } }).lean()
-  ])
+  const evaluation = await evaluateCycleSubmissions({
+    cycleId: body.cycleId,
+    applicationId: body.applicationId,
+    labelId: body.labelId,
+    limit
+  })
 
-  const stagesByApplication = new Map<string, RoutingStage[]>()
-  for (const stage of stages) {
-    const list = stagesByApplication.get(String(stage.applicationId)) || []
-    list.push({ stageId: stage.stageId, name: stage.name, order: stage.order, role: stage.role || 'work', routing: normalizeRoutingConfig(stage.routing) })
-    stagesByApplication.set(String(stage.applicationId), list)
-  }
-  const reviewsBySubmission = new Map<string, typeof reviews>()
-  for (const review of reviews) {
-    const list = reviewsBySubmission.get(review.submissionId) || []
-    list.push(review)
-    reviewsBySubmission.set(review.submissionId, list)
-  }
-  const gpaBySubmission = new Map(gpaRecords.map(record => [record.submissionId, record]))
-  const applicationNames = new Map((await ApplicationModel.find({ _id: { $in: applicationIds } }).lean()).map(application => [String(application._id), application.name]))
   const proposedMoves: Array<Record<string, unknown>> = []
   const submissionDetails: Array<Record<string, unknown>> = []
   const diagnostics: Array<Record<string, unknown>> = []
   let noAction = 0
 
-  for (const submission of submissions) {
-    const routingStages = stagesByApplication.get(String(submission.applicationId)) || []
-    const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
-    const mappedFields = submission.mappedFields || {}
-    const name = applicantName(mappedFields, submission.submissionId)
-    const round = resolveSubmissionRound(submission, rounds)
-    const context: RoutingContext = {
-      submission: {
-        submissionId: submission.submissionId,
-        mappedFields: submission.mappedFields || {},
-        isMapped: submission.isMapped === true,
-        labelIds: submission.labelIds || [],
-        currentStageId: submission.currentStageId,
-        hsptResultId: submission.hsptResultId,
-        status: submission.status
-      },
-      reviews: submissionReviews.map(review => ({
-        stageId: review.stageId,
-        stageName: routingStages.find(stage => stage.stageId === review.stageId)?.name || review.stageName,
-        status: review.status,
-        score: review.score,
-        completedAt: review.completedAt,
-        createdAt: review.createdAt,
-        mappedData: review.mappedData || {}
-      })),
-      gpa: gpaBySubmission.get(submission.submissionId) as RoutingContext['gpa'],
-      cycleRound: round.key
-    }
-    const preliminary = computeReviewCompletion(routingStages, { ...context, prerequisitesComplete: true })
-    context.prerequisitesComplete = preliminary.reviewCompletion
-      .filter(entry => (entry.role === 'work' || entry.role === 'initial') && !/ready for placement/i.test(entry.name))
-      .every(entry => !entry.required || entry.complete)
-    const completion = computeReviewCompletion(routingStages, context)
-    const decision = routeSubmission(routingStages, context)
-    const current = routingStages.find(stage => stage.stageId === decision.fromStageId)
-    const target = routingStages.find(stage => stage.stageId === decision.toStageId)
-    noAction += decision.action === 'stay' ? 1 : 0
-    diagnostics.push(...decision.diagnostics.map(diagnostic => ({ submissionId: submission.submissionId, ...diagnostic })))
+  for (const item of evaluation.submissions) {
+    const current = item.stages.find(stage => stage.stageId === item.decision.fromStageId)
+    const target = item.stages.find(stage => stage.stageId === item.decision.toStageId)
+    noAction += item.decision.action === 'stay' ? 1 : 0
+    diagnostics.push(...item.decision.diagnostics.map(diagnostic => ({ submissionId: item.submission.submissionId, ...diagnostic })))
     submissionDetails.push({
-      submissionId: submission.submissionId,
-      applicantName: name,
-      applicationName: applicationNames.get(String(submission.applicationId)) || String(submission.applicationId),
-      currentStage: current?.name || submission.currentStageName || 'Unknown',
-      proposedStage: target?.name || decision.toStageId || null,
-      decision: decision.reason,
-      backward: decision.backward,
-      diagnostics: decision.diagnostics,
-      reviewCompletion: completion.reviewCompletion
+      submissionId: item.submission.submissionId,
+      applicantName: item.applicantName,
+      applicationName: item.applicationName,
+      currentStage: current?.name || item.submission.currentStageName || 'Unknown',
+      proposedStage: target?.name || item.decision.toStageId || null,
+      decision: item.decision.reason,
+      backward: item.decision.backward,
+      diagnostics: item.decision.diagnostics,
+      reviewCompletion: item.completion.reviewCompletion
     })
-    if (decision.action === 'move') {
+    if (item.decision.action === 'move') {
       proposedMoves.push({
-        submissionId: submission.submissionId,
-        applicantName: name,
-        applicationId: String(submission.applicationId),
-        applicationName: applicationNames.get(String(submission.applicationId)) || String(submission.applicationId),
-        currentStage: current?.name || submission.currentStageName || 'Unknown',
-        proposedStage: target?.name || decision.toStageId,
-        reason: decision.reason,
-        backward: decision.backward,
-        diagnostics: completion.diagnostics
+        submissionId: item.submission.submissionId,
+        applicantName: item.applicantName,
+        applicationId: String(item.submission.applicationId),
+        applicationName: item.applicationName,
+        currentStage: current?.name || item.submission.currentStageName || 'Unknown',
+        proposedStage: target?.name || item.decision.toStageId,
+        reason: item.decision.reason,
+        backward: item.decision.backward,
+        diagnostics: item.completion.diagnostics
       })
     }
   }
@@ -123,5 +63,5 @@ export default defineEventHandler(async (event) => {
     counts[key] = (counts[key] || 0) + 1
     return counts
   }, {})
-  return { evaluated: submissions.length, proposedMoves, submissionDetails, noAction, diagnostics, byTargetStage, limit }
+  return { evaluated: evaluation.submissions.length, proposedMoves, submissionDetails, noAction, diagnostics, byTargetStage, limit }
 })

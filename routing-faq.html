@@ -107,8 +107,8 @@
 
   <p>
     This document records the routing concepts and decisions that guide the
-    configuration-driven routing system. It is intended to clarify the business
-    meaning of routing configuration before automated Submittable writes are enabled.
+    configuration-driven routing system. It clarifies the business meaning of
+    routing configuration and how the <code>run_routing</code> execution job applies it.
   </p>
 
   <section>
@@ -289,9 +289,20 @@
     </p>
 
     <p>
-      Execution will be a separate confirmation workflow. It will eventually use
-      persisted RoutingRun records, allow individual submissions to be excluded,
-      recheck stale stages, and only then perform Submittable writes.
+      Execution is the <code>run_routing</code> job, queued from the routing page
+      behind a confirmation modal (with a dry-run option). The job first refreshes
+      each in-scope submission's current stage from Submittable, re-evaluates the
+      same rules as the preview, and then performs the writes: stage moves, label
+      and reviewer-assignment changes, <code>statusLabels</code> synchronization,
+      and Open/Close-for-Editing actions using stored message templates rendered
+      with submission and review merge fields (<code>{{Field}}</code>,
+      <code>{{Stage Name.Field}}</code>; multi-select fields accept
+      <code>| list</code>, <code>| numbered</code>, or <code>| comma</code> to render
+      as a bulleted list, numbered list, or inline text). Values are HTML-escaped.
+      Each move is appended to the
+      submission's <code>routingHistory</code> and recorded in the audit log.
+      A future enhancement may add persisted RoutingRun records so individual
+      submissions can be excluded before committing.
     </p>
   </section>
 </body>

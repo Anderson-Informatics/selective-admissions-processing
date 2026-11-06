@@ -35,6 +35,17 @@ export interface Submission {
   gpaStatus?: string
   gpaDpscd?: boolean
   gpaOptIn?: boolean
+  routingHistory?: Array<{
+    fromStageId?: string
+    fromStageName?: string
+    toStageId?: string
+    toStageName?: string
+    reason?: string
+    backward?: boolean
+    jobId?: string
+    at?: Date
+    actionsApplied?: Record<string, unknown>
+  }>
   hsptResultId?: string
   hsptMatchType?: string
   geocode?: {
@@ -90,6 +101,20 @@ const submissionSchema = new Schema<Submission>({
   gpaStatus: { type: String, index: true },
   gpaDpscd: { type: Boolean },
   gpaOptIn: { type: Boolean },
+  routingHistory: {
+    type: [{
+      fromStageId: String,
+      fromStageName: String,
+      toStageId: String,
+      toStageName: String,
+      reason: String,
+      backward: Boolean,
+      jobId: String,
+      at: Date,
+      actionsApplied: { type: Schema.Types.Mixed, default: undefined }
+    }],
+    default: undefined
+  },
   hsptResultId: { type: String, index: true, sparse: true },
   hsptMatchType: { type: String, index: true },
   geocode: {

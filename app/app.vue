@@ -51,6 +51,14 @@ const auth = useAuth()
           </UButton>
           <UButton
             v-if="auth.user"
+            to="/templates"
+            color="neutral"
+            variant="ghost"
+          >
+            Templates
+          </UButton>
+          <UButton
+            v-if="auth.user"
             to="/submissions"
             color="neutral"
             variant="ghost"

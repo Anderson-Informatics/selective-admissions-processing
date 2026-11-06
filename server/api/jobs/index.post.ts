@@ -7,6 +7,7 @@ const allowedTypes: JobType[] = [
   'run_validation',
   'refresh_review_completion',
   'catchment_lookup',
+  'run_routing',
   'score_compilation'
 ]
 

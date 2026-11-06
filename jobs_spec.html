@@ -824,9 +824,10 @@ formFieldId:lastName</code></pre>
       <tr><td><code>catchment_lookup</code></td><td>Jobs page; a single-submission lookup is also available from submission details. Uses HERE geocoding and MongoDB catchment zones.</td><td>Submission geocode/catchment fields and seeded catchment zones. Does not compile a Marygrove score.</td></tr>
       <tr><td><code>hspt_upload_preview</code></td><td>HSPT upload flow. Parses staged CSV files and previews matching without importing results.</td><td>HSPTUpload preview/status.</td></tr>
       <tr><td><code>hspt_upload_commit</code></td><td>Confirmed HSPT upload. Imports raw scores, computes scaled scores, and runs matching. Manual link, unlink, and reject actions are separate endpoints.</td><td>HSPTResult records, submission links, HSPTUpload result/status; clears staged files on success and queues review-completion refresh.</td></tr>
+      <tr><td><code>run_routing</code></td><td>Routing page Execute action or Jobs page. Refreshes each in-scope submission's current stage from Submittable, re-evaluates routing configuration, executes stage moves (bulk <code>PUT /submissions/review_stage</code> with per-submission fallback), applies configured label add/remove, reviewer assign/unassign, <code>statusLabels</code> sync, and Open/Close-for-Editing actions (message templates rendered with submission/review merge fields). Payload supports <code>applicationId</code>, <code>labelId</code>, <code>limit</code>, <code>excludeSubmissionIds</code>, and <code>dryRun</code>.</td><td>Submittable stage/label/assignment/editing writes; local <code>Submission.currentStageId/currentStageName</code>, <code>labelIds</code>, and appended <code>routingHistory</code> entries; <code>routing_move</code> AuditLog records; queues review-completion refresh.</td></tr>
     </tbody>
   </table>
-  <p>GPA commits also queue review-completion refresh. Importing exam/GPA data does not compile final admissions scores. Routing configuration publishing activates configuration for evaluation, not a routing execution job.</p>
+  <p>GPA commits also queue review-completion refresh. Importing exam/GPA data does not compile final admissions scores. Open-for-Editing actions may email applicants; use <code>dryRun</code> to rehearse. Configured <code>setFields</code> actions are skipped with a <code>set_fields_deferred</code> diagnostic — internal-form writes belong to score compilation.</p>
 </section>
 
 <section id="verification">
@@ -838,7 +839,7 @@ formFieldId:lastName</code></pre>
     <li>Before a production release, validate representative extraction/imports in a sandbox, inspect unmatched and ambiguous records, test interrupted jobs, and verify label reconciliation and cycle isolation. Live service writes require explicit approval.</li>
     <li>On a retried staged-upload job, the worker restores a failed upload's processing status only when the upload's cycle and recorded job ID match. Completed and cancelled uploads are not reset. Successful commits clear staged source payloads; failures after completion still require operator inspection rather than blindly reimporting empty source data.</li>
     <li>HSPT imports reserve ResultID counter space for every input row, including reimports; repeated uploads can consume counter space even when upserts do not create new results.</li>
-    <li>Score compilation, internal-form score writeback, roster publishing, routing execution, and placement remain outside this implemented job set.</li>
+    <li>Routing execution is implemented and writes to Submittable; validate against a sandbox before a production run. Score compilation, internal-form score writeback, roster publishing, and placement remain outside this implemented job set.</li>
   </ul>
 </section>
 
@@ -853,8 +854,9 @@ formFieldId:lastName</code></pre>
     <li><strong>Catchment lookup</strong> — geocode addresses and determine catchment zones.</li>
     <li><strong>Validation</strong> — run data-quality rules, create/resolve issues, and reconcile managed Check labels in Submittable.</li>
     <li><strong>HSPT and GPA ingestion</strong> — preview/confirm HSPT CSVs, import the DPSCD GPA payload, and preview/confirm Opt-In XLSX uploads.</li>
-    <li><strong>Review completion and routing preview</strong> — inspect refreshed ledgers, proposed moves, and diagnostics without executing routing.</li>
-    <li><strong>Score compilation and routing execution</strong> — not implemented; do not run the score-compilation placeholder.</li>
+    <li><strong>Review completion and routing preview</strong> — inspect refreshed ledgers, proposed moves, and diagnostics.</li>
+    <li><strong>Routing execution</strong> — run <code>run_routing</code> (optionally as a dry run first) to apply stage moves and configured side effects.</li>
+    <li><strong>Score compilation</strong> — not implemented; do not run the score-compilation placeholder.</li>
   </ol>
   <p>Submission Extraction resets mapping state, so Form Response Mapping should be rerun after every extraction that updates entries for the cycle.</p>
 </section>

@@ -62,11 +62,14 @@ export const actionSchema = z.object({
   unassignUserIds: z.array(z.string()).optional(),
   setFields: z.record(z.unknown()).optional(),
   openForEditing: z.object({
+    templateId: z.string().optional(),
+    internalNoteTemplate: z.string().optional(),
     subjectTemplate: z.string().optional(),
     messageTemplate: z.string().optional(),
     variables: z.array(z.string()).optional()
   }).optional(),
   closeForEditing: z.object({
+    templateId: z.string().optional(),
     internalNoteTemplate: z.string().optional(),
     subjectTemplate: z.string().optional(),
     messageTemplate: z.string().optional()
