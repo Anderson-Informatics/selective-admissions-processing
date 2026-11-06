@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { SelectItem } from '@nuxt/ui'
 
+useSeoMeta({ title: 'Data Validation' })
+
 interface Cycle {
   _id: string
   year: string
@@ -165,7 +167,7 @@ function statusColor(issue: ValidationIssue) {
 <template>
   <UContainer class="py-8">
     <h1 class="text-2xl font-semibold mb-6">
-      Validation issues
+      Data Validation
     </h1>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">

@@ -252,7 +252,7 @@ async function applyTemplate() {
 </script>
 
 <template>
-  <UContainer class="py-8 max-w-[1600px]">
+  <UContainer class="py-8">
     <div class="flex items-center justify-between gap-4 mb-6">
       <div>
         <UButton
