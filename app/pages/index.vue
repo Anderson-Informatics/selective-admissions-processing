@@ -97,27 +97,27 @@ function statusColor(jobStatus: string) {
 
 <template>
   <UContainer class="py-8 space-y-6">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-semibold">
-          Dashboard
-        </h1>
-        <p class="mt-1 text-sm text-muted">
-          Admissions pipeline status for the selected cycle.
-        </p>
-      </div>
-      <UFormField
-        label="Admission cycle"
-        class="w-full sm:w-72"
-      >
-        <USelect
-          v-model="selectedCycleId"
-          :items="cycleItems"
-          placeholder="Select a cycle"
-          class="w-full"
-        />
-      </UFormField>
-    </div>
+    <PageHeader
+      title="Dashboard"
+      help="dashboard"
+    >
+      <p class="mt-1 text-sm text-muted">
+        Admissions pipeline status for the selected cycle.
+      </p>
+      <template #actions>
+        <UFormField
+          label="Admission cycle"
+          class="w-full sm:w-72"
+        >
+          <USelect
+            v-model="selectedCycleId"
+            :items="cycleItems"
+            placeholder="Select a cycle"
+            class="w-full"
+          />
+        </UFormField>
+      </template>
+    </PageHeader>
 
     <div
       v-if="status === 'pending'"

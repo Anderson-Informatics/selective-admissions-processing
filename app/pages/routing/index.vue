@@ -165,9 +165,11 @@ function openDetail(detail: SubmissionDetail) {
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-2">
-      Routing Preview
-    </h1>
+    <PageHeader
+      title="Routing Preview"
+      help="routing"
+      class="mb-2"
+    />
     <p class="text-muted mb-6">
       Preview is a read-only sample of up to 500 submissions, not the entire application. Choose All matching submissions and queue a dry run to evaluate the full selection without Submittable writes.
     </p>

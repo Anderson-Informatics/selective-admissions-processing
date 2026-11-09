@@ -84,9 +84,11 @@ async function onDelete() {
 
 <template>
   <UContainer class="py-8 max-w-5xl">
-    <h1 class="text-2xl font-semibold mb-6">
-      Edit Cycle
-    </h1>
+    <PageHeader
+      title="Edit Cycle"
+      help="cycleEdit"
+      class="mb-6"
+    />
 
     <div
       v-if="status === 'pending'"

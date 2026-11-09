@@ -36,14 +36,14 @@ async function onSubmit() {
   <div class="min-h-screen flex items-center justify-center p-4 bg-muted/30">
     <UCard class="w-full max-w-sm">
       <template #header>
-        <div class="text-center">
-          <h1 class="text-2xl font-semibold">
-            EHS Admissions
-          </h1>
+        <PageHeader
+          title="EHS Admissions"
+          help="login"
+        >
           <p class="text-sm text-muted mt-1">
             Sign in to continue
           </p>
-        </div>
+        </PageHeader>
       </template>
 
       <form

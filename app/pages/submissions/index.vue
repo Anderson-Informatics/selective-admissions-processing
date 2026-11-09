@@ -185,9 +185,11 @@ const columns = [
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-6">
-      Submissions
-    </h1>
+    <PageHeader
+      title="Submissions"
+      help="submissions"
+      class="mb-6"
+    />
 
     <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start">
       <UFormField

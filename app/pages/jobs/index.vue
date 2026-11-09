@@ -241,9 +241,11 @@ function openDetails(job: Job) {
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-6">
-      Jobs
-    </h1>
+    <PageHeader
+      title="Jobs"
+      help="jobs"
+      class="mb-6"
+    />
 
     <UFormField
       label="Admission cycle"

@@ -38,9 +38,11 @@ async function onSubmit() {
 
 <template>
   <UContainer class="py-8 max-w-xl">
-    <h1 class="text-2xl font-semibold mb-6">
-      New Cycle
-    </h1>
+    <PageHeader
+      title="New Cycle"
+      help="cycleNew"
+      class="mb-6"
+    />
 
     <form
       class="space-y-4"

@@ -279,23 +279,23 @@ async function applyTemplate() {
 
 <template>
   <UContainer class="py-8">
-    <div class="flex items-center justify-between gap-4 mb-6">
-      <div>
-        <UButton
-          label="Back to applications"
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-arrow-left"
-          @click="router.push('/applications')"
-        />
-        <h1 class="text-2xl font-semibold mt-2">
-          {{ state.name || 'Application configuration' }}
-        </h1>
-        <p class="text-muted">
-          Configure routing drafts for this application. Draft changes do not execute routing.
-        </p>
-      </div>
-      <div class="flex gap-2 items-center">
+    <UButton
+      label="Back to applications"
+      color="neutral"
+      variant="ghost"
+      icon="i-lucide-arrow-left"
+      class="mb-2"
+      @click="router.push('/applications')"
+    />
+    <PageHeader
+      :title="state.name || 'Application configuration'"
+      help="applicationDetail"
+      class="mb-6"
+    >
+      <p class="text-muted">
+        Configure routing drafts for this application. Draft changes do not execute routing.
+      </p>
+      <template #actions>
         <UBadge
           :label="draftState === 'saving' ? 'Saving draft…' : draftState === 'error' ? 'Draft save failed' : 'Draft saved'"
           :color="draftState === 'error' ? 'error' : 'neutral'"
@@ -319,8 +319,8 @@ async function applyTemplate() {
           :loading="publishing"
           @click="publishDraft"
         />
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <div
       v-if="status === 'pending'"

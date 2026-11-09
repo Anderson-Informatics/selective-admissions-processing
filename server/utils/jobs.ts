@@ -391,13 +391,12 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
 
   essay_finish_scoring: async (job, { setProgress, submittable }) => {
     const { runEssayFinishScoring } = await import('./essayScoring')
-    const result = await runEssayFinishScoring({
+    return runEssayFinishScoring({
       cycleId: job.cycleId,
       actor: job.createdBy,
       jobId: String(job._id),
       setProgress,
       submittable
-    })
-    return { result }
+    }, job)
   }
 }

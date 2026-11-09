@@ -89,6 +89,39 @@ describe('buildEssayStats', () => {
     expect(single.reviewers[0]!.perHour).toBe(1) // single review → 1h denominator
   })
 
+  it('sums daily review windows instead of counting overnight gaps', () => {
+    const stats = buildEssayStats([
+      { reviewerId: 'u1', completedAt: new Date('2026-01-14T14:00:00Z') },
+      { reviewerId: 'u1', completedAt: new Date('2026-01-14T16:00:00Z') },
+      { reviewerId: 'u1', completedAt: at('09:00') },
+      { reviewerId: 'u1', completedAt: at('12:00') }
+    ], { now: NOW, includeOverall: true })
+    expect(stats.overallReviewers?.[0]?.perHour).toBe(0.8)
+    expect(stats.reviewers[0]?.perHour).toBe(0.67)
+  })
+
+  it('applies minimum spans and single or identical timestamp fallbacks per day', () => {
+    const stats = buildEssayStats([
+      { reviewerId: 'u1', completedAt: new Date('2026-01-13T14:00:00Z') },
+      { reviewerId: 'u1', completedAt: new Date('2026-01-13T14:10:00Z') },
+      { reviewerId: 'u1', completedAt: new Date('2026-01-14T14:00:00Z') },
+      { reviewerId: 'u1', completedAt: at('09:00') },
+      { reviewerId: 'u1', completedAt: at('09:00') }
+    ], { now: NOW, includeOverall: true })
+    expect(stats.overallReviewers?.[0]?.perHour).toBe(2.22)
+    expect(stats.reviewers[0]?.perHour).toBe(2)
+  })
+
+  it('groups by Detroit dates across UTC midnight and falls back to createdAt', () => {
+    const stats = buildEssayStats([
+      { reviewerId: 'u1', completedAt: new Date('2026-01-15T23:00:00Z') },
+      { reviewerId: 'u1', completedAt: new Date('2026-01-16T01:00:00Z') },
+      { reviewerId: 'u1', status: 'complete', createdAt: new Date('2026-01-16T06:00:00Z') },
+      { reviewerId: 'u1', status: 'complete', createdAt: new Date('2026-01-16T07:00:00Z') }
+    ], { now: NOW, includeOverall: true })
+    expect(stats.overallReviewers?.[0]?.perHour).toBe(1.33)
+  })
+
   it('includes overall stats when requested', () => {
     const stats = buildEssayStats([
       { reviewerId: 'u1', score: 10, completedAt: at('09:00') },

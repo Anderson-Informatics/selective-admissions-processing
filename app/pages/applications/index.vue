@@ -392,17 +392,20 @@ const stageColumns: TableColumn<typeof state.stages[number]>[] = [
 
 <template>
   <UContainer class="py-8">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold">
-        Application &amp; Review Stage Configuration
-      </h1>
-      <UButton
-        :disabled="!selectedCycleId"
-        icon="i-lucide-plus"
-        label="Map project"
-        @click="openMap({ projectId: '', name: '', reviewStages: [] })"
-      />
-    </div>
+    <PageHeader
+      title="Application &amp; Review Stage Configuration"
+      help="applications"
+      class="mb-6"
+    >
+      <template #actions>
+        <UButton
+          :disabled="!selectedCycleId"
+          icon="i-lucide-plus"
+          label="Map project"
+          @click="openMap({ projectId: '', name: '', reviewStages: [] })"
+        />
+      </template>
+    </PageHeader>
 
     <UFormField
       label="Admission cycle"

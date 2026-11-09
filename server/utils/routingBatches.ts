@@ -6,13 +6,14 @@ import { routingPreviewFilter } from './routingPreview'
 import { executeRoutingRun } from './routingExecutor'
 import type { SubmittableClientConfig } from './submittable'
 
-export async function runRoutingBatches(job: HydratedDocument<Job>, submittable?: SubmittableClientConfig) {
+export async function runRoutingBatches(job: HydratedDocument<Job>, submittable?: SubmittableClientConfig, stageId?: string) {
   const jobId = String(job._id)
   if (!job.payload.routingInitialized) {
     if (await RoutingBatchModel.exists({ jobId })) {
       return { status: 'failed' as const, result: { requiresReview: true, message: 'Routing selection was interrupted before execution. No batches were executed; start a new run.' } }
     }
     const filter = routingPreviewFilter(job.cycleId, job.payload.applicationId, job.payload.labelId)
+    if (stageId) filter.currentStageId = stageId
     const cursor = SubmissionModel.find(filter).sort({ _id: 1 }).select('submissionId').lean().cursor()
     let ids: string[] = []
     let index = 0

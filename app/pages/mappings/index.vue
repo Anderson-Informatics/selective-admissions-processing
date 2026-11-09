@@ -167,9 +167,11 @@ async function saveMappings() {
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-6">
-      Form Field Mappings
-    </h1>
+    <PageHeader
+      title="Form Field Mappings"
+      help="mappings"
+      class="mb-6"
+    />
 
     <UFormField
       label="Admission cycle"

@@ -324,9 +324,11 @@ async function sendTest() {
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-2">
-      Message Templates
-    </h1>
+    <PageHeader
+      title="Message Templates"
+      help="templates"
+      class="mb-2"
+    />
     <p class="text-muted mb-6">
       Reusable email messages for routing Open-for-Editing actions. Use <code v-pre>{{Field}}</code> for submission fields and <code v-pre>{{Stage Name.Field}}</code> for review form fields. The Computed source adds link and deadline tokens.
     </p>

@@ -62,6 +62,18 @@ describe('routing batches', () => {
     expect(SubmissionModel.find).toHaveBeenCalledWith({ cycleId: 'cycle', applicationId: 'app', labelIds: 'label' })
   })
 
+  it('snapshots all essay-stage submissions and resumes without selecting again', async () => {
+    submissions = Array.from({ length: 501 }, (_, index) => ({ submissionId: `essay-${index}` }))
+    const selected = submissions.map(item => item.submissionId)
+    expect(await runRoutingBatches(job as never, undefined, 'essay-stage')).toMatchObject({ status: 'pending', result: { processed: 250 } })
+    expect(SubmissionModel.find).toHaveBeenCalledWith({ cycleId: 'cycle', applicationId: 'app', labelIds: 'label', currentStageId: 'essay-stage' })
+    submissions = []
+    expect(await runRoutingBatches(job as never, undefined, 'essay-stage')).toMatchObject({ status: 'pending', result: { processed: 500 } })
+    expect(await runRoutingBatches(job as never, undefined, 'essay-stage')).toMatchObject({ status: 'completed', result: { total: 501, processed: 501 } })
+    expect(SubmissionModel.find).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(executeRoutingRun).mock.calls.flatMap(([options]) => options.submissionIds)).toEqual(selected)
+  })
+
   it('handles an empty selection', async () => {
     expect(await runRoutingBatches(job as never)).toMatchObject({ status: 'completed', result: { total: 0 } })
     expect(executeRoutingRun).not.toHaveBeenCalled()

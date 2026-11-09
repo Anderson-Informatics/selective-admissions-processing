@@ -130,9 +130,11 @@ async function remove() {
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-2">
-      Response Libraries
-    </h1>
+    <PageHeader
+      title="Response Libraries"
+      help="responseLibraries"
+      class="mb-2"
+    />
     <p class="text-muted mb-6">
       Map stored option labels to alternate display text for message templates. Reference a library in a multi-select merge field with <code v-pre>{{Field | list | lib:key}}</code>. Options without a matching entry are omitted. Entry text may contain merge fields (e.g. <code v-pre>{{Stage.OtherField}}</code>) and HTML.
     </p>

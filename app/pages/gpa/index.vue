@@ -305,9 +305,11 @@ function formatDate(value?: string) {
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-6">
-      GPA Records
-    </h1>
+    <PageHeader
+      title="GPA Records"
+      help="gpa"
+      class="mb-6"
+    />
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <UFormField label="Cycle">

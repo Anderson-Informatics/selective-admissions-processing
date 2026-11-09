@@ -88,16 +88,19 @@ async function deleteCycle(id: string) {
 
 <template>
   <UContainer class="py-8">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold">
-        Cycles
-      </h1>
-      <UButton
-        to="/cycles/new"
-        icon="i-lucide-plus"
-        label="New cycle"
-      />
-    </div>
+    <PageHeader
+      title="Cycles"
+      help="cycles"
+      class="mb-6"
+    >
+      <template #actions>
+        <UButton
+          to="/cycles/new"
+          icon="i-lucide-plus"
+          label="New cycle"
+        />
+      </template>
+    </PageHeader>
 
     <UTable
       :data="cycles || []"

@@ -1,5 +1,7 @@
-import type { AnyBulkWriteOperation } from 'mongoose'
-import type { JobProgress } from '../models/Job'
+import type { AnyBulkWriteOperation, HydratedDocument } from 'mongoose'
+import { JobModel, type Job, type JobProgress } from '../models/Job'
+import { RoutingBatchModel } from '../models/RoutingBatch'
+import { runRoutingBatches } from './routingBatches'
 import { ApplicationModel } from '../models/Application'
 import { AuditLogModel } from '../models/AuditLog'
 import { MetadataModel } from '../models/Metadata'
@@ -11,7 +13,7 @@ import { mapFormResponsesForCycle } from './responseMapping'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
 import { evaluateCycleSubmissions, type SubmissionEvaluation } from './routingRun'
 import { normalizeRoutingConfig } from './routingConfig'
-import { executeRoutingRun, type RoutingExecutionResult } from './routingExecutor'
+import type { RoutingExecutionResult } from './routingExecutor'
 import {
   addSubmissionLabelBulk,
   moveSubmissionToStage,
@@ -329,35 +331,67 @@ export async function runEssayUpdateScoring(options: EssayJobOptions) {
   }
 }
 
-export async function runEssayFinishScoring(options: EssayJobOptions) {
+export async function runEssayFinishScoring(options: EssayJobOptions, job: HydratedDocument<Job>) {
   const setProgress = options.setProgress || (async () => {})
-  const ctx = await resolveEssayContext(options.cycleId)
-  await refreshEssayData(ctx, options.cycleId, setProgress, options.submittable)
-
-  const evaluation = await evaluateCycleSubmissions({
-    cycleId: options.cycleId,
-    applicationId: ctx.applicationId,
-    limit: 5000,
-    maxLimit: 5000
-  })
-  const labelSync = await syncEssayStatusLabels(ctx, evaluation.submissions, setProgress, options.submittable)
-
-  const inEssayIds = evaluation.submissions
-    .filter(item => item.submission.currentStageId === ctx.essayStageId)
-    .map(item => item.submission.submissionId)
-
-  let routing: RoutingExecutionResult | undefined
-  if (inEssayIds.length) {
-    routing = await executeRoutingRun({
-      cycleId: options.cycleId,
-      submissionIds: inEssayIds,
-      actor: options.actor,
-      jobId: options.jobId,
-      setProgress,
-      submittable: options.submittable
-    })
-  } else {
-    await setProgress({ phase: 'executing', percent: 100, message: 'No submissions currently in the essay stage' })
+  let preparation = job.result?.preparation as { ctx: EssayContext, labelSync: EssayLabelSyncResult, evaluated: number } | undefined
+  if (!preparation) {
+    const ctx = await resolveEssayContext(options.cycleId)
+    await refreshEssayData(ctx, options.cycleId, setProgress, options.submittable)
+    const labelSync: EssayLabelSyncResult = { labelsAdded: 0, labelsRemoved: 0, failures: [] }
+    let evaluated = 0
+    const cursor = SubmissionModel.find({ cycleId: options.cycleId, applicationId: ctx.applicationId })
+      .sort({ _id: 1 }).select('submissionId').lean().cursor()
+    let ids: string[] = []
+    const sync = async () => {
+      const evaluation = await evaluateCycleSubmissions({
+        cycleId: options.cycleId,
+        applicationId: ctx.applicationId,
+        submissionIds: ids,
+        limit: ids.length,
+        maxLimit: 5000
+      })
+      const result = await syncEssayStatusLabels(ctx, evaluation.submissions, setProgress, options.submittable)
+      evaluated += evaluation.submissions.length
+      labelSync.labelsAdded += result.labelsAdded
+      labelSync.labelsRemoved += result.labelsRemoved
+      labelSync.failures.push(...result.failures)
+      ids = []
+    }
+    for await (const submission of cursor) {
+      ids.push(submission.submissionId)
+      if (ids.length === 250) await sync()
+    }
+    if (ids.length) await sync()
+    preparation = { ctx, labelSync, evaluated }
+    await JobModel.updateOne({ _id: job._id }, { $set: {
+      'result.preparation': preparation,
+      'payload': { applicationId: ctx.applicationId, scope: 'all' }
+    } })
+    job.payload = { applicationId: ctx.applicationId, scope: 'all' }
+  }
+  const { ctx, labelSync, evaluated } = preparation
+  const output = await runRoutingBatches(job, options.submittable, ctx.essayStageId)
+  if (output.status !== 'completed') {
+    return { status: output.status, result: { ...output.result, preparation } }
+  }
+  const routing: RoutingExecutionResult = {
+    evaluated: 0, moves: 0, noAction: 0, backwardMoves: 0, dryRun: false,
+    actionsApplied: { labelsAdded: 0, labelsRemoved: 0, assignments: 0, statusLabelsSynced: 0, openedForEditing: 0, closedForEditing: 0 },
+    movedSubmissions: [], failures: [], diagnostics: []
+  }
+  const batches = RoutingBatchModel.find({ jobId: String(job._id), status: 'completed' }).sort({ index: 1 }).lean().cursor()
+  for await (const batch of batches) {
+    const result = batch.result
+    if (!result) continue
+    routing.evaluated += result.evaluated
+    routing.moves += result.moves
+    routing.noAction += result.noAction
+    routing.backwardMoves += result.backwardMoves
+    for (const key of Object.keys(routing.actionsApplied) as Array<keyof RoutingExecutionResult['actionsApplied']>) {
+      routing.actionsApplied[key] += result.actionsApplied[key]
+    }
+    routing.movedSubmissions.push(...result.movedSubmissions)
+    routing.failures.push(...result.failures)
   }
 
   await setProgress({ phase: 'stats', message: 'Computing scoring statistics' })
@@ -366,30 +400,31 @@ export async function runEssayFinishScoring(options: EssayJobOptions) {
     title: 'Essay Scoring Finish',
     stats,
     applicationName: ctx.applicationName,
-    movedSubmissions: routing?.movedSubmissions
+    movedSubmissions: routing.movedSubmissions
   })
   await setProgress({ phase: 'completed', percent: 100, message: 'Finish scoring complete' })
 
   return {
-    applicationId: ctx.applicationId,
-    applicationName: ctx.applicationName,
-    essayStageId: ctx.essayStageId,
-    essayStageName: ctx.essayStageName,
-    evaluated: evaluation.submissions.length,
-    inEssayStage: inEssayIds.length,
-    routing: routing
-      ? {
-          evaluated: routing.evaluated,
-          moves: routing.moves,
-          noAction: routing.noAction,
-          backwardMoves: routing.backwardMoves,
-          actionsApplied: routing.actionsApplied,
-          failures: routing.failures
-        }
-      : undefined,
-    failures: [...labelSync.failures, ...(routing?.failures || [])],
-    labelSync: { added: labelSync.labelsAdded, removed: labelSync.labelsRemoved },
-    stats,
-    export: exportFile
+    status: 'completed' as const,
+    result: {
+      applicationId: ctx.applicationId,
+      applicationName: ctx.applicationName,
+      essayStageId: ctx.essayStageId,
+      essayStageName: ctx.essayStageName,
+      evaluated,
+      inEssayStage: output.result.total,
+      routing: {
+        evaluated: routing.evaluated,
+        moves: routing.moves,
+        noAction: routing.noAction,
+        backwardMoves: routing.backwardMoves,
+        actionsApplied: routing.actionsApplied,
+        failures: routing.failures
+      },
+      failures: [...labelSync.failures, ...routing.failures],
+      labelSync: { added: labelSync.labelsAdded, removed: labelSync.labelsRemoved },
+      stats,
+      export: exportFile
+    }
   }
 }

@@ -91,13 +91,25 @@ function summarize(reviews: EssayReviewInput[], reviewerNames: Map<string, strin
     list.push(review)
     byReviewer.set(key, list)
   }
+  const dayFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: DETROIT_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
   const reviewers: ReviewerStat[] = [...byReviewer.entries()].map(([id, list]) => {
-    const timestamps = list
-      .map(review => new Date(review.completedAt || review.createdAt || 0).getTime())
-      .filter(value => value > 0)
-      .sort((a, b) => a - b)
-    const spanMs = timestamps.length > 1 ? timestamps[timestamps.length - 1]! - timestamps[0]! : 0
-    const hours = spanMs > 0 ? Math.max(spanMs / 3_600_000, 0.25) : 1
+    const dailyWindows = new Map<string, { first: number, last: number }>()
+    for (const review of list) {
+      const time = new Date(review.completedAt || review.createdAt || 0).getTime()
+      if (!(time > 0)) continue
+      const day = dayFormatter.format(time)
+      const window = dailyWindows.get(day)
+      dailyWindows.set(day, { first: Math.min(window?.first ?? time, time), last: Math.max(window?.last ?? time, time) })
+    }
+    const hours = [...dailyWindows.values()].reduce((total, { first, last }) => {
+      const spanMs = last - first
+      return total + (spanMs > 0 ? Math.max(spanMs / 3_600_000, 0.25) : 1)
+    }, 0) || 1
     const reviewerScores = list.map(review => review.score).filter((score): score is number => typeof score === 'number')
     return {
       reviewerId: id,

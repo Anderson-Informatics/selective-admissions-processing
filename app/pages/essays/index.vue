@@ -225,9 +225,11 @@ const overallSorting = ref([{ id: 'completed', desc: true }])
 
 <template>
   <UContainer class="py-8">
-    <h1 class="text-2xl font-semibold mb-6">
-      Essays
-    </h1>
+    <PageHeader
+      title="Essays"
+      help="essays"
+      class="mb-6"
+    />
 
     <UFormField
       label="Admission cycle"
