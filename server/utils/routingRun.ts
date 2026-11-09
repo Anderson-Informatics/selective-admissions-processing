@@ -16,6 +16,7 @@ export interface RoutingEvaluationOptions {
   cycleId: string
   applicationId?: string
   labelId?: string
+  currentStageId?: string
   submissionIds?: string[]
   limit?: number
   maxLimit?: number
@@ -94,7 +95,7 @@ export async function loadResponseLibraries(): Promise<Record<string, { match: s
 }
 
 export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions): Promise<CycleEvaluation> {
-  const filter: Record<string, unknown> = routingPreviewFilter(options.cycleId, options.applicationId, options.labelId)
+  const filter: Record<string, unknown> = routingPreviewFilter(options.cycleId, options.applicationId, options.labelId, options.currentStageId)
   if (options.submissionIds) {
     delete filter.labelIds
     filter.submissionId = { $in: options.submissionIds }

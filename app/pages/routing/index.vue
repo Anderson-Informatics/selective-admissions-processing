@@ -2,7 +2,7 @@
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 interface Cycle { _id: string, year: string, name: string, active: boolean }
-interface Application { _id: string, name: string }
+interface Application { _id: string, name: string, stages: Array<{ stageId: string, name: string }> }
 interface PreviewMove { submissionId: string, applicantName: string, applicationName: string, currentStage: string, proposedStage: string, reason: string, backward: boolean }
 interface LedgerEntry { stageId: string, name: string, order: number, role: string, required: boolean, status: string, complete: boolean }
 interface SubmissionDetail { submissionId: string, applicantName: string, applicationName: string, currentStage: string, proposedStage?: string | null, decision: string, backward: boolean, diagnostics: Array<{ code: string, message: string }>, reviewCompletion: LedgerEntry[] }
@@ -24,6 +24,8 @@ const ALL_APPLICATIONS = '__all__'
 const ALL_LABELS = '__all__'
 const selectedApplicationId = ref(ALL_APPLICATIONS)
 const selectedLabelId = ref(ALL_LABELS)
+const ALL_STAGES = '__all__'
+const selectedCurrentStageId = ref(ALL_STAGES)
 const limit = ref(250)
 const executionScope = ref<'limited' | 'all'>('limited')
 const loading = ref(false)
@@ -57,12 +59,26 @@ const labelItems = computed<SelectItem[]>(() => [
   ...(labels.value || [])
 ])
 
+const currentStageItems = computed<SelectItem[]>(() => [
+  { label: 'All stages', value: ALL_STAGES },
+  ...(applications.value || [])
+    .filter(application => selectedApplicationId.value === ALL_APPLICATIONS || application._id === selectedApplicationId.value)
+    .flatMap(application => application.stages.map(stage => ({
+      label: selectedApplicationId.value === ALL_APPLICATIONS ? `${stage.name} (${application.name})` : stage.name,
+      value: stage.stageId
+    })))
+])
+
+watch([selectedCycleId, selectedApplicationId], () => {
+  selectedCurrentStageId.value = ALL_STAGES
+})
+
 watch(selectedCycleId, () => {
   selectedApplicationId.value = ALL_APPLICATIONS
   selectedLabelId.value = ALL_LABELS
   result.value = null
 })
-watch([selectedApplicationId, selectedLabelId], () => {
+watch([selectedApplicationId, selectedLabelId, selectedCurrentStageId], () => {
   result.value = null
 })
 
@@ -76,6 +92,7 @@ async function previewRouting() {
         cycleId: selectedCycleId.value,
         applicationId: selectedApplicationId.value === ALL_APPLICATIONS ? undefined : selectedApplicationId.value,
         labelId: selectedLabelId.value === ALL_LABELS ? undefined : selectedLabelId.value,
+        currentStageId: selectedCurrentStageId.value === ALL_STAGES ? undefined : selectedCurrentStageId.value,
         limit: limit.value
       }
     })
@@ -105,6 +122,7 @@ async function executeRouting() {
         payload: {
           applicationId: selectedApplicationId.value === ALL_APPLICATIONS ? undefined : selectedApplicationId.value,
           labelId: selectedLabelId.value === ALL_LABELS ? undefined : selectedLabelId.value,
+          currentStageId: selectedCurrentStageId.value === ALL_STAGES ? undefined : selectedCurrentStageId.value,
           scope: executionScope.value,
           limit: limit.value,
           dryRun: dryRun.value
@@ -196,6 +214,20 @@ function openDetail(detail: SubmissionDetail) {
           class="w-72"
         />
       </UFormField>
+      <UFormField
+        label="Current stage"
+        class="flex-1 min-w-72"
+      >
+        <USelect
+          v-model="selectedCurrentStageId"
+          :items="currentStageItems"
+          :loading="applicationsStatus === 'pending'"
+          class="w-full"
+        />
+      </UFormField>
+    </div>
+
+    <div class="flex flex-wrap items-end gap-4 mb-6">
       <UFormField label="Preview / limited-run size">
         <UInput
           v-model.number="limit"
@@ -379,7 +411,7 @@ function openDetail(detail: SubmissionDetail) {
       <template #body>
         <div class="space-y-3 text-sm">
           <p>
-            This queues a routing job for {{ executionScope === 'all' ? 'all matching submissions' : `up to ${limit} submissions` }} in the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ' and label' : '' }}. Submissions are selected when processing starts and handled in batches. The job refreshes live data, so results may differ from the sample preview.
+            This queues a routing job for {{ executionScope === 'all' ? 'all matching submissions' : `up to ${limit} submissions` }} in the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ', label' : '' }}{{ selectedCurrentStageId !== ALL_STAGES ? ', and current stage' : '' }}. Submissions are selected when processing starts and handled in batches. The job refreshes live data, so results may differ from the sample preview.
           </p>
           <UAlert
             color="warning"

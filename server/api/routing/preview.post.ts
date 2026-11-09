@@ -4,6 +4,7 @@ interface PreviewBody {
   cycleId?: string
   applicationId?: string
   labelId?: string
+  currentStageId?: string
   limit?: number
 }
 
@@ -14,11 +15,14 @@ export default defineEventHandler(async (event) => {
   if (!body.cycleId) throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
   if (body.labelId != null && typeof body.labelId !== 'string') throw createError({ statusCode: 400, statusMessage: 'labelId must be a string' })
 
+  if (body.currentStageId != null && typeof body.currentStageId !== 'string') throw createError({ statusCode: 400, statusMessage: 'currentStageId must be a string' })
+
   const limit = Math.max(1, Math.min(body.limit || 250, 500))
   const evaluation = await evaluateCycleSubmissions({
     cycleId: body.cycleId,
     applicationId: body.applicationId,
     labelId: body.labelId,
+    currentStageId: body.currentStageId,
     limit
   })
 

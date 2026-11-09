@@ -32,7 +32,7 @@ describe('job lease recovery', () => {
     await leasePendingChildJobs(3, 16, 2)
     expect(JobModel.updateMany).toHaveBeenCalledWith(
       { _id: { $in: ['child-1', 'child-2', 'standalone'] } },
-      { $set: { status: 'failed', completedAt: expect.any(Date), error: expect.stringContaining('maximum retry') }, $unset: { routingLock: 1 } }
+      { $set: { status: 'failed', workerSettled: true, completedAt: expect.any(Date), error: expect.stringContaining('maximum retry') }, $unset: { routingLock: 1, essayLock: 1 } }
     )
     expect(updateParentJob).toHaveBeenCalledExactlyOnceWith('parent-1')
   })

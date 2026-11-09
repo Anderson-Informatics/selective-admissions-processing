@@ -18,9 +18,9 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'metadata_sync', label: 'Metadata sync' },
   { value: 'submission_extraction', label: 'Submission extraction' },
   { value: 'form_response_mapping', label: 'Form response mapping' },
+  { value: 'catchment_lookup', label: 'Catchment lookup' },
   { value: 'run_validation', label: 'Run validation' },
   { value: 'refresh_review_completion', label: 'Refresh review completion' },
-  { value: 'catchment_lookup', label: 'Catchment lookup' },
   { value: 'dpscd_gpa_import', label: 'DPSCD GPA import' },
   { value: 'optin_gpa_preview', label: 'Opt-In GPA preview' },
   { value: 'optin_gpa_commit', label: 'Opt-In GPA commit' },
@@ -47,6 +47,13 @@ export async function createJob(type: JobType, cycleId: string, createdBy: strin
 }
 
 async function queueReviewCompletionRefresh(job: HydratedDocument<Job>) {
+  if (job.scheduleRunId) {
+    return JobModel.updateOne({ executionKey: `${job._id}:refresh` }, { $setOnInsert: {
+      type: 'refresh_review_completion', status: 'waiting', cycleId: job.cycleId, createdBy: job.createdBy,
+      scheduleRunId: job.scheduleRunId, scheduleStep: job.scheduleStep, dependencyOf: String(job._id),
+      payload: {}, progress: { phase: 'queued', message: 'Queued after scheduled data refresh' }
+    } }, { upsert: true })
+  }
   return JobModel.create({
     type: 'refresh_review_completion',
     status: 'pending',
@@ -78,18 +85,19 @@ export async function runJob(job: HydratedDocument<Job>, options: { submittable?
       $set: {
         status,
         result: output.result,
+        ...(job.scheduleRunId ? { workerSettled: true } : {}),
         ...(completedAt ? { completedAt } : {})
       },
-      $unset: { leaseExpiresAt: 1, error: 1, ...(completedAt ? { routingLock: 1 } : { completedAt: 1 }) }
+      $unset: { leaseExpiresAt: 1, error: 1, ...(completedAt ? { routingLock: 1, essayLock: 1 } : { completedAt: 1 }) }
     })
     return { status, result: output.result }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     await JobModel.findByIdAndUpdate(job._id, {
       $set: {
-        status: 'failed',
-        completedAt: new Date(),
-        leaseExpiresAt: undefined,
+        status: job.scheduleRunId ? 'running' : 'failed',
+        completedAt: job.scheduleRunId ? undefined : new Date(),
+        ...(!job.scheduleRunId ? { leaseExpiresAt: undefined } : {}),
         error: message
       }
     })
@@ -182,6 +190,7 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
       cycleId: job.cycleId,
       createdBy: job.createdBy,
       parentJobId: job._id,
+      ...(job.scheduleRunId ? { scheduleRunId: job.scheduleRunId, scheduleStep: job.scheduleStep } : {}),
       formId: form.formId,
       formName: form.formName,
       payload: { formId: form.formId },

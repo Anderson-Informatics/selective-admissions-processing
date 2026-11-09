@@ -29,14 +29,15 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('routing job requests', () => {
   it('queues validated scope with a cycle lock and strips internal state', async () => {
+    payload.currentStageId = 'stage-1'
     payload.routingInitialized = true
     await expect(handler({})).resolves.toEqual({ _id: 'job' })
     expect(JobModel.init).toHaveBeenCalled()
-    expect(JobModel.create).toHaveBeenCalledWith(expect.objectContaining({ routingLock: 'cycle', payload: expect.objectContaining({ scope: 'all', dryRun: true }) }))
+    expect(JobModel.create).toHaveBeenCalledWith(expect.objectContaining({ routingLock: 'cycle', payload: expect.objectContaining({ scope: 'all', dryRun: true, currentStageId: 'stage-1' }) }))
     expect(vi.mocked(JobModel.create).mock.calls[0]![0]).not.toHaveProperty('payload.routingInitialized')
   })
 
-  it.each([{ scope: 'invalid' }, { limit: 0 }, { limit: 5001 }, { limit: 1.5 }, { dryRun: 'false' }, { labelId: [] }, { excludeSubmissionIds: [1] }])('rejects invalid settings %j', async (invalid) => {
+  it.each([{ currentStageId: [] }, { scope: 'invalid' }, { limit: 0 }, { limit: 5001 }, { limit: 1.5 }, { dryRun: 'false' }, { labelId: [] }, { excludeSubmissionIds: [1] }])('rejects invalid settings %j', async (invalid) => {
     Object.assign(payload, invalid)
     await expect(handler({})).rejects.toMatchObject({ statusCode: 400 })
     expect(JobModel.create).not.toHaveBeenCalled()

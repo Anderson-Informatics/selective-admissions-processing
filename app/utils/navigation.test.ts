@@ -6,10 +6,10 @@ describe('application navigation', () => {
     expect(navigationGroups.map(group => group.label)).toEqual(['Overview', 'Operations', 'Assessment', 'Configuration'])
     const destinations = navigationGroups.flatMap(group => group.items.map(item => item.to))
     expect(destinations).toEqual([
-      '/', '/submissions', '/validation', '/jobs', '/essays', '/hspt', '/gpa',
+      '/', '/submissions', '/validation', '/jobs', '/jobs/scheduler', '/essays', '/hspt', '/gpa',
       '/cycles', '/applications', '/mappings', '/templates', '/response-libraries', '/routing'
     ])
-    expect(new Set(destinations).size).toBe(13)
+    expect(new Set(destinations).size).toBe(14)
   })
 
   it('makes Data Validation a permanent Operations destination', () => {

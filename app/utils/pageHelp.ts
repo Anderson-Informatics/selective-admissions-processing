@@ -35,6 +35,13 @@ export const pageHelp = {
     gettingStarted: 'Choose the correct admission cycle before starting work. For initial setup, refresh metadata, configure applications and field mappings, then extract submissions and map their responses. Open a job’s details to check its outcome.',
     important: ['Starting work queues a background job; it may not finish immediately. Check for completion or errors before relying on its results.', 'The review-completion dry run evaluates the information without saving the completion records used by routing. Batch size controls how much work is processed together, not which applicants are eligible.']
   },
+  scheduler: {
+    title: 'Job Scheduler',
+    purpose: 'Configure multiple daily chains of background jobs for the active admission cycle.',
+    tasks: ['Create a named chain and select its Detroit-local time.', 'Select jobs and reorder them while preserving dependencies.', 'Monitor queued runs, inspect partial results and review held external actions.'],
+    gettingStarted: 'Create a chain, select jobs, check the order and external-effect warnings, then enable and save. Mapping requires extraction; routing requires review-completion refresh. Catchment precedes validation when both are selected.',
+    important: ['Chains queue in due order and run sequentially per cycle. Pausing does not cancel queued or active runs; manual jobs can still overlap.', 'Routing can be omitted. Live routing and essay workflows can modify Submittable submissions. Review external actions before releasing a hold.', 'Schedules use America/Detroit including DST, run once per local date, and do not replay missed prior days. Score compilation and uploaded-file jobs are not schedulable.']
+  },
   essays: {
     title: 'Essays',
     purpose: 'Manage the essay-review workflow and follow reviewer progress for the selected admission cycle.',

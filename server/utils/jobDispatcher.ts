@@ -1,10 +1,15 @@
-import { JobModel } from '../models/Job'
+import { ESSAY_JOB_TYPES, JobModel } from '../models/Job'
 import { updateParentJob } from './jobWorker'
 
 export async function leasePendingChildJobs(limit: number, leaseMinutes = 16, maxAttempts = 3) {
   const jobs = []
   const now = new Date()
   const leaseExpiresAt = new Date(now.getTime() + leaseMinutes * 60_000)
+
+  await JobModel.updateMany(
+    { status: 'running', leaseExpiresAt: { $lte: now }, scheduleRunId: { $exists: true }, type: { $in: ['run_routing', ...ESSAY_JOB_TYPES] } },
+    { $set: { 'status': 'failed', 'workerSettled': true, 'completedAt': now, 'error': 'External-action worker lease expired; review required before further scheduled work', 'result.requiresReview': true }, $unset: { routingLock: 1, essayLock: 1 } }
+  )
 
   await JobModel.updateMany(
     { status: 'running', leaseExpiresAt: { $lte: now }, attempts: { $lt: maxAttempts } },
@@ -19,7 +24,7 @@ export async function leasePendingChildJobs(limit: number, leaseMinutes = 16, ma
   if (exhausted.length) {
     await JobModel.updateMany(
       { _id: { $in: exhausted.map(job => job._id) } },
-      { $set: { status: 'failed', completedAt: now, error: 'Worker lease expired after maximum retry attempts' }, $unset: { routingLock: 1 } }
+      { $set: { status: 'failed', workerSettled: true, completedAt: now, error: 'Worker lease expired after maximum retry attempts' }, $unset: { routingLock: 1, essayLock: 1 } }
     )
     const parentIds = [...new Set(exhausted.map(job => job.parentJobId && String(job.parentJobId)).filter(Boolean))]
     await Promise.all(parentIds.map(parentJobId => updateParentJob(parentJobId!)))

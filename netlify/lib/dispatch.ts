@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import { JobModel } from '../../server/models/Job'
 import { leasePendingChildJobs } from '../../server/utils/jobDispatcher'
+import { tickJobSchedules } from '../../server/utils/jobScheduler'
 
 export async function dispatchPendingJobs(siteUrl: string) {
   const mongodbUri = process.env.NUXT_MONGODB_URI
@@ -11,6 +12,7 @@ export async function dispatchPendingJobs(siteUrl: string) {
     await mongoose.connect(mongodbUri, { bufferCommands: false })
   }
 
+  await tickJobSchedules().catch(error => console.error('Job scheduler tick failed', error))
   const concurrency = Math.max(1, Number(process.env.NUXT_JOB_CONCURRENCY || 3))
   const jobs = await leasePendingChildJobs(concurrency, 16, Number(process.env.NUXT_JOB_MAX_ATTEMPTS || 3))
 

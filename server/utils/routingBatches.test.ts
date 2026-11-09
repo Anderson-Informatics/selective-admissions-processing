@@ -13,7 +13,7 @@ vi.mock('../models/Submission', () => ({ SubmissionModel: { find: vi.fn() } }))
 interface Batch { _id: string, index: number, submissionIds: string[], status: string, result?: unknown }
 let batches: Batch[]
 let submissions: Array<{ submissionId: string }>
-let job: { _id: string, cycleId: string, createdBy: string, payload: { scope: 'all' | 'limited', routingInitialized?: boolean, limit?: number, dryRun: boolean, applicationId: string, labelId: string } }
+let job: { _id: string, cycleId: string, createdBy: string, payload: { scope: 'all' | 'limited', routingInitialized?: boolean, limit?: number, dryRun: boolean, applicationId: string, labelId: string, currentStageId?: string } }
 
 async function* iterate<T>(items: T[]) {
   yield* items
@@ -72,6 +72,12 @@ describe('routing batches', () => {
     expect(await runRoutingBatches(job as never, undefined, 'essay-stage')).toMatchObject({ status: 'completed', result: { total: 501, processed: 501 } })
     expect(SubmissionModel.find).toHaveBeenCalledTimes(1)
     expect(vi.mocked(executeRoutingRun).mock.calls.flatMap(([options]) => options.submissionIds)).toEqual(selected)
+  })
+
+  it('filters the initial selection by the requested current stage', async () => {
+    job.payload.currentStageId = 'stage-1'
+    await runRoutingBatches(job as never)
+    expect(SubmissionModel.find).toHaveBeenCalledWith({ cycleId: 'cycle', applicationId: 'app', labelIds: 'label', currentStageId: 'stage-1' })
   })
 
   it('handles an empty selection', async () => {

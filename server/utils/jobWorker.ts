@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { JobModel, type JobStatus } from '../models/Job'
+import { ESSAY_JOB_TYPES, JobModel, type JobStatus } from '../models/Job'
 import { HSPTUploadModel } from '../models/HSPTUpload'
 import { GpaUploadModel } from '../models/GpaUpload'
 import { runJob } from './jobs'
@@ -69,7 +69,7 @@ export async function processQueuedJob(jobId: string, config: JobWorkerConfig) {
       leaseExpiresAt: { $gt: now }
     },
     {
-      $set: { status: 'running', startedAt: now, error: undefined },
+      $set: { status: 'running', startedAt: now, error: undefined, workerSettled: false },
       $inc: { attempts: 1 }
     },
     { returnDocument: 'after' }
@@ -103,8 +103,10 @@ export async function processQueuedJob(jobId: string, config: JobWorkerConfig) {
     await runJob(job, { submittable: config.submittable, hereApiKey: config.hereApiKey })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
-    const exhausted = job.attempts >= (config.maxAttempts || 3)
-    if (exhausted && job.routingLock) await JobModel.updateOne({ _id: job._id }, { $unset: { routingLock: 1 } })
+    const externalScheduled = !!job.scheduleRunId && (job.type === 'run_routing' || ESSAY_JOB_TYPES.includes(job.type))
+    const exhausted = externalScheduled || job.attempts >= (config.maxAttempts || 3)
+    if (exhausted && (job.routingLock || job.essayLock)) await JobModel.updateOne({ _id: job._id }, { $unset: { routingLock: 1, essayLock: 1 } })
+    if (exhausted && job.scheduleRunId) await JobModel.updateOne({ _id: job._id }, { $set: { status: 'failed', workerSettled: true, completedAt: new Date(), error: message } })
     if (!exhausted) {
       await JobModel.findByIdAndUpdate(job._id, {
         $set: {
@@ -117,6 +119,7 @@ export async function processQueuedJob(jobId: string, config: JobWorkerConfig) {
     }
   } finally {
     clearInterval(heartbeat)
+    if (job.scheduleRunId) await JobModel.updateOne({ _id: job._id }, { $set: { workerSettled: true } })
   }
 
   if (job.parentJobId) await updateParentJob(String(job.parentJobId))

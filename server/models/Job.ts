@@ -28,6 +28,12 @@ export interface Job {
   cycleId: string
   createdBy: string
   routingLock?: string
+  essayLock?: string
+  scheduleRunId?: string
+  scheduleStep?: number
+  executionKey?: string
+  dependencyOf?: string
+  workerSettled?: boolean
   parentJobId?: Types.ObjectId
   formId?: string
   formName?: string
@@ -35,6 +41,7 @@ export interface Job {
     uploadId?: string
     applicationId?: string
     labelId?: string
+    currentStageId?: string
     scope?: 'limited' | 'all'
     routingInitialized?: boolean
     limit?: number
@@ -60,6 +67,12 @@ const jobSchema = new Schema<Job>({
   cycleId: { type: String, required: true, index: true },
   createdBy: { type: String, required: true },
   routingLock: { type: String, unique: true, sparse: true },
+  essayLock: { type: String, unique: true, sparse: true },
+  scheduleRunId: { type: String, index: true },
+  scheduleStep: Number,
+  executionKey: { type: String, unique: true, sparse: true },
+  dependencyOf: { type: String, index: true },
+  workerSettled: Boolean,
   parentJobId: { type: Schema.Types.ObjectId, ref: 'Job', index: true },
   formId: { type: String, index: true },
   formName: String,

@@ -15,7 +15,8 @@ export const navigationGroups: NavigationGroup[] = [
     items: [
       { label: 'Submissions', to: '/submissions', icon: 'i-lucide-inbox' },
       { label: 'Data Validation', to: '/validation', icon: 'i-lucide-shield-check' },
-      { label: 'Jobs', to: '/jobs', icon: 'i-lucide-list-checks' }
+      { label: 'Jobs', to: '/jobs', icon: 'i-lucide-list-checks' },
+      { label: 'Job Scheduler', to: '/jobs/scheduler', icon: 'i-lucide-calendar-clock' }
     ]
   },
   {

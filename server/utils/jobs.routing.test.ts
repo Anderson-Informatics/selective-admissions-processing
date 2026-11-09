@@ -25,7 +25,15 @@ describe('routing job continuation', () => {
     vi.mocked(runRoutingBatches).mockResolvedValue({ status: 'completed', result: { total: 501, processed: 501 } } as never)
     await expect(runJob(job)).resolves.toMatchObject({ status: 'completed' })
     expect(JobModel.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'refresh_review_completion' }))
-    expect(JobModel.findByIdAndUpdate).toHaveBeenCalledWith('job', expect.objectContaining({ $unset: { leaseExpiresAt: 1, error: 1, routingLock: 1 } }))
+    expect(JobModel.findByIdAndUpdate).toHaveBeenCalledWith('job', expect.objectContaining({ $unset: { leaseExpiresAt: 1, error: 1, routingLock: 1, essayLock: 1 } }))
+  })
+
+  it('creates an idempotent owned refresh dependency for scheduled routing', async () => {
+    vi.spyOn(JobModel, 'updateOne').mockResolvedValue({} as never)
+    vi.mocked(runRoutingBatches).mockResolvedValue({ status: 'completed', result: { total: 501, processed: 501 } } as never)
+    await runJob({ ...job as object, scheduleRunId: 'run', scheduleStep: 3 } as never)
+    expect(JobModel.create).not.toHaveBeenCalled()
+    expect(JobModel.updateOne).toHaveBeenCalledWith({ executionKey: 'job:refresh' }, { $setOnInsert: expect.objectContaining({ scheduleRunId: 'run', scheduleStep: 3, dependencyOf: 'job', type: 'refresh_review_completion' }) }, { upsert: true })
   })
 
   it('does not queue a follow-up for an uncertain failed batch', async () => {

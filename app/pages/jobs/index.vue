@@ -37,6 +37,7 @@ interface Job {
   status: 'pending' | 'waiting' | 'running' | 'completed' | 'failed'
   cycleId: string
   createdBy: string
+  scheduleRunId?: string
   result?: { forms?: FormResult[], [key: string]: unknown }
   error?: string
   progress?: JobProgress
@@ -117,8 +118,8 @@ const jobOptions = [
   { value: 'metadata_sync', label: 'Metadata sync' },
   { value: 'submission_extraction', label: 'Submission extraction' },
   { value: 'form_response_mapping', label: 'Form response mapping' },
-  { value: 'run_validation', label: 'Run validation' },
   { value: 'catchment_lookup', label: 'Catchment lookup' },
+  { value: 'run_validation', label: 'Run validation' },
   { value: 'score_compilation', label: 'Score compilation' }
 ]
 
@@ -237,6 +238,16 @@ function openDetails(job: Job) {
   routingBatchDetail.value = null
   modalOpen.value = true
 }
+
+const route = useRoute()
+watch(() => route.query.jobId, async (id) => {
+  if (typeof id !== 'string') return
+  try {
+    openDetails(await $fetch<Job>(`/api/jobs/${id}`))
+  } catch {
+    toast.add({ title: 'Unable to load job details', color: 'error' })
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -245,6 +256,13 @@ function openDetails(job: Job) {
       title="Jobs"
       help="jobs"
       class="mb-6"
+    />
+
+    <UButton
+      to="/jobs/scheduler"
+      label="Scheduled chains"
+      icon="i-lucide-calendar-clock"
+      class="mb-4"
     />
 
     <UFormField
@@ -321,6 +339,15 @@ function openDetails(job: Job) {
       :columns="columns"
       :get-row-id="(row: Job) => row._id"
     >
+      <template #type-cell="{ row }">
+        <div>{{ row.original.type }}</div>
+        <NuxtLink
+          v-if="row.original.scheduleRunId"
+          to="/jobs/scheduler"
+          class="text-xs text-primary"
+        >Scheduled chain</NuxtLink>
+      </template>
+
       <template #status-cell="{ row }">
         <UBadge
           :label="row.original.status"

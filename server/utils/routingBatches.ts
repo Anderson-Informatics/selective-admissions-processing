@@ -12,7 +12,7 @@ export async function runRoutingBatches(job: HydratedDocument<Job>, submittable?
     if (await RoutingBatchModel.exists({ jobId })) {
       return { status: 'failed' as const, result: { requiresReview: true, message: 'Routing selection was interrupted before execution. No batches were executed; start a new run.' } }
     }
-    const filter = routingPreviewFilter(job.cycleId, job.payload.applicationId, job.payload.labelId)
+    const filter = routingPreviewFilter(job.cycleId, job.payload.applicationId, job.payload.labelId, job.payload.currentStageId)
     if (stageId) filter.currentStageId = stageId
     const cursor = SubmissionModel.find(filter).sort({ _id: 1 }).select('submissionId').lean().cursor()
     let ids: string[] = []

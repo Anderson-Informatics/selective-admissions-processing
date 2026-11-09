@@ -9,6 +9,15 @@ describe('routing preview display and filtering', () => {
     expect(applicantName({ FullName: null }, 'sub-1')).toBe('sub-1')
   })
 
+  it('includes the current stage alongside the other selection filters', () => {
+    expect(routingPreviewFilter('cycle-1', 'app-1', 'label-1', 'stage-1')).toEqual({
+      cycleId: 'cycle-1',
+      applicationId: 'app-1',
+      labelIds: 'label-1',
+      currentStageId: 'stage-1'
+    })
+  })
+
   it('includes a selected label in the database filter before the submission limit', () => {
     expect(routingPreviewFilter('cycle-1')).toEqual({ cycleId: 'cycle-1' })
     expect(routingPreviewFilter('cycle-1', 'app-1', 'label-1')).toEqual({

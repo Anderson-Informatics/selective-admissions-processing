@@ -1,5 +1,6 @@
 import { leasePendingChildJobs } from '../utils/jobDispatcher'
 import { processQueuedJob } from '../utils/jobWorker'
+import { tickJobSchedules } from '../utils/jobScheduler'
 
 const workerKey = '__ehsJobWorkerRunning'
 
@@ -11,6 +12,7 @@ export default defineNitroPlugin(() => {
   const run = async () => {
     try {
       await connectDb()
+      await tickJobSchedules().catch(error => console.error('Local job scheduler tick failed', error))
       const config = useRuntimeConfig()
       const concurrency = Math.max(1, Number(config.jobConcurrency || 3))
       const jobs = await leasePendingChildJobs(concurrency, 16, Number(config.jobMaxAttempts || 3))

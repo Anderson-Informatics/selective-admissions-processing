@@ -27,7 +27,7 @@ describe('job worker', () => {
     expect(runJob).not.toHaveBeenCalled()
     expect(JobModel.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: 'job-1', status: 'pending', leaseExpiresAt: { $gt: expect.any(Date) } },
-      { $set: { status: 'running', startedAt: expect.any(Date), error: undefined }, $inc: { attempts: 1 } },
+      { $set: { status: 'running', startedAt: expect.any(Date), error: undefined, workerSettled: false }, $inc: { attempts: 1 } },
       { returnDocument: 'after' }
     )
   })
@@ -55,7 +55,16 @@ describe('job worker', () => {
     vi.mocked(JobModel.findOneAndUpdate).mockResolvedValue({ _id: 'job-1', attempts: 3, routingLock: 'cycle-1' } as never)
     vi.mocked(runJob).mockRejectedValueOnce(new Error('permanent failure'))
     await processQueuedJob('job-1', config)
-    expect(JobModel.updateOne).toHaveBeenCalledWith({ _id: 'job-1' }, { $unset: { routingLock: 1 } })
+    expect(JobModel.updateOne).toHaveBeenCalledWith({ _id: 'job-1' }, { $unset: { routingLock: 1, essayLock: 1 } })
+  })
+
+  it('does not automatically replay failed scheduled external actions', async () => {
+    vi.spyOn(JobModel, 'updateOne').mockResolvedValue({} as never)
+    vi.mocked(JobModel.findOneAndUpdate).mockResolvedValue({ _id: 'job-1', attempts: 1, type: 'essay_begin_scoring', scheduleRunId: 'run', essayLock: 'cycle' } as never)
+    vi.mocked(runJob).mockRejectedValueOnce(new Error('ambiguous external response'))
+    await processQueuedJob('job-1', config)
+    expect(JobModel.findByIdAndUpdate).not.toHaveBeenCalled()
+    expect(JobModel.updateOne).toHaveBeenCalledWith({ _id: 'job-1' }, { $set: expect.objectContaining({ status: 'failed', workerSettled: true, error: 'ambiguous external response' }) })
   })
 
   it.each([

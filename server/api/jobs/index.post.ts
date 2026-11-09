@@ -1,4 +1,5 @@
 import { ESSAY_JOB_TYPES, JobModel, type JobType } from '../../models/Job'
+import { hasConflictingJob, jobLock } from '../../utils/jobLocks'
 
 const allowedTypes: JobType[] = [
   'metadata_sync',
@@ -27,43 +28,35 @@ export default defineEventHandler(async (event) => {
       || (payload.limit != null && (!Number.isInteger(payload.limit) || payload.limit < 1 || payload.limit > 5000))
       || (payload.applicationId != null && typeof payload.applicationId !== 'string')
       || (payload.labelId != null && typeof payload.labelId !== 'string')
+      || (payload.currentStageId != null && typeof payload.currentStageId !== 'string')
       || (payload.dryRun != null && typeof payload.dryRun !== 'boolean')
       || (payload.excludeSubmissionIds != null && (!Array.isArray(payload.excludeSubmissionIds) || !payload.excludeSubmissionIds.every((id: unknown) => typeof id === 'string')))) {
       throw createError({ statusCode: 400, statusMessage: 'Invalid routing scope, limit, filters, or dry-run setting' })
     }
-    const active = await JobModel.exists({
-      type: 'run_routing',
-      cycleId: body.cycleId,
-      status: { $in: ['pending', 'waiting', 'running'] },
-      ...(payload.applicationId ? { $or: [{ 'payload.applicationId': payload.applicationId }, { 'payload.applicationId': { $exists: false } }] } : {})
-    })
+    const active = await hasConflictingJob(body.type, body.cycleId, payload.applicationId)
     if (active) throw createError({ statusCode: 409, statusMessage: 'An overlapping routing job is already in progress' })
-    body.payload = { scope: payload.scope || 'limited', applicationId: payload.applicationId, labelId: payload.labelId, limit: payload.limit || 250, dryRun: payload.dryRun === true, excludeSubmissionIds: payload.excludeSubmissionIds }
+    body.payload = { scope: payload.scope || 'limited', applicationId: payload.applicationId, labelId: payload.labelId, currentStageId: payload.currentStageId, limit: payload.limit || 250, dryRun: payload.dryRun === true, excludeSubmissionIds: payload.excludeSubmissionIds }
   }
 
   if (ESSAY_JOB_TYPES.includes(body.type)) {
-    const active = await JobModel.exists({
-      cycleId: body.cycleId,
-      type: { $in: ESSAY_JOB_TYPES },
-      status: { $in: ['pending', 'waiting', 'running'] }
-    })
+    const active = await hasConflictingJob(body.type, body.cycleId)
     if (active) {
       throw createError({ statusCode: 409, statusMessage: 'An essay scoring job is already in progress for this cycle' })
     }
   }
 
-  if (body.type === 'run_routing') await JobModel.init()
+  if (body.type === 'run_routing' || ESSAY_JOB_TYPES.includes(body.type)) await JobModel.init()
   const job = await JobModel.create({
     type: body.type,
-    ...(body.type === 'run_routing' ? { routingLock: body.cycleId } : {}),
+    ...jobLock(body.type, body.cycleId),
     status: 'pending',
     cycleId: body.cycleId,
     createdBy: user.email,
     payload: body.payload || {},
     progress: { phase: 'queued', processed: 0, total: 0, percent: 0, message: 'Queued' }
   }).catch((error: unknown) => {
-    if ((error as { code?: number }).code === 11000 && body.type === 'run_routing') {
-      throw createError({ statusCode: 409, statusMessage: 'A routing job is already in progress for this cycle' })
+    if ((error as { code?: number }).code === 11000 && (body.type === 'run_routing' || ESSAY_JOB_TYPES.includes(body.type))) {
+      throw createError({ statusCode: 409, statusMessage: 'A routing or essay job is already in progress for this cycle' })
     }
     throw error
   })
