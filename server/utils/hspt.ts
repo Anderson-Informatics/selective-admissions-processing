@@ -192,7 +192,8 @@ export async function parseAndUpsertHSPTCsv(
     const lastName = row.Last || ''
     const firstName = row.First || ''
     const testCenter = row.TestCenter || ''
-    const batch = row.batch || ''
+    const batch = row.batch || row.Batch || ''
+    const testForm = row.form || row.Form || ''
     const birth = parseDate(row.Birth || '')
     const optCd = (row.OptCd || '').trim()
 
@@ -236,6 +237,18 @@ export async function parseAndUpsertHSPTCsv(
             mtrs,
             lnrs,
             oprs,
+            rdnp: scoreValue(row.RDNP),
+            mtnp: scoreValue(row.MTNP),
+            lnnp: scoreValue(row.LNNP),
+            opnp: scoreValue(row.OPNP),
+            rdlp: scoreValue(row.RDLP),
+            mtlp: scoreValue(row.MTLP),
+            lnlp: scoreValue(row.LNLP),
+            oplp: scoreValue(row.OPLP),
+            rdge: (row.RDGE || '').trim(),
+            mtge: (row.MTGE || '').trim(),
+            lnge: (row.LNGE || '').trim(),
+            form: testForm,
             reading: scaled.reading,
             math: scaled.math,
             language: scaled.language,

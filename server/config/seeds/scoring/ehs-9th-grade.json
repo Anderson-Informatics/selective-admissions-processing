@@ -1,0 +1,31 @@
+{
+  "key": "ehs-9th-grade",
+  "name": "9th Grade (EHS9) scoring recipe",
+  "comment": "Legacy fieldIds from Submittable_v4.py update_internal_form (EHS9). formId is auto-linked from the project's internalFormId on metadata_sync.",
+  "scoring": {
+    "enabled": true,
+    "components": ["gpa", "exam", "essay", "dpscdBonus", "marygroveBonus"],
+    "requireComplete": true,
+    "gpaBonusPoints": 5,
+    "dpscdBonusPoints": 10,
+    "marygroveBonuses": { "primary": 10, "secondary": 5 },
+    "internalForm": {
+      "fields": {
+        "cd398067-d562-4de8-b871-7e9a45368347": { "source": "scoring", "field": "totalAppScore", "default": 0 },
+        "dcdb45cb-812e-43f0-96cf-d2de7ca177fd": { "source": "scoring", "field": "exam.overall", "default": 0 },
+        "98ff1695-3c99-4791-8fff-72dfc8769f2b": { "source": "scoring", "field": "gpa.raw", "default": 0 },
+        "d8cd3e95-2e60-4c19-91dd-f3b390a33a04": { "source": "scoring", "field": "gpa.multiplier", "default": 0 },
+        "ad15d1fc-27e9-4849-a668-eb33f419c49f": { "source": "scoring", "field": "gpa.score", "default": 0 },
+        "7dd4ad3e-d868-4981-a105-d37a15a8b60e": { "source": "scoring", "field": "essay.score", "default": 0 },
+        "caaf112b-5b03-4b13-9291-67ee3e4901ca": { "source": "scoring", "field": "totalMarygroveScore", "default": 0 },
+        "cdad6c63-83c6-4e01-86f1-efce4ef54be8": { "source": "scoring", "field": "marygroveBonus", "default": 0 },
+        "6d76b3d5-1dcc-4b45-8c99-2e8c437922cc": { "source": "scoring", "field": "marygroveCatchment", "default": "None" },
+        "875b5e57-2cfe-49c6-86f5-b2246358c692": { "source": "scoring", "field": "gpa.bonus", "default": 0 },
+        "f2507370-489d-438a-9e62-80d4f2f7917f": { "source": "scoring", "field": "dpscdBonus", "default": 0 },
+        "e454d217-b876-4339-8cdd-dc090f56f5dd": { "source": "condition", "field": "essayScored", "default": false },
+        "cd3658c2-b199-47d4-9c09-06e3606a7dd5": { "source": "condition", "field": "gpaRecorded", "default": false },
+        "5b117eba-e73f-4ae1-b489-5d2515dcee22": { "source": "condition", "field": "hsptTaken", "default": false }
+      }
+    }
+  }
+}

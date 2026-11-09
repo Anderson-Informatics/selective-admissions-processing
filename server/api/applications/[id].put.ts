@@ -53,6 +53,18 @@ export default defineEventHandler(async (event) => {
     }
     application.dashboard = parsed.data
   }
+  if (body.scoring !== undefined) {
+    if (body.scoring != null && (typeof body.scoring !== 'object' || Array.isArray(body.scoring))) {
+      throw createError({ statusCode: 400, statusMessage: 'Invalid scoring configuration' })
+    }
+    application.scoring = body.scoring || undefined
+  }
+  if (body.placementPathway !== undefined) {
+    if (body.placementPathway != null && !['score', 'decision'].includes(body.placementPathway)) {
+      throw createError({ statusCode: 400, statusMessage: 'placementPathway must be "score", "decision", or null' })
+    }
+    application.placementPathway = body.placementPathway ?? null
+  }
 
   let stages: any[] | undefined
   if (Array.isArray(body.stages)) {

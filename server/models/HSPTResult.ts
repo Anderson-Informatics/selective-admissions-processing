@@ -20,6 +20,18 @@ export interface HSPTResult {
   mtrs: number
   lnrs: number
   oprs: number
+  rdnp?: number
+  mtnp?: number
+  lnnp?: number
+  opnp?: number
+  rdlp?: number
+  mtlp?: number
+  lnlp?: number
+  oplp?: number
+  rdge?: string
+  mtge?: string
+  lnge?: string
+  form?: string
   reading: number
   math: number
   language: number
@@ -52,6 +64,18 @@ const hsptResultSchema = new Schema<HSPTResult>({
   mtrs: { type: Number, default: 0 },
   lnrs: { type: Number, default: 0 },
   oprs: { type: Number, default: 0 },
+  rdnp: Number,
+  mtnp: Number,
+  lnnp: Number,
+  opnp: Number,
+  rdlp: Number,
+  mtlp: Number,
+  lnlp: Number,
+  oplp: Number,
+  rdge: String,
+  mtge: String,
+  lnge: String,
+  form: String,
   reading: { type: Number, default: 0 },
   math: { type: Number, default: 0 },
   language: { type: Number, default: 0 },

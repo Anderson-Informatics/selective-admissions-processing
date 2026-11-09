@@ -11,6 +11,8 @@ export interface Application {
   active: boolean
   rounds: CycleRound[]
   dashboard?: DashboardConfig
+  scoring?: Record<string, unknown>
+  placementPathway?: 'score' | 'decision' | null
   createdAt?: Date
   updatedAt?: Date
 }
@@ -33,7 +35,9 @@ const applicationSchema = new Schema<Application>({
     }],
     default: []
   },
-  dashboard: { type: Schema.Types.Mixed }
+  dashboard: { type: Schema.Types.Mixed },
+  scoring: { type: Schema.Types.Mixed },
+  placementPathway: { type: String, default: null }
 }, { timestamps: true })
 
 applicationSchema.index({ cycleId: 1, projectId: 1 }, { unique: true })

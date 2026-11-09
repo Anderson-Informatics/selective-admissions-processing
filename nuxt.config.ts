@@ -18,6 +18,8 @@ export default defineNuxtConfig({
     submittableBaseUrl: 'https://submittable-api.submittable.com/v4',
     submittableV3BaseUrl: 'https://submittable-api.submittable.com/v3',
     hereApiKey: '',
+    registrationApiKey: '',
+    registrationBaseUrl: 'https://ehs-registration-v2.netlify.app',
     authUsers: '',
     authSecret: '',
     dataKey: '',

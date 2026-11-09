@@ -10,6 +10,7 @@ vi.mock('../models/Application', () => ({ ApplicationModel: { find: vi.fn() } })
 vi.mock('../models/GpaRecord', () => ({ GpaRecordModel: { find: vi.fn(), bulkWrite: vi.fn() } }))
 vi.mock('../models/Review', () => ({ ReviewModel: { find: vi.fn() } }))
 vi.mock('../models/ReviewStage', () => ({ ReviewStageModel: { find: vi.fn() } }))
+vi.mock('../models/Metadata', () => ({ MetadataModel: { findOne: vi.fn(() => ({ select: () => ({ lean: async () => undefined }) })) } }))
 vi.mock('../models/Submission', () => ({
   SubmissionModel: { countDocuments: vi.fn(), distinct: vi.fn(), find: vi.fn(), bulkWrite: vi.fn() }
 }))

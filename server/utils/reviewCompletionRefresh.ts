@@ -8,6 +8,8 @@ import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import { normalizeRoutingConfig } from './routingConfig'
 import { computeReviewCompletion, resolveGpa, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
+import { computeGpaScore, deriveGpaMultiplier, resolveGpaBonusLabelId } from './gpaScoring'
+import { normalizeScoringConfig } from './scoreCompilation'
 
 export interface RefreshProgress {
   (update: { phase?: string, processed?: number, total?: number, percent?: number, message?: string }): Promise<void>
@@ -88,6 +90,12 @@ export function buildReviewCompletionForSubmission(
   }
 }
 
+function latestCompletedReview(reviews: Array<Record<string, any>>): Record<string, any> | undefined {
+  const completed = reviews.filter(review => Boolean(review.completedAt) || /^(complete|completed)$/i.test(review.status?.trim?.() || ''))
+  const stamp = (review: Record<string, any>, key: 'completedAt' | 'createdAt') => review[key] ? new Date(review[key]).getTime() : 0
+  return completed.sort((a, b) => stamp(b, 'completedAt') - stamp(a, 'completedAt') || stamp(b, 'createdAt') - stamp(a, 'createdAt'))[0]
+}
+
 export async function refreshReviewCompletion(options: RefreshOptions): Promise<RefreshResult> {
   const batchSize = Math.max(1, Math.min(options.batchSize || 250, 1000))
   const submissionFilter: Record<string, unknown> = { cycleId: options.cycleId }
@@ -95,8 +103,10 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
 
   const total = await SubmissionModel.countDocuments(submissionFilter)
   const applicationIds = await SubmissionModel.distinct('applicationId', submissionFilter)
-  const applicationDocs = await ApplicationModel.find({ _id: { $in: applicationIds } }).select('rounds').lean()
+  const applicationDocs = await ApplicationModel.find({ _id: { $in: applicationIds } }).select('rounds scoring').lean()
   const roundsByApplication = new Map(applicationDocs.map(application => [String(application._id), application.rounds || []]))
+  const scoringByApplication = new Map(applicationDocs.map(application => [String(application._id), normalizeScoringConfig(application.scoring)]))
+  const gpaBonusLabelId = await resolveGpaBonusLabelId()
   const stageDocs = await ReviewStageModel.find({ cycleId: options.cycleId, applicationId: { $in: applicationIds } }).lean()
   const stagesByApplication = new Map<string, Array<Record<string, any>>>()
   for (const stage of stageDocs) {
@@ -133,16 +143,31 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
     for (const submission of submissions) {
       const stages = stagesByApplication.get(String(submission.applicationId)) || []
       const round = resolveSubmissionRound(submission, roundsByApplication.get(String(submission.applicationId)) || [])
+      const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
       const completion = buildReviewCompletionForSubmission(
         submission as Record<string, any>,
         stages,
-        reviewsBySubmission.get(submission.submissionId) || [],
+        submissionReviews,
         gpaBySubmission.get(submission.submissionId) as Record<string, any> | undefined,
         round.key
       )
       result.processed += 1
       result.diagnostics += completion.diagnostics.length
       if (!options.dryRun) {
+        const scoring = scoringByApplication.get(String(submission.applicationId)) || normalizeScoringConfig(undefined)
+        const gpaRecord = gpaBySubmission.get(submission.submissionId)
+        const partialReview = latestCompletedReview(
+          submissionReviews.filter(review => /partial\s*gpa|gpa\s*partial/i.test(review.stageName || '') || Object.hasOwn(review.mappedData || {}, 'PartialGPA'))
+        )
+        const gpaMultiplier = deriveGpaMultiplier({
+          resolvedSource: completion.resolvedGpa.source,
+          hasResolvedGpa: completion.resolvedGpa.cumulativeGpa != null,
+          semesters: partialReview?.mappedData?.Semesters,
+          quartersAvailable: gpaRecord?.dpscd?.quartersAvailable
+        }, scoring.multiplierMap)
+        const gpaBonusEligible = Boolean(gpaBonusLabelId) && (submission.labelIds || []).includes(gpaBonusLabelId!)
+        const gpaBonus = gpaBonusEligible ? scoring.gpaBonusPoints : 0
+        const gpaScore = computeGpaScore(completion.resolvedGpa.cumulativeGpa, gpaMultiplier, gpaBonus, scoring.gpaTable)
         gpaOperations.push({
           updateOne: {
             filter: { cycleId: options.cycleId, submissionId: submission.submissionId },
@@ -150,7 +175,11 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
               $setOnInsert: { cycleId: options.cycleId, submissionId: submission.submissionId },
               $set: {
                 resolvedCumulativeGpa: completion.resolvedGpa.cumulativeGpa,
-                resolvedSource: completion.resolvedGpa.source
+                resolvedSource: completion.resolvedGpa.source,
+                gpaMultiplier,
+                gpaBonusEligible,
+                gpaBonus,
+                gpaScore
               }
             },
             upsert: true

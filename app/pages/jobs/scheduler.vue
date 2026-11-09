@@ -185,7 +185,7 @@ onUnmounted(() => clearInterval(timer))
           v-for="step in schedule.steps"
           :key="step"
         >
-          {{ label(step) }}{{ step === 'run_routing' && schedule.dryRun ? ' (dry run)' : '' }}
+          {{ label(step) }}{{ (step === 'run_routing' || step === 'registration_sync') && schedule.dryRun ? ' (dry run)' : '' }}
         </li>
       </ol>
     </div>
@@ -331,12 +331,12 @@ onUnmounted(() => clearInterval(timer))
             </div>
           </div>
           <p class="text-xs text-muted">
-            Required order: extraction before mapping, catchment before validation when selected, refresh before routing.
+            Required order: extraction before mapping, catchment before validation when selected, refresh before routing, validation before registration sync.
           </p>
           <UCheckbox
-            v-if="form.steps.includes('run_routing')"
+            v-if="form.steps.includes('run_routing') || form.steps.includes('registration_sync')"
             v-model="form.dryRun"
-            label="Routing dry run (full cycle; no external routing writes)"
+            label="Dry run (full cycle; no external routing or registration writes)"
           />
           <p class="text-sm text-warning">
             Live routing and essay workflows can modify Submittable submissions or send configured messages. Omitted data jobs mean later steps use existing stored data.

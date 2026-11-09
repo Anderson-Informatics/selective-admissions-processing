@@ -12,6 +12,8 @@ export interface SubmittableProject {
   projectId: string
   name: string
   initialFormId?: string
+  internalFormId?: string
+  eligibilityFormId?: string
   reviewStages: SubmittableReviewStage[]
 }
 
@@ -25,12 +27,14 @@ export interface SubmittableFormField {
 
 export interface SubmittableForm {
   formId: string
+  formType?: string
   name: string
   fields: SubmittableFormField[]
 }
 
 export interface SubmittableFormListItem {
   formId: string
+  formType?: string
   name: string
 }
 
@@ -169,7 +173,12 @@ export async function fetchProjects(clientConfig?: SubmittableClientConfig): Pro
     }
 
     const data = await submittableRequest<{ items: SubmittableProject[], continuationToken?: string }>(`/projects?${params.toString()}`, {}, clientConfig)
-    projects.push(...(data.items || []))
+    projects.push(...(data.items || []).map(project => ({
+      ...project,
+      initialFormId: project.initialFormId,
+      internalFormId: project.internalFormId,
+      eligibilityFormId: project.eligibilityFormId
+    })))
     continuationToken = data.continuationToken
   } while (continuationToken)
 
@@ -178,9 +187,10 @@ export async function fetchProjects(clientConfig?: SubmittableClientConfig): Pro
 
 export async function fetchForm(formId: string, clientConfig?: SubmittableClientConfig): Promise<SubmittableForm> {
   const data = await submittableRequest<unknown>(`/forms/${formId}`, {}, clientConfig)
-  const formData = data as { formId: string, name: string, fields: unknown[] }
+  const formData = data as { formId: string, formType?: string, name: string, fields: unknown[] }
   return {
     formId: formData.formId,
+    formType: formData.formType,
     name: formData.name,
     fields: (formData.fields || []).map((field: unknown) => {
       const f = field as { formFieldId: string, label: string, fieldType: string, isRequired?: boolean, options?: unknown[] }
@@ -463,6 +473,74 @@ export async function fetchEntriesForForm(
   } while (continuationToken)
 
   return onBatch ? [] : entries
+}
+
+// ---------------------------------------------------------------------------
+// Internal form entries (score write-back)
+// ---------------------------------------------------------------------------
+
+export interface SubmittableFieldData {
+  formFieldId: string
+  fieldType: string
+  value?: unknown
+  options?: string[]
+  [key: string]: unknown
+}
+
+export interface SubmissionEntrySummary {
+  formType: string
+  entryId?: string
+  formId?: string
+  status?: string
+  fieldData?: SubmittableFieldData[]
+  entry?: { entryId?: string, formId?: string, fieldData?: SubmittableFieldData[] }
+}
+
+export async function fetchSubmissionEntries(
+  submissionId: string,
+  clientConfig?: SubmittableClientConfig
+): Promise<SubmissionEntrySummary[]> {
+  const data = await submittableRequest<unknown>(`/entries/submissions/${encodeURIComponent(submissionId)}`, {}, clientConfig)
+  const items = (data as { items?: unknown[] })?.items ?? (Array.isArray(data) ? data : [])
+  return items as SubmissionEntrySummary[]
+}
+
+export async function fetchEntry(
+  entryId: string,
+  clientConfig?: SubmittableClientConfig
+): Promise<{ entryId: string, formId?: string, fieldData: SubmittableFieldData[] }> {
+  const data = await submittableRequest<unknown>(`/entries/${encodeURIComponent(entryId)}`, {}, clientConfig)
+  const entry = (data as { entry?: Record<string, unknown> })?.entry ?? (data as Record<string, unknown>)
+  return {
+    entryId: String(entry.entryId ?? entryId),
+    formId: entry.formId as string | undefined,
+    fieldData: (entry.fieldData || []) as SubmittableFieldData[]
+  }
+}
+
+export async function updateInternalFormEntry(
+  entryId: string,
+  fieldData: SubmittableFieldData[],
+  clientConfig?: SubmittableClientConfig
+): Promise<void> {
+  await submittableRequest<unknown>(
+    `/entries/${encodeURIComponent(entryId)}`,
+    { method: 'PUT', body: JSON.stringify({ formType: 'internal', fieldData }) },
+    clientConfig
+  )
+}
+
+export async function createInternalFormEntry(
+  submissionId: string,
+  fieldData: SubmittableFieldData[],
+  clientConfig?: SubmittableClientConfig
+): Promise<{ entryId?: string }> {
+  const result = await submittableRequest<{ entryId?: string }>(
+    '/entries/internal',
+    { method: 'POST', body: JSON.stringify({ submissionId, fieldData }) },
+    clientConfig
+  )
+  return result || {}
 }
 
 function extractV3SubmissionInt(item: Record<string, unknown>): number | undefined {

@@ -1,0 +1,16 @@
+{
+  "key": "ehs-current-hs",
+  "name": "Current HS (EHSC) scoring recipe",
+  "comment": "Legacy fieldIds from Submittable_v4.py update_internal_form (EHSC). Values only — feeds reviewer assignment, not placement.",
+  "scoring": {
+    "enabled": true,
+    "components": ["gpa", "exam"],
+    "requireComplete": false,
+    "internalForm": {
+      "fields": {
+        "b15882fd-403d-4a22-abca-34ba7ae3a9f3": { "source": "scoring", "field": "gpa.raw", "default": 0 },
+        "20f2a7d8-b7af-48d8-b0e7-a6534e444e34": { "source": "scoring", "field": "exam.overall", "default": 0 }
+      }
+    }
+  }
+}

@@ -126,6 +126,13 @@ export const pageHelp = {
     gettingStarted: 'Publish the intended rules from the application settings first. Preview the selection, investigate unexpected results, and use a dry run before a live run when you need a broader check.',
     important: ['Preview is read-only and covers at most 500 submissions, not necessarily the whole application. Choose All matching submissions with a dry run to evaluate the full selection without writes to Submittable.', 'Live routing can write to Submittable, including moving stages and applying configured labels or messages. Check the scope and dry-run setting carefully.', 'Execution runs as a background job. Follow its progress and result on Jobs; a preview is not confirmation that a live run has completed.']
   },
+  scoring: {
+    title: 'Scoring Preview',
+    purpose: 'Check what the score compilation would compute for an application using live data, before running it for real.',
+    tasks: ['Choose a cycle and application, then run the preview.', 'Review readiness flags (HSPT, GPA, Essay), resolved GPA details, exam and essay scores, bonuses, both totals, and percentile ranks.', 'Search the results table to spot-check individual applicants.'],
+    gettingStarted: 'Enable scoring and map the internal form on the application’s Scoring tab first. Then select the cycle and application here and run the preview.',
+    important: ['The preview is read-only — nothing is written to the database, Submittable, or internal forms.', 'When the numbers look right, run Score compilation on the Jobs page to persist scores and write internal forms.']
+  },
   login: {
     title: 'Sign In',
     purpose: 'Securely access the EHS Admissions workspace with your staff account.',

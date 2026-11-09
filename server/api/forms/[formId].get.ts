@@ -6,6 +6,7 @@ interface FieldRow {
   label: string
   fieldType: string
   isRequired?: boolean
+  options?: { formOptionId: string, label: string }[]
   subField?: string
   extractKey: string
   canonicalName: string
@@ -92,6 +93,7 @@ export default defineEventHandler(async (event) => {
       label,
       fieldType: f.fieldType,
       isRequired: f.isRequired,
+      options: f.options,
       subField,
       extractKey,
       canonicalName: mapping?.canonicalName || suggested || '',

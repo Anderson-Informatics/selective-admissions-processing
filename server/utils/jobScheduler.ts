@@ -43,7 +43,7 @@ async function reconcileCycle(cycleId: string, now: Date) {
     try {
       await JobModel.updateOne({ executionKey }, { $setOnInsert: {
         ...lock, type, cycleId, createdBy: run.actor, status: 'pending', scheduleRunId: runId,
-        scheduleStep: run.stepIndex, payload: type === 'run_routing' ? { scope: 'all', dryRun: run.dryRun } : {},
+        scheduleStep: run.stepIndex, payload: type === 'run_routing' ? { scope: 'all', dryRun: run.dryRun } : type === 'registration_sync' ? { dryRun: run.dryRun } : {},
         progress: { phase: 'queued', message: 'Queued by scheduler' }
       } }, { upsert: true })
     } catch (error) {

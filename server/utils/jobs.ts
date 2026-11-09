@@ -1,5 +1,6 @@
 import type { AnyBulkWriteOperation, HydratedDocument } from 'mongoose'
 import { JobModel, type Job, type JobProgress, type JobStatus, type JobType } from '../models/Job'
+import { ApplicationModel } from '../models/Application'
 import { MetadataModel, type Metadata } from '../models/Metadata'
 import { HSPTUploadModel } from '../models/HSPTUpload'
 import { extractFormSubmissions } from './extraction'
@@ -28,7 +29,8 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'score_compilation', label: 'Score compilation' },
   { value: 'essay_begin_scoring', label: 'Essay — Begin Scoring' },
   { value: 'essay_update_scoring', label: 'Essay — Update Scoring' },
-  { value: 'essay_finish_scoring', label: 'Essay — Finish Scoring' }
+  { value: 'essay_finish_scoring', label: 'Essay — Finish Scoring' },
+  { value: 'registration_sync', label: 'Registration sync' }
 ]
 
 interface HandlerResult {
@@ -163,9 +165,29 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
     const reconcile = await applyStageReconcile(job.cycleId, rawProjects, job.createdBy)
     if (reconcile.remappedCount) await queueReviewCompletionRefresh(job)
 
+    await setProgress({ phase: 'linking_internal_forms', message: 'Linking internal forms to applications' })
+    const internalFormByProject = new Map(projects.filter(project => project.internalFormId).map(project => [project.projectId, project.internalFormId!]))
+    const cycleApplications = await ApplicationModel.find({ cycleId: job.cycleId, projectId: { $in: [...internalFormByProject.keys()] } })
+    const internalFormLinks: { applicationId: string, name: string, internalFormId: string, previous?: string, status: 'linked' | 'mismatch' }[] = []
+    for (const application of cycleApplications) {
+      const internalFormId = internalFormByProject.get(application.projectId)!
+      const scoring = (application.scoring || {}) as Record<string, unknown>
+      const internalForm = (scoring.internalForm || {}) as Record<string, unknown>
+      if (!internalForm.formId) {
+        internalForm.formId = internalFormId
+        scoring.internalForm = internalForm
+        application.scoring = scoring
+        application.markModified('scoring')
+        await application.save()
+        internalFormLinks.push({ applicationId: String(application._id), name: application.name, internalFormId, status: 'linked' })
+      } else if (internalForm.formId !== internalFormId) {
+        internalFormLinks.push({ applicationId: String(application._id), name: application.name, internalFormId, previous: String(internalForm.formId), status: 'mismatch' })
+      }
+    }
+
     await setProgress({ phase: 'completed', processed: operations.length, total: operations.length, percent: 100, message: 'Metadata sync complete' })
 
-    return { result: { projects: projects.length, forms: forms.length, labels: labels.length, team: team.length, stageReconcile: reconcile.reports.filter(report => report.remapped.length || report.ambiguous.length || report.orphanStageIds.length || report.newRemoteStages.length) } }
+    return { result: { projects: projects.length, forms: forms.length, labels: labels.length, team: team.length, internalFormLinks, stageReconcile: reconcile.reports.filter(report => report.remapped.length || report.ambiguous.length || report.orphanStageIds.length || report.newRemoteStages.length) } }
   },
 
   submission_extraction: async (job, { setProgress }) => {
@@ -370,8 +392,47 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
     return { result }
   },
 
-  score_compilation: async () => {
-    throw new Error('Score compilation is not implemented yet')
+  score_compilation: async (job, { setProgress, submittable }) => {
+    const { runScoreCompilation, normalizeScoringConfig } = await import('./scoreCompilation')
+    const { syncInternalForms } = await import('./internalFormSync')
+    const payload = (job.payload || {}) as { applicationId?: string, dryRun?: boolean }
+    const dryRun = payload.dryRun === true
+
+    await setProgress({ phase: 'compiling', message: 'Compiling scores' })
+    const compilation = await runScoreCompilation({
+      cycleId: job.cycleId,
+      applicationId: payload.applicationId,
+      dryRun,
+      jobId: String(job._id),
+      setProgress
+    })
+
+    const internalFormSyncs = []
+    if (!dryRun) {
+      for (const detail of compilation.result.applications) {
+        const application = await ApplicationModel.findById(detail.applicationId).select('name scoring').lean()
+        const config = normalizeScoringConfig(application?.scoring)
+        if (!config.internalForm?.formId) continue
+        await setProgress({ phase: 'syncing_internal_forms', message: `Writing internal forms for ${application?.name}` })
+        const sync = await syncInternalForms({
+          cycleId: job.cycleId,
+          applicationId: detail.applicationId,
+          config,
+          actor: job.createdBy,
+          jobId: String(job._id),
+          setProgress,
+          submittable
+        })
+        internalFormSyncs.push({ applicationId: detail.applicationId, name: application?.name, ...sync })
+      }
+    }
+
+    return {
+      result: {
+        ...compilation.result,
+        internalFormSyncs
+      }
+    }
   },
 
   essay_begin_scoring: async (job, { setProgress, submittable }) => {
@@ -407,5 +468,15 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
       setProgress,
       submittable
     }, job)
+  },
+
+  registration_sync: async (job, { setProgress }) => {
+    const { runRegistrationSync } = await import('./registrationSync')
+    const result = await runRegistrationSync({
+      cycleId: job.cycleId,
+      setProgress,
+      dryRun: job.payload?.dryRun === true
+    })
+    return { result }
   }
 }

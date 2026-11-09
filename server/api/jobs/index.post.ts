@@ -10,6 +10,7 @@ const allowedTypes: JobType[] = [
   'catchment_lookup',
   'run_routing',
   'score_compilation',
+  'registration_sync',
   ...ESSAY_JOB_TYPES
 ]
 

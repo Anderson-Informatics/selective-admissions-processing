@@ -10,12 +10,14 @@ export const scheduledJobs = [
   { type: 'run_routing', label: 'Run routing' },
   { type: 'essay_begin_scoring', label: 'Essay — Begin Scoring' },
   { type: 'essay_update_scoring', label: 'Essay — Update Scoring' },
-  { type: 'essay_finish_scoring', label: 'Essay — Finish Scoring' }
+  { type: 'essay_finish_scoring', label: 'Essay — Finish Scoring' },
+  { type: 'registration_sync', label: 'Registration sync' }
 ] as const
 export type ScheduledJobType = typeof scheduledJobs[number]['type']
 export const prerequisites: Partial<Record<ScheduledJobType, ScheduledJobType>> = {
   form_response_mapping: 'submission_extraction',
-  run_routing: 'refresh_review_completion'
+  run_routing: 'refresh_review_completion',
+  registration_sync: 'run_validation'
 }
 export function orderError(steps: ScheduledJobType[]): string | undefined {
   if (!steps.length) return 'Select at least one job'
@@ -47,6 +49,6 @@ export const scheduleSchema = z.object({
 }).strict().superRefine((value, ctx) => {
   const error = orderError(value.steps)
   if (error) ctx.addIssue({ code: 'custom', message: error, path: ['steps'] })
-  if (value.enabled && !value.acknowledged && value.steps.some(type => type.startsWith('essay_') || (type === 'run_routing' && !value.dryRun))) ctx.addIssue({ code: 'custom', message: 'Acknowledge external submission changes before enabling', path: ['acknowledged'] })
+  if (value.enabled && !value.acknowledged && value.steps.some(type => type.startsWith('essay_') || (type === 'registration_sync' && !value.dryRun) || (type === 'run_routing' && !value.dryRun))) ctx.addIssue({ code: 'custom', message: 'Acknowledge external submission changes before enabling', path: ['acknowledged'] })
 })
 export type ScheduleInput = z.infer<typeof scheduleSchema>

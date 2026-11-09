@@ -120,7 +120,8 @@ const jobOptions = [
   { value: 'form_response_mapping', label: 'Form response mapping' },
   { value: 'catchment_lookup', label: 'Catchment lookup' },
   { value: 'run_validation', label: 'Run validation' },
-  { value: 'score_compilation', label: 'Score compilation' }
+  { value: 'score_compilation', label: 'Score compilation' },
+  { value: 'registration_sync', label: 'Registration sync' }
 ]
 
 function formatDate(value?: string) {
@@ -169,6 +170,10 @@ function formatResult(job: Job) {
     const { evaluated = 0, moves = 0, noAction = 0, failures = 0, dryRun = false, requiresReview = false, message = '' } = job.result
     if (requiresReview) return String(message)
     return `${evaluated} evaluated — ${moves} ${dryRun ? 'proposed moves' : 'moves'}, ${noAction} unchanged, ${Array.isArray(failures) ? failures.length : failures} failures`
+  }
+  if (job.type === 'registration_sync') {
+    const { submissions = 0, inserts = 0, updates = 0, unchanged = 0, deletes = [], errors = [], dryRun = false } = job.result as { submissions?: number, inserts?: number, updates?: number, unchanged?: number, deletes?: unknown[], errors?: unknown[], dryRun?: boolean }
+    return `${submissions} submissions — ${inserts} inserts, ${updates} updates, ${unchanged} unchanged, ${deletes.length} deletions${errors.length ? `, ${errors.length} errors` : ''}${dryRun ? ' (dry run)' : ''}`
   }
   if (job.type === 'essay_begin_scoring') {
     const { moved = 0, alreadyInStage = 0, complete = 0 } = job.result
