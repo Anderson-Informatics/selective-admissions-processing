@@ -45,6 +45,12 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2026-06-30',
 
+  nitro: {
+    externals: {
+      inline: ['xlsx']
+    }
+  },
+
   eslint: {
     config: {
       stylistic: {

@@ -6,12 +6,12 @@ export const scheduledJobs = [
   { type: 'form_response_mapping', label: 'Form response mapping' },
   { type: 'catchment_lookup', label: 'Catchment lookup' },
   { type: 'run_validation', label: 'Run validation' },
+  { type: 'registration_sync', label: 'Registration sync' },
   { type: 'refresh_review_completion', label: 'Refresh review completion' },
   { type: 'run_routing', label: 'Run routing' },
   { type: 'essay_begin_scoring', label: 'Essay — Begin Scoring' },
   { type: 'essay_update_scoring', label: 'Essay — Update Scoring' },
-  { type: 'essay_finish_scoring', label: 'Essay — Finish Scoring' },
-  { type: 'registration_sync', label: 'Registration sync' }
+  { type: 'essay_finish_scoring', label: 'Essay — Finish Scoring' }
 ] as const
 export type ScheduledJobType = typeof scheduledJobs[number]['type']
 export const prerequisites: Partial<Record<ScheduledJobType, ScheduledJobType>> = {

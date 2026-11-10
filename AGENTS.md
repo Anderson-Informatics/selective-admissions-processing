@@ -16,6 +16,7 @@
 - `pnpm test` — run Vitest unit and mocked route/workflow tests; these do not use live MongoDB or Submittable.
 - Verification baseline on 2026-11-03: tests, lint, typecheck, and the default local production build pass. The build may emit non-fatal font-network/tooling warnings. Local builds use the Node server preset unless a deployment preset is selected; verify Netlify background functions separately.
 - CI runs lint, typecheck, tests, and a production build on pushes and pull requests.
+- Verify Netlify bundling locally with `NITRO_PRESET=netlify pnpm build`. Keep `nitro.externals.inline: ['xlsx']`: without the package-name matcher, Nitro can emit absolute build-machine imports for `xlsx/dist/cpexcel.js`. The helper must be bundled in `.netlify/functions-internal/server/chunks/nitro/nitro.mjs`, not imported from the source `node_modules`.
 
 ## Environment Variables
 Copy `.env.example` to `.env` and fill in values. Runtime config keys must be prefixed with `NUXT_` to be available in Nitro server routes. Public keys need to be prefixed with `NUXT_PUBLIC_` for client access.

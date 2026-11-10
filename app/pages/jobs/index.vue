@@ -120,8 +120,8 @@ const jobOptions = [
   { value: 'form_response_mapping', label: 'Form response mapping' },
   { value: 'catchment_lookup', label: 'Catchment lookup' },
   { value: 'run_validation', label: 'Run validation' },
-  { value: 'score_compilation', label: 'Score compilation' },
-  { value: 'registration_sync', label: 'Registration sync' }
+  { value: 'registration_sync', label: 'Registration sync' },
+  { value: 'score_compilation', label: 'Score compilation' }
 ]
 
 function formatDate(value?: string) {
