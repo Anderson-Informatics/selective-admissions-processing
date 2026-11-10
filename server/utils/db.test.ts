@@ -40,8 +40,42 @@ describe('connectDb', () => {
     expect(mongoose.connect).toHaveBeenCalledTimes(1)
   })
 
-  it('retries on the next request after a failed connection', async () => {
-    const error = new Error('connection closed')
+  it('retries transient connection failures before resolving', async () => {
+    vi.useFakeTimers()
+    try {
+      const error = new Error('connection closed')
+      vi.mocked(mongoose.connect).mockRejectedValueOnce(error).mockResolvedValueOnce(mongoose)
+
+      const pending = connectDb()
+      await vi.runAllTimersAsync()
+      await expect(pending).resolves.toBe(mongoose)
+      connection.readyState = 1
+
+      await expect(connectDb()).resolves.toBe(mongoose)
+      expect(mongoose.connect).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('gives up after exhausting transient retries', async () => {
+    vi.useFakeTimers()
+    try {
+      const error = new Error('ECONNRESET')
+      vi.mocked(mongoose.connect).mockRejectedValue(error)
+
+      const pending = connectDb()
+      const assertion = expect(pending).rejects.toBe(error)
+      await vi.runAllTimersAsync()
+      await assertion
+      expect(mongoose.connect).toHaveBeenCalledTimes(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not retry non-transient connection errors', async () => {
+    const error = new Error('bad auth credentials')
     vi.mocked(mongoose.connect).mockRejectedValueOnce(error).mockResolvedValueOnce(mongoose)
 
     await expect(connectDb()).rejects.toBe(error)
