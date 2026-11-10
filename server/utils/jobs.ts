@@ -42,6 +42,8 @@ interface JobContext {
   setProgress: (progress: Partial<JobProgress>) => Promise<void>
   submittable?: SubmittableClientConfig
   hereApiKey?: string
+  registrationApiKey?: string
+  registrationBaseUrl?: string
 }
 
 export async function createJob(type: JobType, cycleId: string, createdBy: string, payload: Job['payload'] = {}) {
@@ -66,7 +68,7 @@ async function queueReviewCompletionRefresh(job: HydratedDocument<Job>) {
   })
 }
 
-export async function runJob(job: HydratedDocument<Job>, options: { submittable?: SubmittableClientConfig, hereApiKey?: string } = {}) {
+export async function runJob(job: HydratedDocument<Job>, options: { submittable?: SubmittableClientConfig, hereApiKey?: string, registrationApiKey?: string, registrationBaseUrl?: string } = {}) {
   const handler = jobHandlers[job.type]
   if (!handler) throw new Error(`Unknown job type: ${job.type}`)
 
@@ -80,7 +82,7 @@ export async function runJob(job: HydratedDocument<Job>, options: { submittable?
   }
 
   try {
-    const output = await handler(job, { setProgress, submittable: options.submittable, hereApiKey: options.hereApiKey })
+    const output = await handler(job, { setProgress, submittable: options.submittable, hereApiKey: options.hereApiKey, registrationApiKey: options.registrationApiKey, registrationBaseUrl: options.registrationBaseUrl })
     const status = output.status || 'completed'
     const completedAt = status === 'completed' || status === 'failed' ? new Date() : undefined
     await JobModel.findByIdAndUpdate(job._id, {
@@ -470,12 +472,14 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
     }, job)
   },
 
-  registration_sync: async (job, { setProgress }) => {
+  registration_sync: async (job, { setProgress, registrationApiKey, registrationBaseUrl }) => {
     const { runRegistrationSync } = await import('./registrationSync')
     const result = await runRegistrationSync({
       cycleId: job.cycleId,
       setProgress,
-      dryRun: job.payload?.dryRun === true
+      dryRun: job.payload?.dryRun === true,
+      apiKey: registrationApiKey,
+      baseUrl: registrationBaseUrl
     })
     return { result }
   }

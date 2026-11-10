@@ -21,6 +21,8 @@ export default async function handler(request: Request) {
       v3BaseUrl: process.env.NUXT_SUBMITTABLE_V3_BASE_URL
     },
     hereApiKey: process.env.NUXT_HERE_API_KEY,
+    registrationApiKey: process.env.NUXT_REGISTRATION_API_KEY,
+    registrationBaseUrl: process.env.NUXT_REGISTRATION_BASE_URL,
     maxAttempts: Number(process.env.NUXT_JOB_MAX_ATTEMPTS || 3)
   })
 

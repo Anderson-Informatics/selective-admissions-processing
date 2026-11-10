@@ -25,6 +25,8 @@ export default defineNitroPlugin(() => {
             v3BaseUrl: config.submittableV3BaseUrl
           },
           hereApiKey: config.hereApiKey,
+          registrationApiKey: config.registrationApiKey,
+          registrationBaseUrl: config.registrationBaseUrl,
           maxAttempts: Number(config.jobMaxAttempts || 3)
         }).catch(error => console.error(`Local job ${job._id} failed`, error))
       }

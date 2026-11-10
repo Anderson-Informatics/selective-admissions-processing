@@ -9,6 +9,8 @@ export interface JobWorkerConfig {
   mongodbUri: string
   submittable: SubmittableClientConfig
   hereApiKey?: string
+  registrationApiKey?: string
+  registrationBaseUrl?: string
   maxAttempts?: number
 }
 
@@ -100,7 +102,7 @@ export async function processQueuedJob(jobId: string, config: JobWorkerConfig) {
       if (job.type.startsWith('hspt_')) await HSPTUploadModel.updateOne(filter, update)
       else await GpaUploadModel.updateOne(filter, update)
     }
-    await runJob(job, { submittable: config.submittable, hereApiKey: config.hereApiKey })
+    await runJob(job, { submittable: config.submittable, hereApiKey: config.hereApiKey, registrationApiKey: config.registrationApiKey, registrationBaseUrl: config.registrationBaseUrl })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     const externalScheduled = !!job.scheduleRunId && (job.type === 'run_routing' || ESSAY_JOB_TYPES.includes(job.type))

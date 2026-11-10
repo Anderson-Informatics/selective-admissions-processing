@@ -137,10 +137,12 @@ export async function runRegistrationSync(options: {
   baseUrl?: string
 }): Promise<RegistrationSyncResult> {
   const { cycleId, setProgress, dryRun = false } = options
-  const config = useRuntimeConfig()
-  const apiKey = options.apiKey || config.registrationApiKey
+  // useRuntimeConfig is a Nitro auto-import and does not exist inside Netlify
+  // background functions; fall back to process.env there.
+  const config = typeof useRuntimeConfig === 'function' ? useRuntimeConfig() : {} as Record<string, string | undefined>
+  const apiKey = options.apiKey || config.registrationApiKey || process.env.NUXT_REGISTRATION_API_KEY
   if (!apiKey) throw new Error('NUXT_REGISTRATION_API_KEY is not configured')
-  const baseUrl = (options.baseUrl || config.registrationBaseUrl || REGISTRATION_DEFAULT_BASE_URL).replace(/\/+$/, '')
+  const baseUrl = (options.baseUrl || config.registrationBaseUrl || process.env.NUXT_REGISTRATION_BASE_URL || REGISTRATION_DEFAULT_BASE_URL).replace(/\/+$/, '')
 
   await setProgress?.({ phase: 'loading', message: 'Loading submissions and reviews', total: 0, processed: 0, percent: 0 })
 
