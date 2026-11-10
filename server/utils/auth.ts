@@ -1,36 +1,17 @@
 import { useSession } from 'h3'
 import type { H3Event } from 'h3'
+import type { UserRole } from '../models/User'
 
 export interface AuthUser {
+  userId: string
   email: string
-  password?: string
+  role: UserRole
 }
 
-let _authUsers: AuthUser[] | null = null
-
-function parseAuthUsers(value: unknown): AuthUser[] {
-  if (!value) return []
-  try {
-    const users = typeof value === 'string' ? JSON.parse(value) : value
-    if (!Array.isArray(users)) {
-      throw new Error('NUXT_AUTH_USERS must be a JSON array')
-    }
-    for (const user of users) {
-      if (typeof user.email !== 'string' || typeof user.password !== 'string') {
-        throw new Error('Each entry in NUXT_AUTH_USERS must have email and password strings')
-      }
-    }
-    return users
-  } catch (err: unknown) {
-    throw new Error(`Failed to parse NUXT_AUTH_USERS: ${err instanceof Error ? err.message : String(err)}`, { cause: err })
-  }
-}
-
-export function getAuthUsers(): AuthUser[] {
-  if (!_authUsers) {
-    _authUsers = parseAuthUsers(useRuntimeConfig().authUsers)
-  }
-  return _authUsers
+interface SessionData {
+  userId?: string
+  email?: string
+  role?: UserRole
 }
 
 export function getSessionConfig() {
@@ -51,13 +32,14 @@ export function getSessionConfig() {
   }
 }
 
-export async function getAuthUser(event: H3Event): Promise<Pick<AuthUser, 'email'> | null> {
-  const session = await useSession(event, getSessionConfig())
-  const email = session.data.email
-  return email ? { email: email as string } : null
+export async function getAuthUser(event: H3Event): Promise<AuthUser | null> {
+  const session = await useSession<SessionData>(event, getSessionConfig())
+  const { userId, email, role } = session.data
+  if (!userId || !email || !role) return null
+  return { userId, email, role }
 }
 
-export async function requireAuth(event: H3Event): Promise<Pick<AuthUser, 'email'>> {
+export async function requireAuth(event: H3Event): Promise<AuthUser> {
   const user = await getAuthUser(event)
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
@@ -65,9 +47,17 @@ export async function requireAuth(event: H3Event): Promise<Pick<AuthUser, 'email
   return user
 }
 
-export async function setAuthSession(event: H3Event, user: Pick<AuthUser, 'email'>) {
-  const session = await useSession(event, getSessionConfig())
-  await session.update({ email: user.email })
+export async function requireRole(event: H3Event, role: UserRole): Promise<AuthUser> {
+  const user = await requireAuth(event)
+  if (user.role !== role) {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
+  }
+  return user
+}
+
+export async function setAuthSession(event: H3Event, user: AuthUser) {
+  const session = await useSession<SessionData>(event, getSessionConfig())
+  await session.update({ userId: user.userId, email: user.email, role: user.role })
 }
 
 export async function clearAuthSession(event: H3Event) {

@@ -50,7 +50,7 @@ describe('cycle API authentication', () => {
   })
 
   it('allows an authenticated list request', async () => {
-    vi.mocked(requireAuth).mockResolvedValue({ email: 'admin@example.test' })
+    vi.mocked(requireAuth).mockResolvedValue({ userId: 'user-1', email: 'admin@example.test', role: 'site_admin' })
     await expect(handlers[0]!({})).resolves.toEqual([])
     expect(connectDb).toHaveBeenCalledOnce()
     expect(model.find).toHaveBeenCalledOnce()

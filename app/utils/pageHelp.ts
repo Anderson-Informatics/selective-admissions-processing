@@ -139,6 +139,34 @@ export const pageHelp = {
     tasks: ['Enter your account email address and password.', 'Sign in to open the admissions dashboard.', 'Correct your details and try again if the sign-in attempt is unsuccessful.'],
     gettingStarted: 'Use the email address and password supplied for your EHS Admissions account, then select Sign in.',
     important: ['This page does not create accounts or reset passwords. If you need access or cannot sign in, contact the person who manages staff access.', 'Keep your password private and sign out from the account menu when you finish using a shared computer.']
+  },
+  forgotPassword: {
+    title: 'Reset Password',
+    purpose: 'Request a password reset for a staff account that can no longer sign in.',
+    tasks: ['Enter the email address on the account.', 'Submit the request to flag the account for a site administrator.', 'Wait for an administrator to send you a reset link.'],
+    gettingStarted: 'Enter the email address used for the EHS Admissions account and select Request reset.',
+    important: ['Reset links are sent manually by a site administrator; no email is sent automatically.', 'Submitting the form does not reveal whether an account exists for the address entered.']
+  },
+  acceptInvite: {
+    title: 'Accept Invitation',
+    purpose: 'Activate a new staff account from an invitation link.',
+    tasks: ['Open the invitation link supplied by a site administrator.', 'Choose a password for the account.', 'Sign in after the account is created.'],
+    gettingStarted: 'Use the full invitation link, then set a password that meets the requirements shown on the page.',
+    important: ['Invitation links expire; if yours no longer works, ask a site administrator for a new one.', 'Accounts are only created through invitations — there is no self-service signup.']
+  },
+  resetPassword: {
+    title: 'Reset Password',
+    purpose: 'Choose a new password from a reset link provided by a site administrator.',
+    tasks: ['Open the reset link supplied by an administrator.', 'Enter and confirm a new password.', 'Sign in with the new password.'],
+    gettingStarted: 'Use the full reset link, then set a new password that meets the requirements shown on the page.',
+    important: ['Reset links expire and can only be used once.', 'If the link no longer works, request a new reset from the sign-in page.']
+  },
+  users: {
+    title: 'User Management',
+    purpose: 'Manage staff access to the EHS Admissions workspace.',
+    tasks: ['Invite a new staff member by generating an invitation link and sending it to them manually.', 'Review pending invitations and revoke any that should no longer be usable.', 'Generate a password reset link for a user who requested one, and send it to them manually.', 'Disable an account or change a user\'s role when their access needs change.'],
+    gettingStarted: 'Use the invite form to create an invitation link for a new user. Invited users are central office admins by default and can access everything except this page.',
+    important: ['Invitation and reset links are shown once — copy them before leaving the page and deliver them through a trusted channel.', 'Only site admins can open this page. Keep at least one active site admin account at all times.']
   }
 } satisfies Record<string, PageHelpContent>
 

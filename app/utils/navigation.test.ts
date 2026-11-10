@@ -3,13 +3,14 @@ import { isNavigationActive, navigationGroups } from './navigation'
 
 describe('application navigation', () => {
   it('lists every primary destination exactly once in task order', () => {
-    expect(navigationGroups.map(group => group.label)).toEqual(['Overview', 'Operations', 'Assessment', 'Configuration'])
+    expect(navigationGroups.map(group => group.label)).toEqual(['Overview', 'Operations', 'Assessment', 'Configuration', 'Administration'])
     const destinations = navigationGroups.flatMap(group => group.items.map(item => item.to))
     expect(destinations).toEqual([
       '/', '/submissions', '/validation', '/jobs', '/jobs/scheduler', '/essays', '/hspt', '/gpa', '/scoring',
-      '/cycles', '/applications', '/mappings', '/templates', '/response-libraries', '/routing'
+      '/cycles', '/applications', '/mappings', '/templates', '/response-libraries', '/routing', '/admin/users'
     ])
-    expect(new Set(destinations).size).toBe(15)
+    expect(new Set(destinations).size).toBe(16)
+    expect(navigationGroups.find(group => group.label === 'Administration')?.siteAdminOnly).toBe(true)
   })
 
   it('makes Data Validation a permanent Operations destination', () => {

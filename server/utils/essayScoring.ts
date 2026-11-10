@@ -22,6 +22,7 @@ import {
   type SubmittableClientConfig
 } from './submittable'
 import { buildEssayExport } from './essayExport'
+import { persistJobExport } from './exportFiles'
 import { buildEssayStats, reviewerKey, type EssayStats } from './essayStats'
 
 type ProgressFn = (update: Partial<JobProgress>) => Promise<void>
@@ -327,7 +328,7 @@ export async function runEssayUpdateScoring(options: EssayJobOptions) {
     failures: labelSync.failures,
     labelSync: { added: labelSync.labelsAdded, removed: labelSync.labelsRemoved },
     stats,
-    export: exportFile
+    export: await persistJobExport(options.jobId, exportFile)
   }
 }
 
@@ -424,7 +425,7 @@ export async function runEssayFinishScoring(options: EssayJobOptions, job: Hydra
       failures: [...labelSync.failures, ...routing.failures],
       labelSync: { added: labelSync.labelsAdded, removed: labelSync.labelsRemoved },
       stats,
-      export: exportFile
+      export: await persistJobExport(options.jobId, exportFile)
     }
   }
 }

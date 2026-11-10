@@ -6,7 +6,7 @@ export default defineNuxtConfig({
   ],
 
   devtools: {
-    enabled: true
+    enabled: process.env.NODE_ENV !== 'production'
   },
 
   css: ['~/assets/css/main.css'],
@@ -20,8 +20,9 @@ export default defineNuxtConfig({
     hereApiKey: '',
     registrationApiKey: '',
     registrationBaseUrl: 'https://ehs-registration-v2.netlify.app',
-    authUsers: '',
     authSecret: '',
+    bootstrapAdminEmail: '',
+    bootstrapAdminPassword: '',
     dataKey: '',
     dataSecret: '',
     msalTenantId: '',
@@ -40,7 +41,18 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    '/': { prerender: false }
+    '/': { prerender: false },
+    '/**': {
+      headers: {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        // Nuxt renders its SSR payload as an inline script, so 'unsafe-inline'
+        // is required here unless inline scripts are disabled app-wide.
+        'Content-Security-Policy': 'default-src \'self\'; script-src \'self\' \'unsafe-inline\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\'; font-src \'self\'; object-src \'none\'; base-uri \'self\'; form-action \'self\'; frame-ancestors \'none\''
+      }
+    }
   },
 
   compatibilityDate: '2026-06-30',

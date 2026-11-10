@@ -4,7 +4,8 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 const auth = useAuth()
 const menuOpen = ref(false)
 const accountItems = computed<DropdownMenuItem[][]>(() => [
-  [{ label: auth.user.value?.email || '', type: 'label' }],
+  [{ label: auth.user.value?.email || '', type: 'label' },
+    { label: auth.user.value?.role === 'site_admin' ? 'Site admin' : 'Central office admin', type: 'label', class: 'text-xs text-muted' }],
   [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => auth.logout() }]
 ])
 </script>

@@ -4,6 +4,7 @@ import type { Submission } from '../../models/Submission'
 import { FormEntryModel } from '../../models/FormEntry'
 import { SubmissionModel } from '../../models/Submission'
 import { csvCell, csvPhone, notWithdrawnFilter, parseDataFormat, parseDataPagination, requireDataKey } from '../../utils/dataApi'
+import { recordDisclosure } from '../../utils/disclosureAudit'
 
 const answerFields = [
   'FullName', 'FirstName', 'LastName', 'SingleAcceptance', 'GradeEntering',
@@ -97,6 +98,13 @@ export default defineEventHandler(async (event) => {
   const format = parseDataFormat(query)
   if (format === 'csv') {
     await connectDb()
+    await recordDisclosure({
+      actor: 'data-api',
+      action: 'data_api_disclosure',
+      entityType: 'applications',
+      entityId: 'all',
+      detail: { format: 'csv' }
+    })
     setHeader(event, 'Content-Type', 'text/csv; charset=utf-8')
     setHeader(event, 'Content-Disposition', 'attachment; filename="applications.csv"')
     setHeader(event, 'Cache-Control', 'no-store')
@@ -115,6 +123,14 @@ export default defineEventHandler(async (event) => {
       .lean(),
     SubmissionModel.countDocuments(filter)
   ])
+
+  await recordDisclosure({
+    actor: 'data-api',
+    action: 'data_api_disclosure',
+    entityType: 'applications',
+    entityId: 'all',
+    detail: { format: 'json', page, limit, total }
+  })
 
   return {
     applications: await mapApplications(submissions),

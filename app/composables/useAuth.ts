@@ -1,17 +1,18 @@
 export interface AuthUser {
   email: string
-  password?: string
+  role: 'site_admin' | 'central_admin'
 }
 
 export function useAuth() {
-  const user = useState<Pick<AuthUser, 'email'> | null>('auth-user', () => null)
+  const user = useState<AuthUser | null>('auth-user', () => null)
   const loading = useState('auth-loading', () => true)
   const loggedIn = computed(() => !!user.value)
+  const isSiteAdmin = computed(() => user.value?.role === 'site_admin')
 
   async function fetchUser() {
     try {
       const $fetchApi = import.meta.server ? useRequestFetch() : $fetch
-      user.value = await $fetchApi('/api/auth/me') as Pick<AuthUser, 'email'>
+      user.value = await $fetchApi('/api/auth/me') as AuthUser
     } catch {
       user.value = null
     } finally {
@@ -24,8 +25,8 @@ export function useAuth() {
       const result = await $fetch('/api/auth/login', {
         method: 'POST',
         body: { email, password }
-      }) as { email: string }
-      user.value = { email: result.email }
+      }) as AuthUser
+      user.value = { email: result.email, role: result.role }
       return true
     } catch {
       user.value = null
@@ -46,6 +47,7 @@ export function useAuth() {
     user,
     loading,
     loggedIn,
+    isSiteAdmin,
     fetchUser,
     login,
     logout

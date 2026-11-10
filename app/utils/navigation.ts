@@ -2,6 +2,7 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 interface NavigationGroup {
   label: string
+  siteAdminOnly?: boolean
   items: (NavigationMenuItem & { to: string })[]
 }
 
@@ -37,6 +38,13 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Templates', to: '/templates', icon: 'i-lucide-file-text' },
       { label: 'Response Libraries', to: '/response-libraries', icon: 'i-lucide-list-tree' },
       { label: 'Routing', to: '/routing', icon: 'i-lucide-git-branch' }
+    ]
+  },
+  {
+    label: 'Administration',
+    siteAdminOnly: true,
+    items: [
+      { label: 'Users', to: '/admin/users', icon: 'i-lucide-users' }
     ]
   }
 ]

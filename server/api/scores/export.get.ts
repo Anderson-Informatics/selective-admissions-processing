@@ -1,9 +1,10 @@
 import * as XLSX from 'xlsx'
 import { ScoreRecordModel } from '../../models/ScoreRecord'
+import { recordDisclosure } from '../../utils/disclosureAudit'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
-  await requireAuth(event)
+  const user = await requireAuth(event)
   const { cycleId, applicationId } = getQuery(event) as { cycleId?: string, applicationId?: string }
   if (!cycleId) {
     throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
@@ -53,6 +54,14 @@ export default defineEventHandler(async (event) => {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Scores')
   const content = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+
+  await recordDisclosure({
+    actor: user.email,
+    action: 'pii_export',
+    entityType: 'score_records',
+    entityId: cycleId,
+    detail: { applicationId: applicationId ?? null, rows: records.length }
+  })
 
   setResponseHeader(event, 'Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   setResponseHeader(event, 'Content-Disposition', `attachment; filename="scores-${cycleId}${applicationId ? `-${applicationId}` : ''}.xlsx"`)

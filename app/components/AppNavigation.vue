@@ -3,14 +3,17 @@ import { isNavigationActive, navigationGroups } from '~/utils/navigation'
 
 const emit = defineEmits<{ select: [] }>()
 const route = useRoute()
-const groups = computed(() => navigationGroups.map(group => ({
-  label: group.label,
-  items: group.items.map(item => ({
-    ...item,
-    active: isNavigationActive(route.path, item.to),
-    onSelect: () => emit('select')
-  }))
-})))
+const auth = useAuth()
+const groups = computed(() => navigationGroups
+  .filter(group => !group.siteAdminOnly || auth.isSiteAdmin.value)
+  .map(group => ({
+    label: group.label,
+    items: group.items.map(item => ({
+      ...item,
+      active: isNavigationActive(route.path, item.to),
+      onSelect: () => emit('select')
+    }))
+  })))
 </script>
 
 <template>

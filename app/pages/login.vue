@@ -54,6 +54,7 @@ async function onSubmit() {
           v-model="email"
           type="email"
           label="Email"
+          class="w-full"
           placeholder="you@example.com"
           autocomplete="email"
           required
@@ -63,6 +64,7 @@ async function onSubmit() {
           v-model="password"
           type="password"
           label="Password"
+          class="w-full"
           placeholder="••••••••"
           autocomplete="current-password"
           required
@@ -83,6 +85,15 @@ async function onSubmit() {
         >
           Sign in
         </UButton>
+
+        <p class="text-sm text-center">
+          <NuxtLink
+            to="/forgot-password"
+            class="text-primary hover:underline"
+          >
+            Forgot your password?
+          </NuxtLink>
+        </p>
       </form>
     </UCard>
   </div>
