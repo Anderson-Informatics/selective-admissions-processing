@@ -1,12 +1,13 @@
 import { GpaUploadModel } from '~~/server/models/GpaUpload'
 import { JobModel } from '~~/server/models/Job'
 import { parseDpscdBody } from '~~/server/utils/gpa'
+import { requireDpscdAccess } from '../../../utils/dpscdAuth'
 
 const maxPayloadBytes = 8 * 1024 * 1024
 
 export default defineEventHandler(async (event) => {
+  const user = await requireDpscdAccess(event)
   await connectDb()
-  const user = await requireAuth(event)
 
   const raw = await readRawBody(event)
   if (!raw) throw createError({ statusCode: 400, statusMessage: 'Request body is required' })
