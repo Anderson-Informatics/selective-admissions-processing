@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
     status: 'pending',
     cycleId,
     createdBy: user.email,
-    payload: { uploadId: String(upload._id) },
+    payload: { uploadId: String(upload._id), dryRun: String(getQuery(event).dryRun) === 'true' },
     progress: { phase: 'queued', processed: 0, total: records.length, percent: 0, message: 'Import queued' }
   })
   await GpaUploadModel.findByIdAndUpdate(upload._id, { $set: { importJobId: job._id } })

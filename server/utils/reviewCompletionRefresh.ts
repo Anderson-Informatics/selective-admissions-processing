@@ -3,6 +3,7 @@ import type { AnyBulkWriteOperation } from 'mongoose'
 import { ApplicationModel } from '../models/Application'
 import { GpaRecordModel, type GpaRecord } from '../models/GpaRecord'
 import { resolveSubmissionRound } from './cycleRounds'
+import { selectDpscdSnapshot } from './dpscdSnapshots'
 import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
@@ -144,18 +145,19 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
       const stages = stagesByApplication.get(String(submission.applicationId)) || []
       const round = resolveSubmissionRound(submission, roundsByApplication.get(String(submission.applicationId)) || [])
       const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
+      const storedGpa = gpaBySubmission.get(submission.submissionId)
+      const gpaRecord = storedGpa ? { ...storedGpa, dpscd: selectDpscdSnapshot(storedGpa.dpscd, submission, roundsByApplication.get(String(submission.applicationId)) || []) } : undefined
       const completion = buildReviewCompletionForSubmission(
         submission as Record<string, any>,
         stages,
         submissionReviews,
-        gpaBySubmission.get(submission.submissionId) as Record<string, any> | undefined,
+        gpaRecord as Record<string, any> | undefined,
         round.key
       )
       result.processed += 1
       result.diagnostics += completion.diagnostics.length
       if (!options.dryRun) {
         const scoring = scoringByApplication.get(String(submission.applicationId)) || normalizeScoringConfig(undefined)
-        const gpaRecord = gpaBySubmission.get(submission.submissionId)
         const partialReview = latestCompletedReview(
           submissionReviews.filter(review => /partial\s*gpa|gpa\s*partial/i.test(review.stageName || '') || Object.hasOwn(review.mappedData || {}, 'PartialGPA'))
         )
@@ -167,13 +169,23 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
         }, scoring.multiplierMap)
         const gpaBonusEligible = Boolean(gpaBonusLabelId) && (submission.labelIds || []).includes(gpaBonusLabelId!)
         const gpaBonus = gpaBonusEligible ? scoring.gpaBonusPoints : 0
-        const gpaScore = computeGpaScore(completion.resolvedGpa.cumulativeGpa, gpaMultiplier, gpaBonus, scoring.gpaTable)
+        const gpaScore = completion.resolvedGpa.cumulativeGpa == null ? null : computeGpaScore(completion.resolvedGpa.cumulativeGpa, gpaMultiplier, gpaBonus, scoring.gpaTable)
         gpaOperations.push({
           updateOne: {
             filter: { cycleId: options.cycleId, submissionId: submission.submissionId },
             update: {
               $setOnInsert: { cycleId: options.cycleId, submissionId: submission.submissionId },
               $set: {
+                ...(gpaRecord?.dpscd?.snapshots
+                  ? {
+                      'dpscd.cumulativeGpa': gpaRecord.dpscd.cumulativeGpa ?? null,
+                      'dpscd.quartersAvailable': gpaRecord.dpscd.quartersAvailable ?? null,
+                      'dpscd.gpaStatus': gpaRecord.dpscd.gpaStatus ?? null,
+                      'dpscd.selectedSnapshot': gpaRecord.dpscd.selectedSnapshot ?? null,
+                      'dpscd.selectedRound': gpaRecord.dpscd.selectedRound ?? null,
+                      'dpscd.selectionIssue': gpaRecord.dpscd.selectionIssue ?? null
+                    }
+                  : {}),
                 resolvedCumulativeGpa: completion.resolvedGpa.cumulativeGpa,
                 resolvedSource: completion.resolvedGpa.source,
                 gpaMultiplier,

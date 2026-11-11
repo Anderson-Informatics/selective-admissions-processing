@@ -2,7 +2,9 @@ import JSON5 from 'json5'
 import * as XLSX from 'xlsx'
 import type { AnyBulkWriteOperation } from 'mongoose'
 import type { JobProgress } from '../models/Job'
-import { GpaRecordModel, type GpaRecord } from '../models/GpaRecord'
+import { GpaRecordModel, type GpaRecord, type DpscdGpa } from '../models/GpaRecord'
+import { ApplicationModel } from '../models/Application'
+import { selectDpscdSnapshot } from './dpscdSnapshots'
 import { GpaUploadModel } from '../models/GpaUpload'
 import { MetadataModel } from '../models/Metadata'
 import { SubmissionModel } from '../models/Submission'
@@ -137,6 +139,7 @@ function toDate(value: unknown): Date | undefined {
 }
 
 interface NormalizedDpscdRecord {
+  snapshots?: DpscdGpa['snapshots']
   submissionId?: string
   submissionIdInt?: number
   studentNumber?: number
@@ -158,7 +161,26 @@ interface NormalizedDpscdRecord {
 export function normalizeDpscdRecord(raw: Record<string, unknown>): NormalizedDpscdRecord {
   const out: NormalizedDpscdRecord = { extra: {} }
   for (const [key, value] of Object.entries(raw || {})) {
-    const field = DPSCD_FIELD_MAP[normalizeKey(key)]
+    const normalized = normalizeKey(key)
+    const snapshotField = /^(gpa|gpastatus|quartersavailable|quartersgr[678])(r1|all)$/.exec(normalized)
+    if (snapshotField) {
+      const name = snapshotField[1]!
+      const suffix = snapshotField[2] as 'r1' | 'all'
+      const snapshot = (out.snapshots ??= {})[suffix] ??= {}
+      if (name === 'gpastatus') snapshot.gpaStatus = value == null ? undefined : String(value).trim()
+      else if (name === 'gpa') {
+        const gpa = toFloat(value)
+        if (value != null && value !== '' && (gpa == null || gpa < 0 || gpa > 4.3)) throw new Error(`${key}: GPA must be between 0 and 4.3`)
+        snapshot.cumulativeGpa = gpa
+      } else {
+        const quarters = toFloat(value)
+        if (value != null && value !== '' && (quarters == null || !Number.isInteger(quarters) || quarters < 0)) throw new Error(`${key}: quarters must be a nonnegative integer`)
+        if (name === 'quartersavailable') snapshot.quartersAvailable = quarters
+        else if (quarters != null) (snapshot.quartersByGrade ??= {})[name.slice(-1)] = quarters
+      }
+      continue
+    }
+    const field = DPSCD_FIELD_MAP[normalized]
     if (field === 'submissionId') {
       out.submissionId = value == null ? undefined : String(value).trim() || undefined
     } else if (field && INT_FIELD_KEYS.has(field)) {
@@ -178,15 +200,23 @@ export function normalizeDpscdRecord(raw: Record<string, unknown>): NormalizedDp
   return out
 }
 
+interface SubmissionEntry {
+  submissionId: string
+  submissionIdInt?: number
+  studentNumber: string
+  applicationId: string
+  completedAt?: Date
+}
+
 interface SubmissionLookup {
-  bySubmissionId: Map<string, { submissionId: string, submissionIdInt?: number, studentNumber: string }>
-  bySubmissionIdInt: Map<number, { submissionId: string, submissionIdInt?: number, studentNumber: string }>
-  byStudentNumber: Map<string, { submissionId: string, submissionIdInt?: number, studentNumber: string }>
+  bySubmissionId: Map<string, SubmissionEntry>
+  bySubmissionIdInt: Map<number, SubmissionEntry>
+  byStudentNumber: Map<string, SubmissionEntry[]>
 }
 
 async function loadSubmissionLookup(cycleId: string): Promise<SubmissionLookup> {
   const submissions = await SubmissionModel.find({ cycleId })
-    .select('submissionId submissionIdInt mappedFields.StudentNumber')
+    .select('submissionId submissionIdInt mappedFields.StudentNumber applicationId completedAt')
     .lean()
   const lookup: SubmissionLookup = {
     bySubmissionId: new Map(),
@@ -197,16 +227,26 @@ async function loadSubmissionLookup(cycleId: string): Promise<SubmissionLookup> 
     const entry = {
       submissionId: sub.submissionId,
       submissionIdInt: sub.submissionIdInt,
+      applicationId: String(sub.applicationId),
+      completedAt: sub.completedAt,
       studentNumber: String((sub.mappedFields as Record<string, unknown> | undefined)?.StudentNumber ?? '').trim()
     }
     lookup.bySubmissionId.set(sub.submissionId, entry)
     if (sub.submissionIdInt != null) lookup.bySubmissionIdInt.set(sub.submissionIdInt, entry)
-    if (entry.studentNumber) lookup.byStudentNumber.set(entry.studentNumber, entry)
+    if (entry.studentNumber) {
+      const matches = lookup.byStudentNumber.get(entry.studentNumber) || []
+      matches.push(entry)
+      lookup.byStudentNumber.set(entry.studentNumber, matches)
+    }
   }
   return lookup
 }
 
 export interface DpscdImportResult {
+  dryRun?: boolean
+  matchedSubmissions?: number
+  previewTruncated?: boolean
+  preview?: Array<{ submissionId: string, round?: string, snapshot?: string, cumulativeGpa?: number, quartersAvailable?: number, issue?: string }>
   processed: number
   matched: number
   inserted: number
@@ -219,17 +259,22 @@ export interface DpscdImportResult {
 export async function importDpscdGpaRecords(
   uploadId: string,
   jobId: string,
-  setProgress: ProgressFn
+  setProgress: ProgressFn,
+  dryRun = false
 ): Promise<DpscdImportResult> {
   const upload = await GpaUploadModel.findOne({ _id: uploadId, source: 'dpscd', status: 'importing' })
   if (!upload) throw new Error('Staged DPSCD GPA import is unavailable')
 
   const records = upload.records || []
-  const result: DpscdImportResult = { processed: 0, matched: 0, inserted: 0, updated: 0, unmatched: 0, warnings: [], errors: [] }
+  const result: DpscdImportResult = { ...(dryRun ? { dryRun: true, preview: [] } : {}), processed: 0, matched: 0, inserted: 0, updated: 0, unmatched: 0, warnings: [], errors: [] }
 
   try {
     await setProgress({ phase: 'matching', total: records.length, processed: 0, percent: 0, message: `Normalizing ${records.length} DPSCD records` })
     const lookup = await loadSubmissionLookup(upload.cycleId)
+    const hasSnapshots = records.some(raw => raw && Object.keys(raw).some(key => /^(gpa|gpastatus|quartersavailable|quartersgr[678])(r1|all)$/.test(normalizeKey(key))))
+    const applications = hasSnapshots ? await ApplicationModel.find({ cycleId: upload.cycleId }).select('rounds').lean() : []
+    const roundsByApplication = new Map(applications.map(application => [String(application._id), application.rounds || []]))
+    const seenStudents = new Set<number>()
     const importedAt = new Date()
     const operations: AnyBulkWriteOperation<GpaRecord>[] = []
 
@@ -239,18 +284,39 @@ export async function importDpscdGpaRecords(
         result.errors.push(`Record ${i + 1}: not an object`)
         continue
       }
-      const record = normalizeDpscdRecord(raw)
-
-      let match
-      if (record.submissionId && lookup.bySubmissionId.has(record.submissionId)) {
-        match = lookup.bySubmissionId.get(record.submissionId)
-      } else if (record.submissionIdInt != null && lookup.bySubmissionIdInt.has(record.submissionIdInt)) {
-        match = lookup.bySubmissionIdInt.get(record.submissionIdInt)
-      } else if (record.studentNumber != null && lookup.byStudentNumber.has(String(record.studentNumber))) {
-        match = lookup.byStudentNumber.get(String(record.studentNumber))
+      let record: NormalizedDpscdRecord
+      try {
+        record = normalizeDpscdRecord(raw)
+      } catch (error) {
+        result.errors.push(`Record ${i + 1}: ${error instanceof Error ? error.message : String(error)}`)
+        continue
+      }
+      if (record.snapshots && record.studentNumber != null) {
+        if (seenStudents.has(record.studentNumber)) {
+          result.errors.push(`Record ${i + 1}: duplicate studentNumber ${record.studentNumber}`)
+          continue
+        }
+        seenStudents.add(record.studentNumber)
+      }
+      for (const [suffix, snapshot] of Object.entries(record.snapshots || {})) {
+        const complete = snapshot.cumulativeGpa != null && snapshot.quartersAvailable != null && snapshot.quartersAvailable >= 6
+        if (snapshot.gpaStatus && (snapshot.gpaStatus.toLowerCase() === 'complete') !== complete) result.warnings.push(`Record ${i + 1}: ${suffix} source status disagrees with GPA/quarter completeness`)
+        const grades = snapshot.quartersByGrade
+        if (grades && Object.keys(grades).length === 3 && snapshot.quartersAvailable !== Object.values(grades).reduce((sum, quarters) => sum + quarters, 0)) {
+          result.warnings.push(`Record ${i + 1}: ${suffix} grade quarters do not sum to quartersAvailable`)
+        }
       }
 
-      if (!match) {
+      let matches: SubmissionEntry[] = []
+      if (record.submissionId && lookup.bySubmissionId.has(record.submissionId)) {
+        matches = [lookup.bySubmissionId.get(record.submissionId)!]
+      } else if (record.submissionIdInt != null && lookup.bySubmissionIdInt.has(record.submissionIdInt)) {
+        matches = [lookup.bySubmissionIdInt.get(record.submissionIdInt)!]
+      } else if (record.studentNumber != null) {
+        matches = lookup.byStudentNumber.get(String(record.studentNumber)) || []
+      }
+
+      if (!matches.length) {
         result.unmatched += 1
         if (result.errors.length < MAX_ISSUE_MESSAGES) {
           result.errors.push(`Record ${i + 1}: no submission in cycle matched submissionId=${record.submissionId || '—'}, submissionIdInt=${record.submissionIdInt ?? '—'}, studentNumber=${record.studentNumber ?? '—'}`)
@@ -259,61 +325,74 @@ export async function importDpscdGpaRecords(
       }
 
       result.matched += 1
+      result.matchedSubmissions = (result.matchedSubmissions || 0) + matches.length
+      if (dryRun && result.matchedSubmissions > MAX_ISSUE_MESSAGES) result.previewTruncated = true
 
-      if (record.studentNumber != null && match.studentNumber && String(record.studentNumber) !== match.studentNumber) {
-        if (result.warnings.length < MAX_ISSUE_MESSAGES) {
-          result.warnings.push(`Record ${i + 1} (${match.submissionId}): student number ${record.studentNumber} differs from application value ${match.studentNumber}`)
+      for (const match of matches) {
+        const selected = selectDpscdSnapshot(record, match, roundsByApplication.get(match.applicationId) || [])!
+        if (result.preview && result.preview.length < MAX_ISSUE_MESSAGES) result.preview.push({ submissionId: match.submissionId, round: selected.selectedRound, snapshot: selected.selectedSnapshot, cumulativeGpa: selected.cumulativeGpa, quartersAvailable: selected.quartersAvailable, issue: selected.selectionIssue })
+        if (selected.selectionIssue) result.warnings.push(`Record ${i + 1} (${match.submissionId}): ${selected.selectionIssue}`)
+        if (record.studentNumber != null && match.studentNumber && String(record.studentNumber) !== match.studentNumber) {
+          if (result.warnings.length < MAX_ISSUE_MESSAGES) {
+            result.warnings.push(`Record ${i + 1} (${match.submissionId}): student number ${record.studentNumber} differs from application value ${match.studentNumber}`)
+          }
         }
-      }
-      if (record.cumulativeGpa != null && (record.cumulativeGpa < 0 || record.cumulativeGpa > 5)) {
-        if (result.warnings.length < MAX_ISSUE_MESSAGES) {
-          result.warnings.push(`Record ${i + 1} (${match.submissionId}): cumulativeGpa ${record.cumulativeGpa} outside expected 0–5 range`)
+        if (record.cumulativeGpa != null && (record.cumulativeGpa < 0 || record.cumulativeGpa > 5)) {
+          if (result.warnings.length < MAX_ISSUE_MESSAGES) {
+            result.warnings.push(`Record ${i + 1} (${match.submissionId}): cumulativeGpa ${record.cumulativeGpa} outside expected 0–5 range`)
+          }
         }
-      }
-      if (record.quartersAvailable != null && record.quartersAvailable < 0) {
-        if (result.warnings.length < MAX_ISSUE_MESSAGES) {
-          result.warnings.push(`Record ${i + 1} (${match.submissionId}): negative quartersAvailable ${record.quartersAvailable}`)
+        if (record.quartersAvailable != null && record.quartersAvailable < 0) {
+          if (result.warnings.length < MAX_ISSUE_MESSAGES) {
+            result.warnings.push(`Record ${i + 1} (${match.submissionId}): negative quartersAvailable ${record.quartersAvailable}`)
+          }
         }
-      }
 
-      operations.push({
-        updateOne: {
-          filter: { cycleId: upload.cycleId, submissionId: match.submissionId },
-          update: {
-            $set: {
-              submissionIdInt: record.submissionIdInt ?? match.submissionIdInt,
-              dpscd: {
-                studentNumber: record.studentNumber,
-                quartersAvailable: record.quartersAvailable,
-                cumulativeGpa: record.cumulativeGpa,
-                gpaStatus: record.gpaStatus,
-                yearEnd: record.yearEnd,
-                gradeLevel: record.gradeLevel,
-                middleSchoolNumber: record.middleSchoolNumber,
-                projectName: record.projectName,
-                submissionStatus: record.submissionStatus,
-                stageName: record.stageName,
-                acceptingHighSchool: record.acceptingHighSchool,
-                acceptingHighSchoolNumber: record.acceptingHighSchoolNumber,
-                completedAt: record.completedAt,
-                importJobId: jobId,
-                importedAt,
-                extra: record.extra
-              }
+        operations.push({
+          updateOne: {
+            filter: { cycleId: upload.cycleId, submissionId: match.submissionId },
+            update: {
+              $set: {
+                submissionIdInt: record.submissionIdInt ?? match.submissionIdInt,
+                dpscd: {
+                  studentNumber: record.studentNumber,
+                  snapshots: record.snapshots,
+                  selectedSnapshot: selected.selectedSnapshot,
+                  selectedRound: selected.selectedRound,
+                  selectionIssue: selected.selectionIssue,
+                  quartersAvailable: selected.quartersAvailable,
+                  cumulativeGpa: selected.cumulativeGpa,
+                  gpaStatus: selected.gpaStatus,
+                  yearEnd: record.yearEnd,
+                  gradeLevel: record.gradeLevel,
+                  middleSchoolNumber: record.middleSchoolNumber,
+                  projectName: record.projectName,
+                  submissionStatus: record.submissionStatus,
+                  stageName: record.stageName,
+                  acceptingHighSchool: record.acceptingHighSchool,
+                  acceptingHighSchoolNumber: record.acceptingHighSchoolNumber,
+                  completedAt: record.completedAt,
+                  importJobId: jobId,
+                  importedAt,
+                  extra: record.extra
+                }
+              },
+              $setOnInsert: { cycleId: upload.cycleId, submissionId: match.submissionId }
             },
-            $setOnInsert: { cycleId: upload.cycleId, submissionId: match.submissionId }
-          },
-          upsert: true
-        }
-      })
+            upsert: true
+          }
+        })
+      }
     }
 
-    await setProgress({ phase: 'writing', total: operations.length, processed: 0, message: `Writing ${operations.length} GPA records` })
+    await setProgress({ phase: dryRun ? 'previewing' : 'writing', total: operations.length, processed: 0, message: `${dryRun ? 'Previewing' : 'Writing'} ${operations.length} GPA records` })
     for (let i = 0; i < operations.length; i += 500) {
       const batch = operations.slice(i, i + 500)
-      const written = await GpaRecordModel.bulkWrite(batch)
-      result.inserted += written.upsertedCount
-      result.updated += written.modifiedCount
+      if (!dryRun) {
+        const written = await GpaRecordModel.bulkWrite(batch)
+        result.inserted += written.upsertedCount
+        result.updated += written.modifiedCount
+      }
       await setProgress({ processed: Math.min(i + 500, operations.length) })
     }
     result.processed = records.length

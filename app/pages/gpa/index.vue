@@ -15,6 +15,9 @@ interface GpaRecordItem {
   submissionName: string
   hasOptInLabel: boolean
   dpscd?: {
+    selectedSnapshot?: 'r1' | 'all'
+    selectedRound?: string
+    selectionIssue?: string
     studentNumber?: number
     quartersAvailable?: number
     cumulativeGpa?: number
@@ -409,6 +412,18 @@ function formatDate(value?: string) {
       </template>
       <template #dpscdGpa-cell="{ row }">
         {{ row.original.dpscd?.cumulativeGpa ?? '—' }}
+        <div
+          v-if="row.original.dpscd?.selectedSnapshot"
+          class="text-xs text-muted"
+        >
+          {{ row.original.dpscd.selectedRound }} · {{ row.original.dpscd.selectedSnapshot }}
+        </div>
+        <div
+          v-if="row.original.dpscd?.selectionIssue"
+          class="text-xs text-error"
+        >
+          {{ row.original.dpscd.selectionIssue }}
+        </div>
       </template>
       <template #quarters-cell="{ row }">
         {{ row.original.dpscd?.quartersAvailable ?? '—' }}

@@ -260,9 +260,8 @@ Document for staff reference:
 - [ ] Submittable: staff accounts use district SSO/MFA; API key scoped to the
   minimum project access and stored only as `NUXT_SUBMITTABLE_API_KEY`.
 - [ ] Secrets rotation schedule documented (quarterly or on staff departure).
-- [ ] `NUXT_BOOTSTRAP_ADMIN_*` removed from the environment after first
-  successful admin creation (it's only needed when the users collection is
-  empty — leaving a plaintext admin password in env is a standing risk).
+- [x] `NUXT_BOOTSTRAP_ADMIN_*` — bootstrap seeder removed from the codebase;
+  delete the vars from Netlify env if still present.
 
 ---
 

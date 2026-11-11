@@ -354,8 +354,8 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
   },
 
   dpscd_gpa_import: async (job, { setProgress }) => {
-    const result = await importDpscdGpaRecords(String(job.payload.uploadId), String(job._id), setProgress)
-    await queueReviewCompletionRefresh(job)
+    const result = await importDpscdGpaRecords(String(job.payload.uploadId), String(job._id), setProgress, job.payload.dryRun === true)
+    if (job.payload.dryRun !== true) await queueReviewCompletionRefresh(job)
     return { result }
   },
 

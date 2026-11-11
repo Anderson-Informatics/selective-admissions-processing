@@ -86,6 +86,25 @@ describe('compileApplicationScores', () => {
     expect(record.essayScored).toBe(false)
   })
 
+  it('reselects snapshots during scoring and clears stale partial scores until a review is completed', async () => {
+    vi.mocked(ApplicationModel.find).mockReturnValue(lean([{ _id: 'a1', rounds: [
+      { key: 'first', order: 1, active: true, startDate: new Date('2026-01-01'), endDate: new Date('2026-02-01') },
+      { key: 'second', order: 2, active: true, startDate: new Date('2026-02-02'), endDate: new Date('2026-03-01') }
+    ] }]) as never)
+    const snapshots = { r1: { cumulativeGpa: 3.5, quartersAvailable: 5 }, all: { cumulativeGpa: 3.95, quartersAvailable: 9 } }
+    const data = {
+      submissions: [{ submissionId: 'early', completedAt: new Date('2026-01-15') }, { submissionId: 'later', completedAt: new Date('2026-02-15') }],
+      gpa: ['early', 'later'].map(submissionId => ({ submissionId, resolvedCumulativeGpa: 4, resolvedSource: 'dpscd', dpscd: { cumulativeGpa: 4, quartersAvailable: 9, snapshots } }))
+    }
+    mockData(data)
+    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: minimalConfig })
+    expect(output.records[0]!.record).toMatchObject({ gpaRecorded: false, gpa: { raw: null, source: null, score: null } })
+    expect(output.records[1]!.record).toMatchObject({ gpaRecorded: true, gpa: { raw: 3.95, source: 'dpscd', multiplier: 1, score: 30 } })
+    mockData({ ...data, reviews: [{ submissionId: 'early', stageId: 'partial', stageName: 'Partial GPA', status: 'completed', mappedData: { PartialGPA: 3.95, Semesters: 'One semester (or 2-3 quarters)' } }] })
+    const reviewed = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: minimalConfig })
+    expect(reviewed.records[0]!.record).toMatchObject({ gpaRecorded: true, gpa: { raw: 3.95, source: 'partial', multiplier: 0.4, score: 12 } })
+  })
+
   it('applies the Semesters multiplier for partial GPA', async () => {
     mockData({
       submissions: [{ submissionId: 'sub-1', labelIds: [] }],

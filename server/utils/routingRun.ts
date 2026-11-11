@@ -10,6 +10,7 @@ import { buildListOptionLabels } from './mergeFields'
 import { normalizeRoutingConfig } from './routingConfig'
 import { applicantName, routingPreviewFilter } from './routingPreview'
 import { resolveSubmissionRound } from './cycleRounds'
+import { selectDpscdSnapshot } from './dpscdSnapshots'
 import { computeReviewCompletion, resolveGpa, routeSubmission, type ReviewCompletionResult, type ResolvedGpa, type RoutingContext, type RoutingDecision, type RoutingStage } from './routingEvaluator'
 
 export interface RoutingEvaluationOptions {
@@ -133,11 +134,13 @@ export async function evaluateCycleSubmissions(options: RoutingEvaluationOptions
     const routingStages = stagesByApplication.get(String(submission.applicationId)) || []
     const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
     const round = resolveSubmissionRound(submission, roundsByApplication.get(String(submission.applicationId)) || [])
+    const storedGpa = gpaBySubmission.get(submission.submissionId)
+    const selectedGpa = storedGpa ? { ...storedGpa, dpscd: selectDpscdSnapshot(storedGpa.dpscd, submission, roundsByApplication.get(String(submission.applicationId)) || []) } : undefined
     const context = buildRoutingContext(
       submission,
       routingStages,
       submissionReviews,
-      gpaBySubmission.get(submission.submissionId) as RoutingContext['gpa'],
+      selectedGpa as RoutingContext['gpa'],
       round.key
     )
     const completion = computeReviewCompletion(routingStages, context)

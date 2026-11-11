@@ -4,6 +4,7 @@ import { GpaRecordModel } from '../models/GpaRecord'
 import { GpaUploadModel } from '../models/GpaUpload'
 import { SubmissionModel } from '../models/Submission'
 import { MetadataModel } from '../models/Metadata'
+import { ApplicationModel } from '../models/Application'
 import { commitOptInGpaUpload, importDpscdGpaRecords, normalizeDpscdRecord, parseDpscdBody, parseOptInXlsx, previewOptInGpaUpload } from './gpa'
 
 function optInWorkbook() {
@@ -71,6 +72,49 @@ describe('GPA ingestion', () => {
       expect(operation.updateOne.update.$set.dpscd).toMatchObject({ importJobId: 'job-1' })
     }
     expect(GpaUploadModel.findByIdAndUpdate).toHaveBeenCalledWith('upload-1', { $set: expect.objectContaining({ status: 'completed', records: [] }) })
+  })
+
+  it('does not add empty snapshots to legacy records and persists both new snapshots', () => {
+    const legacy = new GpaRecordModel({ cycleId: 'c1', submissionId: 's1', dpscd: { cumulativeGpa: 3.5, quartersAvailable: 6 } }).toObject()
+    expect(legacy.dpscd?.snapshots).toBeUndefined()
+    const current = new GpaRecordModel({ cycleId: 'c1', submissionId: 's1', dpscd: normalizeDpscdRecord({ gpa_r1: 3.5, quarters_available_r1: 5, gpa_all: 3.8, quarters_available_all: 9 }) }).toObject()
+    expect(current.dpscd?.snapshots).toMatchObject({ r1: { cumulativeGpa: 3.5 }, all: { quartersAvailable: 9 } })
+  })
+
+  it('validates and normalizes the new snapshot fields', () => {
+    expect(normalizeDpscdRecord({ STUDENT_NUMBER: 12345, gpa_r1: '3.5', quarters_available_r1: 5, quarters_gr6_r1: 4, quarters_gr7_r1: 1, quarters_gr8_r1: 0, gpa_status_r1: 'Incomplete', gpa_all: 3.8, quarters_available_all: 9 })).toMatchObject({ studentNumber: 12345, snapshots: { r1: { cumulativeGpa: 3.5, quartersAvailable: 5, quartersByGrade: { 6: 4, 7: 1, 8: 0 }, gpaStatus: 'Incomplete' }, all: { cumulativeGpa: 3.8, quartersAvailable: 9 } } })
+    expect(() => normalizeDpscdRecord({ quarters_available_r1: 1.5 })).toThrow('nonnegative integer')
+    expect(() => normalizeDpscdRecord({ gpa_all: 9 })).toThrow('between 0 and 4.3')
+  })
+
+  it('imports both snapshots into every matching submission and previews without GPA writes', async () => {
+    vi.mocked(GpaUploadModel.findOne).mockResolvedValue({ _id: 'upload-1', cycleId: 'cycle-1', records: [{ STUDENT_NUMBER: 12345, gpa_r1: 3.5, quarters_available_r1: 5, gpa_all: 3.8, quarters_available_all: 9 }] } as never)
+    vi.mocked(SubmissionModel.find).mockReturnValue({ select: () => ({ lean: async () => [
+      { submissionId: 'early-sub', applicationId: 'a1', completedAt: new Date('2026-01-15'), mappedFields: { StudentNumber: '12345' } },
+      { submissionId: 'later-sub', applicationId: 'a2', completedAt: new Date('2026-01-15'), mappedFields: { StudentNumber: '12345' } }
+    ] }) } as never)
+    vi.spyOn(ApplicationModel, 'find').mockReturnValue({ select: () => ({ lean: async () => [1, 2].map(order => ({ _id: `a${order}`, rounds: [{ key: `round-${order}`, order, active: true, startDate: new Date('2026-01-01'), endDate: new Date('2026-02-01') }] })) }) } as never)
+    const preview = await importDpscdGpaRecords('upload-1', 'job-1', vi.fn(), true)
+    expect(preview.preview).toEqual([
+      expect.objectContaining({ submissionId: 'early-sub', snapshot: 'r1', cumulativeGpa: 3.5, quartersAvailable: 5 }),
+      expect.objectContaining({ submissionId: 'later-sub', snapshot: 'all', cumulativeGpa: 3.8, quartersAvailable: 9 })
+    ])
+    expect(GpaRecordModel.bulkWrite).not.toHaveBeenCalled()
+    await importDpscdGpaRecords('upload-1', 'job-1', vi.fn())
+    expect(vi.mocked(GpaRecordModel.bulkWrite).mock.calls[0]![0]).toHaveLength(2)
+  })
+
+  it('reports duplicate students, invalid snapshots, and quarter/status discrepancies', async () => {
+    vi.mocked(GpaUploadModel.findOne).mockResolvedValue({ _id: 'upload-1', cycleId: 'cycle-1', records: [
+      { STUDENT_NUMBER: 12345, gpa_r1: 3.5, quarters_available_r1: 5, quarters_gr6_r1: 4, quarters_gr7_r1: 4, quarters_gr8_r1: 0, gpa_status_r1: 'Complete' },
+      { STUDENT_NUMBER: 12345, gpa_r1: 3.6 },
+      { STUDENT_NUMBER: 11111, gpa_all: 9 }
+    ] } as never)
+    vi.spyOn(ApplicationModel, 'find').mockReturnValue({ select: () => ({ lean: async () => [] }) } as never)
+    const result = await importDpscdGpaRecords('upload-1', 'job-1', vi.fn(), true)
+    expect(result.matched).toBe(1)
+    expect(result.errors).toEqual(expect.arrayContaining([expect.stringContaining('duplicate studentNumber'), expect.stringContaining('GPA must be between')]))
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('do not sum'), expect.stringContaining('source status disagrees')]))
   })
 
   it('reuses upsert keys on repeat imports', async () => {

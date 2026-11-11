@@ -14,7 +14,9 @@ import {
   type GpaTableBand,
   type MultiplierMap
 } from './gpaScoring'
-import type { RoutingReview } from './routingEvaluator'
+import { resolveGpa, type RoutingReview } from './routingEvaluator'
+import { selectDpscdSnapshot } from './dpscdSnapshots'
+import type { CycleRoundInput } from './cycleRounds'
 
 // ---------------------------------------------------------------------------
 // Score compilation
@@ -191,6 +193,11 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     reviewsBySubmission.set(review.submissionId, list)
   }
 
+  let rounds: CycleRoundInput[] = []
+  if (gpaRecords.some(record => record.dpscd?.snapshots)) {
+    const applications = await ApplicationModel.find({ _id: applicationId }).lean()
+    rounds = applications[0]?.rounds || []
+  }
   const essayStageIds = new Set(essayStages.map(stage => stage.stageId))
   const bonusLabelId = input.gpaBonusLabelId ?? await resolveGpaBonusLabelId()
 
@@ -208,17 +215,27 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
 
   for (const submission of submissions) {
     const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
-    const gpaRecord = gpaBySubmission.get(submission.submissionId)
+    const storedGpa = gpaBySubmission.get(submission.submissionId)
+    const gpaRecord = storedGpa ? { ...storedGpa, dpscd: selectDpscdSnapshot(storedGpa.dpscd, submission, rounds) } : undefined
+    const mustResolve = Boolean(gpaRecord?.dpscd?.snapshots) || (typeof gpaRecord?.dpscd?.quartersAvailable === 'number' && gpaRecord.dpscd.quartersAvailable < 6)
+    const resolved = mustResolve
+      ? resolveGpa({
+          submission: { submissionId: submission.submissionId, mappedFields: submission.mappedFields || {}, isMapped: submission.isMapped === true },
+          reviews: submissionReviews,
+          gpa: gpaRecord
+        })
+      : undefined
 
     const hspt = has('exam') ? hsptBySubmission.get(submission.submissionId) : undefined
     const hsptTaken = Boolean(hspt)
 
-    const resolvedGpa = gpaRecord?.resolvedCumulativeGpa
+    const resolvedGpa = resolved ? resolved.cumulativeGpa : gpaRecord?.resolvedCumulativeGpa
+    const resolvedSource = resolved ? resolved.source : gpaRecord?.resolvedSource
     const gpaRecorded = toNumber(resolvedGpa) != null
     const partialReview = has('gpa') ? latestCompletedReview(submissionReviews.filter(isPartialGpaReview)) : undefined
     const multiplier = has('gpa')
       ? deriveGpaMultiplier({
-          resolvedSource: gpaRecord?.resolvedSource,
+          resolvedSource,
           hasResolvedGpa: gpaRecorded,
           semesters: partialReview?.mappedData?.Semesters,
           quartersAvailable: gpaRecord?.dpscd?.quartersAvailable
@@ -226,7 +243,7 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
       : 0
     const gpaBonusEligible = has('gpa') && Boolean(bonusLabelId) && (submission.labelIds || []).includes(bonusLabelId!)
     const gpaBonus = gpaBonusEligible ? config.gpaBonusPoints : 0
-    const gpaScore = has('gpa') ? computeGpaScore(toNumber(resolvedGpa), multiplier, gpaBonus, config.gpaTable) : 0
+    const gpaScore = has('gpa') ? (gpaRecorded ? computeGpaScore(toNumber(resolvedGpa), multiplier, gpaBonus, config.gpaTable) : null) : 0
 
     const essayReviews = has('essay') ? submissionReviews.filter(review => essayStageIds.has(review.stageId) && isCompletedReview(review)) : []
     const essayScores = essayReviews.map(review => toNumber(review.score)).filter((score): score is number => score != null)
@@ -243,7 +260,7 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     const ready = (!has('exam') || hsptTaken) && (!has('gpa') || gpaRecorded) && essayScored
     const gated = config.requireComplete && !ready
     const examScore = hspt?.overall ?? 0
-    const base = gated ? 0 : round2(examScore + gpaScore + (essayScore ?? 0) + dpscdBonus)
+    const base = gated ? 0 : round2(examScore + (gpaScore ?? 0) + (essayScore ?? 0) + dpscdBonus)
     const totalAppScore = base
     const totalMarygroveScore = gated ? 0 : round2(base + marygroveBonus)
 
@@ -264,7 +281,7 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
         essayScored: has('essay') ? essayScored : false,
         gpa: {
           raw: toNumber(resolvedGpa),
-          source: gpaRecord?.resolvedSource ?? null,
+          source: resolvedSource ?? null,
           multiplier,
           bonus: gpaBonus,
           score: gpaScore
@@ -301,6 +318,7 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
           update: {
             $setOnInsert: { cycleId, submissionId: submission.submissionId },
             $set: {
+              ...(resolved ? { resolvedCumulativeGpa: resolved.cumulativeGpa, resolvedSource: resolved.source } : {}),
               gpaMultiplier: multiplier,
               gpaBonusEligible,
               gpaBonus,

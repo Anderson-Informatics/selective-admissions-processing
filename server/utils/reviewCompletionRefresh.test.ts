@@ -90,6 +90,18 @@ describe('review completion GPA resolution', () => {
     expect(SubmissionModel.bulkWrite).not.toHaveBeenCalled()
   })
 
+  it('refreshes selected snapshot fields and clears cached scores for unresolved rounds', async () => {
+    gpaRecords = [{ submissionId: 'sub-1', resolvedCumulativeGpa: 4, gpaScore: 30, dpscd: { cumulativeGpa: 4, quartersAvailable: 9, snapshots: { r1: { cumulativeGpa: 3.5, quartersAvailable: 5 }, all: { cumulativeGpa: 4, quartersAvailable: 9 } } } }]
+    await refreshReviewCompletion({ cycleId: 'cycle-1' })
+    expect(vi.mocked(GpaRecordModel.bulkWrite).mock.lastCall?.[0]?.[0]).toMatchObject({
+      updateOne: { update: { $set: {
+        'resolvedCumulativeGpa': null, 'resolvedSource': null, 'gpaScore': null,
+        'dpscd.cumulativeGpa': null, 'dpscd.quartersAvailable': null,
+        'dpscd.selectionIssue': expect.stringContaining('missing_submission_date')
+      } } }
+    })
+  })
+
   it('preserves imported GPA fields when updating the resolved value', async () => {
     gpaRecords = [{
       submissionId: 'sub-1',

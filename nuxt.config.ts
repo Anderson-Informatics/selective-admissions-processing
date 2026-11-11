@@ -21,8 +21,6 @@ export default defineNuxtConfig({
     registrationApiKey: '',
     registrationBaseUrl: 'https://ehs-registration-v2.netlify.app',
     authSecret: '',
-    bootstrapAdminEmail: '',
-    bootstrapAdminPassword: '',
     dataKey: '',
     dataSecret: '',
     msalTenantId: '',

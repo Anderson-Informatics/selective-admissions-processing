@@ -1,6 +1,17 @@
 import mongoose, { Schema } from 'mongoose'
 
+export interface DpscdSnapshot {
+  cumulativeGpa?: number
+  quartersAvailable?: number
+  gpaStatus?: string
+  quartersByGrade?: Record<string, number>
+}
+
 export interface DpscdGpa {
+  snapshots?: { r1?: DpscdSnapshot, all?: DpscdSnapshot }
+  selectedSnapshot?: 'r1' | 'all'
+  selectionIssue?: string
+  selectedRound?: string
   studentNumber?: number
   quartersAvailable?: number
   cumulativeGpa?: number
@@ -50,11 +61,22 @@ export interface GpaRecord {
   updatedAt?: Date
 }
 
+const snapshotSchema = new Schema<DpscdSnapshot>({
+  cumulativeGpa: Number,
+  quartersAvailable: Number,
+  gpaStatus: String,
+  quartersByGrade: { type: Schema.Types.Mixed }
+}, { _id: false })
+
 const gpaRecordSchema = new Schema<GpaRecord>({
   cycleId: { type: String, required: true, index: true },
   submissionId: { type: String, required: true },
   submissionIdInt: { type: Number, index: true, sparse: true },
   dpscd: {
+    snapshots: { r1: snapshotSchema, all: snapshotSchema },
+    selectedSnapshot: String,
+    selectionIssue: String,
+    selectedRound: String,
     studentNumber: Number,
     quartersAvailable: Number,
     cumulativeGpa: Number,

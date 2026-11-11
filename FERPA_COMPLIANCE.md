@@ -113,10 +113,9 @@ district through Submittable and the SIS, not through this tool.
   produce identical errors with timing equalization to prevent enumeration.
 - **Self-protection.** A site admin cannot disable or demote their own
   account, preventing accidental lockout of all administration.
-- **Bootstrap.** The first site admin is seeded from
-  `NUXT_BOOTSTRAP_ADMIN_*` env vars only when the user collection is empty
-  (`server/utils/seedAdmin.ts`). **[OPEN — § 10.1: clear these vars after
-  first deploy.]**
+- **Bootstrap.** The first site admin is provisioned manually in MongoDB;
+  additional users are created via site-admin invitation links. (Resolved —
+  former `NUXT_BOOTSTRAP_ADMIN_*` env-var seeder removed.)
 - **[OPEN — needs expansion § 10.2]** Authentication is currently
   single-factor. The MSAL/Entra ID SSO path is reserved in config; when
   enabled, MFA moves to district directory controls.
@@ -187,14 +186,14 @@ emit job IDs, counts, stage names, and error messages only — never
   name/email fragments may appear in Netlify function request URLs. Options:
   accept the residual risk (single-operator log access), move search to a
   POST body, or confirm Netlify log retention is acceptable.
-- The admin-bootstrap success line logs the bootstrap admin *email* (staff
+- Invitation emails/log lines log the admin *email* (staff
   data, low sensitivity).
 
 ## 10. Items needing resolution or expansion
 
 | # | Item | Status | Recommended action |
 | --- | --- | --- | --- |
-| 10.1 | `NUXT_BOOTSTRAP_ADMIN_*` remains in env after seeding | **[OPEN — needs resolution]** | Remove both vars from Netlify env after the first site admin exists; they are only read when the users collection is empty |
+| 10.1 | `NUXT_BOOTSTRAP_ADMIN_*` remains in env after seeding | **[RESOLVED]** | Bootstrap seeder removed; delete both vars from Netlify env |
 | 10.2 | Single-factor authentication | **[OPEN — needs expansion]** | Accept interim risk documented, or implement MSAL/Entra ID SSO for MFA (config keys reserved) |
 | 10.3 | MongoDB Atlas contractual basis | **[OPEN — needs confirmation]** | Confirm the Atlas account/agreement is covered under district or contractor terms; verify encryption at rest, TLS-only, IP allowlist, MFA on the account |
 | 10.4 | Netlify under contractor's account | **[OPEN — needs resolution]** | Governance question: document district approval for the contractor-owned host, or migrate to a district-controlled Netlify team. Technical posture is acceptable (sole-operator access, no PII in logs beyond § 10.8) |

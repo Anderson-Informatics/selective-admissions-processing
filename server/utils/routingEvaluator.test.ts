@@ -79,7 +79,7 @@ describe('review completion evaluator', () => {
     expect(resolveGpa(context({ gpa: {
       dpscd: { quartersAvailable: 4, cumulativeGpa: 3.2 },
       optIn: { cumulativeGpa: 3.8, enrolledMinTerms: 'yes' }
-    } }))).toEqual({ status: 'Complete', cumulativeGpa: 3.8, source: 'optIn' })
+    } }))).toEqual({ status: 'DPSCD Partial', cumulativeGpa: null, source: null })
     expect(resolveGpa(context({ gpa: { dpscd: { quartersAvailable: 4, cumulativeGpa: 3.2 } } }))).toEqual({
       status: 'DPSCD Partial', cumulativeGpa: null, source: null
     })

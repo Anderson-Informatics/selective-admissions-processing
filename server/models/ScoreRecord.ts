@@ -12,7 +12,7 @@ export interface ScoreRecord {
     source?: string | null
     multiplier?: number
     bonus?: number
-    score?: number
+    score?: number | null
   }
   exam?: {
     reading?: number

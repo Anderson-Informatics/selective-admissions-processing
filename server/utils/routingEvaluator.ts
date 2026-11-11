@@ -23,6 +23,7 @@ export interface RoutingReview {
 
 export interface RoutingGpaRecord {
   dpscd?: {
+    selectionIssue?: string
     quartersAvailable?: number
     cumulativeGpa?: number
   }
@@ -200,7 +201,7 @@ export function resolveGpa(context: RoutingContext): ResolvedGpa {
   const optInGpa = validGpa(context.gpa?.optIn?.cumulativeGpa)
   const attendance = context.gpa?.optIn?.enrolledMinTerms?.trim().toLowerCase()
   // Only an explicit "no" blocks an otherwise valid Opt-In GPA.
-  if (optInGpa != null && attendance !== 'no') {
+  if (optInGpa != null && attendance !== 'no' && !context.gpa?.dpscd?.selectionIssue && !(typeof quarters === 'number' && quarters < 6)) {
     return { status: 'Complete', cumulativeGpa: optInGpa, source: 'optIn' }
   }
 
