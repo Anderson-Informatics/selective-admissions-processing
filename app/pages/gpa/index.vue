@@ -15,6 +15,7 @@ interface GpaRecordItem {
   submissionName: string
   hasOptInLabel: boolean
   dpscd?: {
+    snapshots?: { r1?: { cumulativeGpa?: number, quartersAvailable?: number, gpaStatus?: string }, all?: { cumulativeGpa?: number, quartersAvailable?: number, gpaStatus?: string } }
     selectedSnapshot?: 'r1' | 'all'
     selectedRound?: string
     selectionIssue?: string
@@ -37,6 +38,12 @@ interface GpaRecordItem {
     sourceFile: string
     importedAt?: string
   }
+  resolvedCumulativeGpa?: number | null
+  resolvedSource?: string | null
+  gpaMultiplier?: number | null
+  gpaBonusEligible?: boolean
+  gpaBonus?: number | null
+  gpaScore?: number | null
   updatedAt?: string
 }
 
@@ -110,11 +117,19 @@ const selectedSource = ref('all')
 const page = ref(1)
 const limit = 50
 
-watch([selectedCycleId, selectedSource], () => {
+const searchInput = ref('')
+const search = ref('')
+const sorting = ref([{ id: 'updatedAt', desc: true }])
+const expanded = ref({})
+
+function applySearch() {
+  search.value = searchInput.value.trim()
+}
+
+watch([selectedCycleId, selectedSource, search, sorting], () => {
   page.value = 1
-  refresh()
-})
-watch(page, () => refresh())
+  expanded.value = {}
+}, { deep: true })
 
 const requestFetch = useRequestFetch()
 const { data, status, refresh } = useAsyncData<{
@@ -132,10 +147,13 @@ const { data, status, refresh } = useAsyncData<{
     params.set('cycleId', selectedCycleId.value)
     params.set('page', String(page.value))
     params.set('limit', String(limit))
+    params.set('search', search.value)
+    params.set('sortBy', sorting.value[0]?.id || 'updatedAt')
+    params.set('sortOrder', sorting.value[0]?.desc === false ? 'asc' : 'desc')
     if (selectedSource.value !== 'all') params.set('source', selectedSource.value)
     return requestFetch(`/api/gpa/optin?${params.toString()}`)
   },
-  { default: () => ({ records: [], total: 0, page: 1, limit }) }
+  { default: () => ({ records: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedSource, search, sorting, page] }
 )
 
 const totalPages = computed(() => Math.ceil((data.value?.total || 0) / limit))
@@ -290,16 +308,69 @@ const previewColumns: TableColumn<PreviewRow>[] = [
   { id: 'status', header: 'Status', enableSorting: false }
 ]
 
-const recordColumns: TableColumn<GpaRecordItem>[] = [
-  { accessorKey: 'submissionIdInt', header: 'Submission ID' },
-  { id: 'student', header: 'Student', enableSorting: false },
-  { id: 'optInLabel', header: 'Opt-In', enableSorting: false },
-  { id: 'optInSchool', header: 'School', enableSorting: false },
-  { id: 'optInGpa', header: 'Opt-In GPA', enableSorting: false },
-  { id: 'enrolled', header: 'Enrolled', enableSorting: false },
-  { id: 'dpscdGpa', header: 'DPSCD GPA', enableSorting: false },
-  { id: 'quarters', header: 'Quarters', enableSorting: false }
-]
+const UButton = resolveComponent('UButton')
+
+function sortableColumn(id: string, label: string): TableColumn<GpaRecordItem> {
+  return {
+    id,
+    accessorKey: id,
+    enableSorting: true,
+    cell: ({ getValue }) => getValue() ?? '—',
+    header: ({ column }) => h(UButton, {
+      color: 'neutral',
+      variant: 'ghost',
+      label,
+      icon: column.getIsSorted() ? (column.getIsSorted() === 'asc' ? 'i-lucide-arrow-up-narrow-wide' : 'i-lucide-arrow-down-wide-narrow') : 'i-lucide-arrow-up-down',
+      class: '-mx-2.5',
+      onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+    })
+  }
+}
+
+const recordColumns = computed<TableColumn<GpaRecordItem>[]>(() => {
+  const shared: TableColumn<GpaRecordItem>[] = [
+    { id: 'expand', header: 'Details', enableSorting: false },
+    sortableColumn('submissionIdInt', 'Submission ID'),
+    sortableColumn('student', 'Student')
+  ]
+  const optIn = [
+    sortableColumn('optIn.studentName', 'Name in Uploaded File'),
+    sortableColumn('optIn.schoolName', 'Opt-In School'),
+    sortableColumn('optIn.cumulativeGpa', 'Opt-In GPA'),
+    sortableColumn('optIn.enrolledMinTerms', 'Minimum Enrollment Met?'),
+    sortableColumn('optIn.termsEnrolled', 'Terms Enrolled'),
+    sortableColumn('hasOptInLabel', 'Opt-In Label'),
+    sortableColumn('optIn.sourceFile', 'Source File'),
+    sortableColumn('optIn.importedAt', 'Imported At')
+  ]
+  const dpscd = [
+    sortableColumn('dpscd.studentNumber', 'DPSCD Student Number'),
+    sortableColumn('dpscd.cumulativeGpa', 'DPSCD GPA'),
+    sortableColumn('dpscd.quartersAvailable', 'Quarters Available'),
+    sortableColumn('dpscd.gpaStatus', 'GPA Status'),
+    sortableColumn('dpscd.selectedRound', 'Admission Round'),
+    sortableColumn('dpscd.selectedSnapshot', 'Selected Snapshot'),
+    sortableColumn('dpscd.selectionIssue', 'DPSCD Review Issues'),
+    sortableColumn('dpscd.importedAt', 'Imported At')
+  ]
+  if (selectedSource.value === 'opt_in') return [...shared, ...optIn]
+  if (selectedSource.value === 'dpscd') return [...shared, ...dpscd]
+  return [
+    ...shared,
+    { id: 'sources', header: 'Sources Present', enableSorting: false },
+    ...optIn.slice(1, 4),
+    ...dpscd.slice(1, 3),
+    { id: 'issues', header: 'Review Issues', enableSorting: false }
+  ]
+})
+
+function reviewIssues(record: GpaRecordItem) {
+  return [
+    record.dpscd?.selectionIssue,
+    record.optIn && !record.hasOptInLabel ? 'Missing Opt-In label' : '',
+    record.optIn && record.optIn.enrolledMinTerms !== 'yes' ? 'Minimum enrollment not met or unknown' : ''
+  ].filter(Boolean).join('; ') || '—'
+}
 
 function formatDate(value?: string) {
   return value ? new Date(value).toLocaleString() : '—'
@@ -364,6 +435,36 @@ function formatDate(value?: string) {
       </div>
     </UCard>
 
+    <form
+      class="flex flex-wrap items-end gap-2 mb-4"
+      @submit.prevent="applySearch"
+    >
+      <UFormField
+        label="Search GPA records"
+        class="grow"
+      >
+        <UInput
+          v-model="searchInput"
+          placeholder="Name, DPSCD student number, or integer Submission ID"
+          icon="i-lucide-search"
+          class="w-full"
+        />
+      </UFormField>
+      <UButton
+        type="submit"
+        label="Search"
+      />
+      <UButton
+        color="neutral"
+        variant="outline"
+        label="Clear"
+        @click="searchInput = ''; applySearch()"
+      />
+    </form>
+    <p class="text-sm text-muted mb-2">
+      Showing {{ data?.records.length || 0 }} of {{ data?.total || 0 }} records. Numeric searches match exact IDs.
+    </p>
+
     <div
       v-if="status === 'pending' && !data?.records.length"
       class="text-muted"
@@ -373,6 +474,10 @@ function formatDate(value?: string) {
 
     <UTable
       v-else
+      v-model:sorting="sorting"
+      v-model:expanded="expanded"
+      :sorting-options="{ manualSorting: true }"
+      :loading="status === 'pending'"
       :data="data?.records || []"
       :columns="recordColumns"
       :get-row-id="(row: GpaRecordItem) => row._id"
@@ -380,7 +485,23 @@ function formatDate(value?: string) {
       <template #student-cell="{ row }">
         {{ row.original.submissionName || row.original.optIn?.studentName || '—' }}
       </template>
-      <template #optInLabel-cell="{ row }">
+      <template #expand-cell="{ row }">
+        <UButton
+          variant="ghost"
+          color="neutral"
+          size="xs"
+          :aria-label="row.getIsExpanded() ? 'Collapse audit details' : 'Expand audit details'"
+          :icon="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          @click="row.toggleExpanded()"
+        />
+      </template>
+      <template #sources-cell="{ row }">
+        {{ [row.original.optIn ? 'Opt-In' : '', row.original.dpscd ? 'DPSCD' : ''].filter(Boolean).join(', ') }}
+      </template>
+      <template #issues-cell="{ row }">
+        {{ reviewIssues(row.original) }}
+      </template>
+      <template #[`hasOptInLabel-cell`]="{ row }">
         <UBadge
           v-if="row.original.optIn"
           :label="row.original.hasOptInLabel ? 'Opt-In' : 'No label'"
@@ -392,31 +513,28 @@ function formatDate(value?: string) {
           class="text-muted"
         >—</span>
       </template>
-      <template #optInSchool-cell="{ row }">
+      <template #[`optIn.schoolName-cell`]="{ row }">
         {{ row.original.optIn?.schoolName || '—' }}
       </template>
-      <template #optInGpa-cell="{ row }">
+      <template #[`optIn.cumulativeGpa-cell`]="{ row }">
         {{ row.original.optIn?.cumulativeGpa ?? '—' }}
       </template>
-      <template #enrolled-cell="{ row }">
+      <template #[`optIn.enrolledMinTerms-cell`]="{ row }">
         <span v-if="row.original.optIn">
-          {{ row.original.optIn.enrolledMinTerms || '—' }}<span
-            v-if="row.original.optIn.enrolledMinTerms === 'no' && row.original.optIn.termsEnrolled != null"
-            class="text-muted"
-          > ({{ row.original.optIn.termsEnrolled }} terms)</span>
+          {{ row.original.optIn.enrolledMinTerms === 'yes' ? 'Yes' : row.original.optIn.enrolledMinTerms === 'no' ? 'No' : '—' }}
         </span>
         <span
           v-else
           class="text-muted"
         >—</span>
       </template>
-      <template #dpscdGpa-cell="{ row }">
+      <template #[`dpscd.cumulativeGpa-cell`]="{ row }">
         {{ row.original.dpscd?.cumulativeGpa ?? '—' }}
         <div
           v-if="row.original.dpscd?.selectedSnapshot"
           class="text-xs text-muted"
         >
-          {{ row.original.dpscd.selectedRound }} · {{ row.original.dpscd.selectedSnapshot }}
+          {{ row.original.dpscd.selectedRound || 'Round unknown' }} · {{ row.original.dpscd.selectedSnapshot === 'r1' ? 'Round 1 snapshot' : 'All available' }}
         </div>
         <div
           v-if="row.original.dpscd?.selectionIssue"
@@ -425,8 +543,59 @@ function formatDate(value?: string) {
           {{ row.original.dpscd.selectionIssue }}
         </div>
       </template>
-      <template #quarters-cell="{ row }">
-        {{ row.original.dpscd?.quartersAvailable ?? '—' }}
+      <template #[`dpscd.selectedSnapshot-cell`]="{ row }">
+        {{ row.original.dpscd?.selectedSnapshot === 'r1' ? 'Round 1' : row.original.dpscd?.selectedSnapshot === 'all' ? 'All available' : '—' }}
+      </template>
+      <template #[`dpscd.importedAt-cell`]="{ row }">
+        {{ formatDate(row.original.dpscd?.importedAt) }}
+      </template>
+      <template #[`optIn.importedAt-cell`]="{ row }">
+        {{ formatDate(row.original.optIn?.importedAt) }}
+      </template>
+      <template #expanded="{ row }">
+        <div class="grid gap-6 p-4 md:grid-cols-3 text-sm">
+          <section>
+            <h3 class="font-semibold mb-2">
+              DPSCD import
+            </h3>
+            <p>Student number: {{ row.original.dpscd?.studentNumber ?? '—' }}</p>
+            <p>Round: {{ row.original.dpscd?.selectedRound || '—' }}</p>
+            <p
+              v-for="snapshot in (['r1', 'all'] as const)"
+              :key="snapshot"
+            >
+              {{ snapshot === 'r1' ? 'Round 1' : 'All available' }}: GPA {{ row.original.dpscd?.snapshots?.[snapshot]?.cumulativeGpa ?? '—' }} · Quarters {{ row.original.dpscd?.snapshots?.[snapshot]?.quartersAvailable ?? '—' }} · Status {{ row.original.dpscd?.snapshots?.[snapshot]?.gpaStatus || '—' }}
+            </p>
+            <p>Imported: {{ formatDate(row.original.dpscd?.importedAt) }}</p>
+          </section>
+          <section>
+            <h3 class="font-semibold mb-2">
+              Opt-In import
+            </h3>
+            <p>Name in file: {{ row.original.optIn?.studentName || '—' }}</p>
+            <p>School: {{ row.original.optIn?.schoolName || '—' }}</p>
+            <p>Terms enrolled: {{ row.original.optIn?.termsEnrolled ?? '—' }}</p>
+            <p>Source file: {{ row.original.optIn?.sourceFile || '—' }}</p>
+            <p>Imported: {{ formatDate(row.original.optIn?.importedAt) }}</p>
+          </section>
+          <section>
+            <h3 class="font-semibold mb-2">
+              Stored scoring results
+            </h3>
+            <p class="text-muted mb-2">
+              From the last scoring refresh; distinct from raw imported GPA.
+            </p>
+            <p>Resolved GPA: {{ row.original.resolvedCumulativeGpa ?? '—' }}</p>
+            <p>Resolved source: {{ row.original.resolvedSource ?? '—' }}</p>
+            <p>Multiplier: {{ row.original.gpaMultiplier ?? '—' }}</p>
+            <p>Bonus eligible: {{ row.original.gpaBonusEligible == null ? '—' : row.original.gpaBonusEligible ? 'Yes' : 'No' }}</p>
+            <p>Bonus points: {{ row.original.gpaBonus ?? '—' }}</p>
+            <p>GPA score: {{ row.original.gpaScore ?? '—' }}</p>
+          </section>
+          <p class="md:col-span-3">
+            Review issues: {{ reviewIssues(row.original) }}
+          </p>
+        </div>
       </template>
     </UTable>
 
