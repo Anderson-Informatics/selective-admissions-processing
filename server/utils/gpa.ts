@@ -10,6 +10,7 @@ import { MetadataModel } from '../models/Metadata'
 import { SubmissionModel } from '../models/Submission'
 import { fetchSubmissionsForProject, type SubmittableClientConfig } from './submittable'
 import { mapWithConcurrency } from './concurrency'
+import { clearGpaRecordsForSubmissions, isWithdrawnSubmission } from './withdrawnGpa'
 
 type ProgressFn = (update: Partial<JobProgress>) => Promise<void>
 
@@ -208,16 +209,24 @@ interface SubmissionLookup {
   bySubmissionId: Map<string, SubmissionEntry>
   bySubmissionIdInt: Map<number, SubmissionEntry>
   byStudentNumber: Map<string, SubmissionEntry[]>
+  withdrawnBySubmissionId: Map<string, SubmissionEntry>
+  withdrawnBySubmissionIdInt: Map<number, SubmissionEntry>
+  withdrawnByStudentNumber: Map<string, SubmissionEntry[]>
+  withdrawnSubmissionIds: string[]
 }
 
 async function loadSubmissionLookup(cycleId: string): Promise<SubmissionLookup> {
   const submissions = await SubmissionModel.find({ cycleId })
-    .select('submissionId submissionIdInt mappedFields.StudentNumber applicationId completedAt')
+    .select('submissionId submissionIdInt status mappedFields.StudentNumber applicationId completedAt')
     .lean()
   const lookup: SubmissionLookup = {
     bySubmissionId: new Map(),
     bySubmissionIdInt: new Map(),
-    byStudentNumber: new Map()
+    byStudentNumber: new Map(),
+    withdrawnBySubmissionId: new Map(),
+    withdrawnBySubmissionIdInt: new Map(),
+    withdrawnByStudentNumber: new Map(),
+    withdrawnSubmissionIds: []
   }
   for (const sub of submissions) {
     const entry = {
@@ -226,6 +235,17 @@ async function loadSubmissionLookup(cycleId: string): Promise<SubmissionLookup> 
       applicationId: String(sub.applicationId),
       completedAt: sub.completedAt,
       studentNumber: String((sub.mappedFields as Record<string, unknown> | undefined)?.StudentNumber ?? '').trim()
+    }
+    if (isWithdrawnSubmission(sub)) {
+      lookup.withdrawnSubmissionIds.push(sub.submissionId)
+      lookup.withdrawnBySubmissionId.set(sub.submissionId, entry)
+      if (sub.submissionIdInt != null) lookup.withdrawnBySubmissionIdInt.set(sub.submissionIdInt, entry)
+      if (entry.studentNumber) {
+        const matches = lookup.withdrawnByStudentNumber.get(entry.studentNumber) || []
+        matches.push(entry)
+        lookup.withdrawnByStudentNumber.set(entry.studentNumber, matches)
+      }
+      continue
     }
     lookup.bySubmissionId.set(sub.submissionId, entry)
     if (sub.submissionIdInt != null) lookup.bySubmissionIdInt.set(sub.submissionIdInt, entry)
@@ -238,6 +258,19 @@ async function loadSubmissionLookup(cycleId: string): Promise<SubmissionLookup> 
   return lookup
 }
 
+function dpscdWithdrawnMatches(record: NormalizedDpscdRecord, lookup: SubmissionLookup): SubmissionEntry[] {
+  if (record.submissionId && lookup.withdrawnBySubmissionId.has(record.submissionId)) {
+    return [lookup.withdrawnBySubmissionId.get(record.submissionId)!]
+  }
+  if (record.submissionIdInt != null && lookup.withdrawnBySubmissionIdInt.has(record.submissionIdInt)) {
+    return [lookup.withdrawnBySubmissionIdInt.get(record.submissionIdInt)!]
+  }
+  if (record.studentNumber != null) {
+    return lookup.withdrawnByStudentNumber.get(String(record.studentNumber)) || []
+  }
+  return []
+}
+
 export interface DpscdImportResult {
   dryRun?: boolean
   matchedSubmissions?: number
@@ -248,6 +281,9 @@ export interface DpscdImportResult {
   inserted: number
   updated: number
   unmatched: number
+  skippedWithdrawn: number
+  clearedWithdrawn?: number
+  wouldClearWithdrawn?: number
   warnings: string[]
   errors: string[]
 }
@@ -262,7 +298,7 @@ export async function importDpscdGpaRecords(
   if (!upload) throw new Error('Staged DPSCD GPA import is unavailable')
 
   const records = upload.records || []
-  const result: DpscdImportResult = { ...(dryRun ? { dryRun: true, preview: [] } : {}), processed: 0, matched: 0, inserted: 0, updated: 0, unmatched: 0, warnings: [], errors: [] }
+  const result: DpscdImportResult = { ...(dryRun ? { dryRun: true, preview: [] } : {}), processed: 0, matched: 0, inserted: 0, updated: 0, unmatched: 0, skippedWithdrawn: 0, warnings: [], errors: [] }
 
   try {
     await setProgress({ phase: 'matching', total: records.length, processed: 0, percent: 0, message: `Normalizing ${records.length} DPSCD records` })
@@ -312,10 +348,20 @@ export async function importDpscdGpaRecords(
         matches = lookup.byStudentNumber.get(String(record.studentNumber)) || []
       }
 
+      const withdrawnMatches = dpscdWithdrawnMatches(record, lookup)
+      if (withdrawnMatches.length) {
+        result.skippedWithdrawn += withdrawnMatches.length
+        if (result.warnings.length < MAX_ISSUE_MESSAGES) {
+          result.warnings.push(`Record ${i + 1}: skipped ${withdrawnMatches.length} withdrawn submission${withdrawnMatches.length === 1 ? '' : 's'}`)
+        }
+      }
+
       if (!matches.length) {
-        result.unmatched += 1
-        if (result.errors.length < MAX_ISSUE_MESSAGES) {
-          result.errors.push(`Record ${i + 1}: no submission in cycle matched submissionId=${record.submissionId || '—'}, submissionIdInt=${record.submissionIdInt ?? '—'}, studentNumber=${record.studentNumber ?? '—'}`)
+        if (!withdrawnMatches.length) {
+          result.unmatched += 1
+          if (result.errors.length < MAX_ISSUE_MESSAGES) {
+            result.errors.push(`Record ${i + 1}: no submission in cycle matched submissionId=${record.submissionId || '—'}, submissionIdInt=${record.submissionIdInt ?? '—'}, studentNumber=${record.studentNumber ?? '—'}`)
+          }
         }
         continue
       }
@@ -390,6 +436,11 @@ export async function importDpscdGpaRecords(
       await setProgress({ processed: Math.min(i + 500, operations.length) })
     }
     result.processed = records.length
+    if (dryRun) {
+      result.wouldClearWithdrawn = await clearGpaRecordsForSubmissions(upload.cycleId, lookup.withdrawnSubmissionIds, true)
+    } else {
+      result.clearedWithdrawn = await clearGpaRecordsForSubmissions(upload.cycleId, lookup.withdrawnSubmissionIds)
+    }
 
     await GpaUploadModel.findByIdAndUpdate(upload._id, {
       $set: { status: 'completed', result: { ...result, errors: result.errors.slice(0, MAX_ISSUE_MESSAGES), warnings: result.warnings.slice(0, MAX_ISSUE_MESSAGES) }, records: [], error: undefined }
@@ -555,6 +606,8 @@ export interface OptInPreview {
   unmatched: number
   invalidGpa: number
   notEnrolled: number
+  skippedWithdrawn: number
+  wouldClearWithdrawn: number
   optInMissingFromFile: number
   optInLabelResolved: boolean
   rows: OptInPreviewRow[]
@@ -564,6 +617,8 @@ export interface OptInPreview {
 interface OptInMatchContext {
   optInLabelId?: string
   byInt: Map<number, { submissionId: string, fullName: string, hasOptIn: boolean }>
+  withdrawnByInt: Map<number, { submissionId: string, fullName: string }>
+  withdrawnSubmissionIds: string[]
 }
 
 async function loadOptInMatchContext(
@@ -579,29 +634,42 @@ async function loadOptInMatchContext(
 
   const [optInLabelId, submissions] = await Promise.all([
     resolveOptInLabelId(),
-    SubmissionModel.find({ cycleId }).select('submissionId submissionIdInt labelIds mappedFields.FullName mappedFields.FirstName mappedFields.LastName').lean()
+    SubmissionModel.find({ cycleId }).select('submissionId submissionIdInt status labelIds mappedFields.FullName mappedFields.FirstName mappedFields.LastName').lean()
   ])
 
   const byInt = new Map<number, { submissionId: string, fullName: string, hasOptIn: boolean }>()
+  const withdrawnByInt = new Map<number, { submissionId: string, fullName: string }>()
+  const withdrawnSubmissionIds: string[] = []
   for (const sub of submissions) {
     const labelIds = (sub as { labelIds?: string[] }).labelIds || []
     const hasOptIn = optInLabelId ? labelIds.includes(optInLabelId) : false
     if (sub.submissionIdInt != null) {
       const mapped = (sub.mappedFields || {}) as Record<string, unknown>
       const fullName = String(mapped.FullName || `${mapped.FirstName || ''} ${mapped.LastName || ''}`.trim())
-      byInt.set(sub.submissionIdInt, { submissionId: sub.submissionId, fullName, hasOptIn })
+      if (isWithdrawnSubmission(sub)) {
+        withdrawnSubmissionIds.push(sub.submissionId)
+        withdrawnByInt.set(sub.submissionIdInt, { submissionId: sub.submissionId, fullName })
+      } else {
+        byInt.set(sub.submissionIdInt, { submissionId: sub.submissionId, fullName, hasOptIn })
+      }
+    } else if (isWithdrawnSubmission(sub)) {
+      withdrawnSubmissionIds.push(sub.submissionId)
     }
   }
-  return { optInLabelId, byInt }
+  return { optInLabelId, byInt, withdrawnByInt, withdrawnSubmissionIds }
 }
 
 function classifyOptInRow(
   row: OptInRow,
   context: OptInMatchContext
-): { status: OptInRowStatus, warnings: string[], match?: { submissionId: string, fullName: string, hasOptIn: boolean } } {
+): { status: OptInRowStatus, warnings: string[], withdrawn?: boolean, match?: { submissionId: string, fullName: string, hasOptIn: boolean } } {
   const warnings: string[] = []
   if (row.submissionIdInt == null) {
     return { status: 'unmatched', warnings: ['missing SubmissionID'] }
+  }
+  const withdrawn = context.withdrawnByInt.get(row.submissionIdInt)
+  if (withdrawn) {
+    return { status: 'unmatched', warnings: ['submission is withdrawn'], withdrawn: true }
   }
   const match = context.byInt.get(row.submissionIdInt)
   if (!match) {
@@ -637,6 +705,8 @@ export async function previewOptInGpaUpload(
     unmatched: 0,
     invalidGpa: 0,
     notEnrolled: 0,
+    skippedWithdrawn: 0,
+    wouldClearWithdrawn: 0,
     optInMissingFromFile: 0,
     optInLabelResolved: false,
     rows: [],
@@ -664,8 +734,9 @@ export async function previewOptInGpaUpload(
     const fileIdInts = new Set<number>()
     for (const file of files) {
       for (const row of file.rows) {
-        const { status, warnings, match } = classifyOptInRow(row, context)
+        const { status, warnings, match, withdrawn } = classifyOptInRow(row, context)
         if (row.submissionIdInt != null) fileIdInts.add(row.submissionIdInt)
+        if (withdrawn) preview.skippedWithdrawn += 1
         if (status === 'matched') preview.matched += 1
         else if (status === 'missing_optin_label') preview.missingOptInLabel += 1
         else if (status === 'unmatched') preview.unmatched += 1
@@ -687,6 +758,7 @@ export async function previewOptInGpaUpload(
     for (const [intId, entry] of context.byInt) {
       if (entry.hasOptIn && !fileIdInts.has(intId)) preview.optInMissingFromFile += 1
     }
+    preview.wouldClearWithdrawn = await clearGpaRecordsForSubmissions(upload.cycleId, context.withdrawnSubmissionIds, true)
 
     await GpaUploadModel.findByIdAndUpdate(upload._id, { $set: { status: 'ready', preview: preview as unknown as Record<string, unknown>, error: undefined } })
     await setProgress({ phase: 'completed', processed: upload.files.length + 1, total: upload.files.length + 1, percent: 100, message: 'Preview complete' })
@@ -704,6 +776,8 @@ export interface OptInCommitResult {
   inserted: number
   skippedUnmatched: number
   skippedInvalid: number
+  skippedWithdrawn: number
+  clearedWithdrawn: number
   missingOptInLabel: number
   notEnrolled: number
   warnings: string[]
@@ -718,7 +792,7 @@ export async function commitOptInGpaUpload(
   const upload = await GpaUploadModel.findOne({ _id: uploadId, source: 'opt_in', status: 'confirming' })
   if (!upload) throw new Error('Staged Opt-In GPA upload is unavailable for import')
 
-  const result: OptInCommitResult = { processed: 0, updated: 0, inserted: 0, skippedUnmatched: 0, skippedInvalid: 0, missingOptInLabel: 0, notEnrolled: 0, warnings: [], errors: [] }
+  const result: OptInCommitResult = { processed: 0, updated: 0, inserted: 0, skippedUnmatched: 0, skippedInvalid: 0, skippedWithdrawn: 0, clearedWithdrawn: 0, missingOptInLabel: 0, notEnrolled: 0, warnings: [], errors: [] }
 
   try {
     const files: OptInFile[] = []
@@ -737,9 +811,10 @@ export async function commitOptInGpaUpload(
     for (const file of files) {
       for (const row of file.rows) {
         result.processed += 1
-        const { status, match } = classifyOptInRow(row, context)
+        const { status, match, withdrawn } = classifyOptInRow(row, context)
         if (!match) {
           result.skippedUnmatched += 1
+          if (withdrawn) result.skippedWithdrawn += 1
           continue
         }
         if (status === 'invalid_gpa') {
@@ -792,6 +867,7 @@ export async function commitOptInGpaUpload(
       result.inserted += written.upsertedCount
       result.updated += written.modifiedCount
     }
+    result.clearedWithdrawn = await clearGpaRecordsForSubmissions(upload.cycleId, context.withdrawnSubmissionIds)
 
     await GpaUploadModel.findByIdAndUpdate(upload._id, {
       $set: { status: 'completed', result: result as unknown as Record<string, unknown>, files: [], error: undefined }

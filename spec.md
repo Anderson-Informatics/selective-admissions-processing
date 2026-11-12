@@ -223,10 +223,10 @@ Opt-In students are identified by the presence of the "Opt-In" label on their Su
 DPSCD GPA data is delivered to `POST /api/gpa/dpscd` as a JSON body: `{ cycleId, records: [...] }` (a bare top-level array is also accepted). The sender may emit strict JSON or Python-style repr output (single quotes, `None`/`True`/`False`/`nan`); the endpoint normalizes both before staging.
 
 - The endpoint validates the envelope, stores the raw records on a `GpaUpload` staging document (`source: 'dpscd'`), queues a `dpscd_gpa_import` background job, and returns `{ uploadId, jobId }`. `GET /api/gpa/dpscd/{uploadId}` returns upload + job status for polling.
-- The job matches each record to a `Submission` within the cycle by `submissionId` GUID, then `submissionIdInt`, then `StudentNumber`. Payloads may span multiple years/projects; records that do not match a submission in the cycle are counted as unmatched, not fatal.
+- The job matches each record to a non-withdrawn `Submission` within the cycle by `submissionId` GUID, then `submissionIdInt`, then `StudentNumber`. Payloads may span multiple years/projects; records that do not match a submission in the cycle are counted as unmatched, not fatal.
 - The preferred record contract uses `STUDENT_NUMBER`, `StudentName`, `DOB`, `SchoolNumber`, `SchoolName`, `latestGradeLevel`, `minimumEntryDate`, `latestExitDate`, and `_r1`/`_all` GPA snapshot fields. `StudentNumber` matching updates every submission in the cycle with that mapped student number; optional `submissionId`/`submissionIdInt` fields remain supported as higher-priority matches.
 - Integer-semantic fields (`STUDENT_NUMBER`, `submissionIdInt`, `SchoolNumber`, `Latest_GRADE_LEVEL`, and quarter fields) are coerced to integers; GPA fields remain decimals and `DOB`, `minimumEntryDate`, and `latestExitDate` become dates. `Middle School Number` is accepted as a legacy alias for `SchoolNumber`. All remaining payload fields are preserved under `dpscd.extra`.
-- Results are upserted into `GpaRecord.dpscd` keyed `(cycleId, submissionId)` — the last import wins and provenance (`importJobId`, `importedAt`) is stamped. The job result reports processed/matched/updated/unmatched counts plus per-record warnings and errors, and is visible in the Jobs log.
+- Results are upserted into `GpaRecord.dpscd` keyed `(cycleId, submissionId)` — the last import wins and provenance (`importJobId`, `importedAt`) is stamped. Withdrawn submissions are skipped and their stale `GpaRecord` documents are deleted during the import or review-completion refresh. The job result reports processed/matched/updated/unmatched/withdrawn counts plus per-record warnings and errors, and is visible in the Jobs log.
 
 ### Opt-In GPA Upload (UI)
 
@@ -234,7 +234,7 @@ Out-of-district opt-in schools return per-school XLSX files containing a `SCHOOL
 
 - The GPA page provides a staged upload flow identical to HSPT: select one or more `.xlsx` files → a preview job parses each file, extracts the school name, matches rows to submissions by `submissionIdInt`, and reports per-row status (`matched`, `missing_optin_label`, `unmatched`, `invalid_gpa`, `not_enrolled`) plus the count of Opt-In-labeled submissions absent from the files.
 - The preview is read-only; corrections are made by fixing the file and re-uploading. Rows whose submission lacks the Opt-In label are imported but flagged as warnings.
-- Confirming queues a commit job that upserts `GpaRecord.optIn` for matched rows only — only submissions whose `submissionIdInt` appears in the uploaded files are modified.
+- Confirming queues a commit job that upserts `GpaRecord.optIn` for matched, non-withdrawn rows only — only active submissions whose `submissionIdInt` appears in the uploaded files are modified, while stale `GpaRecord` documents for withdrawn submissions are cleared.
 
 ### GPA Review and Duplicates
 

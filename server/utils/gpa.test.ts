@@ -47,6 +47,8 @@ beforeEach(() => {
     { submissionId: 'sub-3', mappedFields: { StudentNumber: '12345' } }
   ] }) } as never)
   vi.spyOn(GpaRecordModel, 'bulkWrite').mockResolvedValue({ upsertedCount: 3, modifiedCount: 0 } as never)
+  vi.spyOn(GpaRecordModel, 'deleteMany').mockResolvedValue({ deletedCount: 0 } as never)
+  vi.spyOn(GpaRecordModel, 'countDocuments').mockResolvedValue(0)
   vi.spyOn(GpaUploadModel, 'findByIdAndUpdate').mockResolvedValue(null)
 })
 
@@ -97,6 +99,26 @@ describe('GPA ingestion', () => {
       expect(operation.updateOne.update.$set.dpscd).toMatchObject({ importJobId: 'job-1' })
     }
     expect(GpaUploadModel.findByIdAndUpdate).toHaveBeenCalledWith('upload-1', { $set: expect.objectContaining({ status: 'completed', records: [] }) })
+  })
+
+  it('skips withdrawn DPSCD matches and clears their stale GPA records', async () => {
+    vi.mocked(GpaUploadModel.findOne).mockResolvedValue({ _id: 'upload-1', cycleId: 'cycle-1', records: [
+      { STUDENT_NUMBER: 12345, gpa_cumulative: 3.5 }
+    ] } as never)
+    vi.mocked(SubmissionModel.find).mockReturnValue({ select: () => ({ lean: async () => [
+      { submissionId: 'active-sub', applicationId: 'a1', mappedFields: { StudentNumber: '12345' } },
+      { submissionId: 'withdrawn-sub', applicationId: 'a1', status: 'Withdrawn', mappedFields: { StudentNumber: '12345' } }
+    ] }) } as never)
+    vi.mocked(GpaRecordModel.deleteMany).mockResolvedValue({ deletedCount: 1 } as never)
+
+    const result = await importDpscdGpaRecords('upload-1', 'job-1', vi.fn())
+
+    expect(result).toMatchObject({ matched: 1, matchedSubmissions: 1, skippedWithdrawn: 1, clearedWithdrawn: 1 })
+    expect(vi.mocked(GpaRecordModel.bulkWrite).mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ updateOne: expect.objectContaining({ filter: { cycleId: 'cycle-1', submissionId: 'active-sub' } }) })
+    ])
+    expect(GpaRecordModel.deleteMany).toHaveBeenCalledWith({ cycleId: 'cycle-1', submissionId: { $in: ['withdrawn-sub'] } })
+    expect(result.warnings).toEqual([expect.stringContaining('skipped 1 withdrawn submission')])
   })
 
   it('does not add empty snapshots to legacy records and persists both new snapshots', () => {
@@ -174,6 +196,24 @@ describe('GPA ingestion', () => {
       expect(operation.updateOne.update.$set.optIn).toMatchObject({ schoolName: 'Fixture School', uploadId: 'upload-1' })
     }
     expect(GpaUploadModel.findByIdAndUpdate).toHaveBeenCalledWith('upload-1', { $set: expect.objectContaining({ status: 'completed', files: [] }) })
+  })
+
+  it('skips withdrawn Opt-In submissions and clears their stale GPA records', async () => {
+    mockOptInUpload()
+    vi.mocked(SubmissionModel.find).mockReturnValue({ select: () => ({ lean: async () => [
+      { submissionId: 'sub-1', submissionIdInt: 101, labelIds: ['opt-in'], mappedFields: {} },
+      { submissionId: 'sub-2', submissionIdInt: 102, status: 'Withdrawn', labelIds: ['opt-in'], mappedFields: {} },
+      { submissionId: 'sub-3', submissionIdInt: 103, labelIds: ['opt-in'], mappedFields: {} }
+    ] }) } as never)
+    vi.mocked(GpaRecordModel.deleteMany).mockResolvedValue({ deletedCount: 1 } as never)
+
+    const preview = await previewOptInGpaUpload('upload-1', vi.fn())
+    expect(preview).toMatchObject({ skippedWithdrawn: 1, unmatched: 2, wouldClearWithdrawn: 0 })
+    expect(preview.rows.find(row => row.submissionIdInt === 102)?.warnings).toEqual(['submission is withdrawn'])
+
+    const result = await commitOptInGpaUpload('upload-1', vi.fn())
+    expect(result).toMatchObject({ skippedWithdrawn: 1, clearedWithdrawn: 1 })
+    expect(GpaRecordModel.deleteMany).toHaveBeenCalledWith({ cycleId: 'cycle-1', submissionId: { $in: ['sub-2'] } })
   })
 
   it('parses an Opt-In workbook with its school banner and enrollment flag', () => {

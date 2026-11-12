@@ -7,7 +7,7 @@ import { SubmissionModel } from '../models/Submission'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
 
 vi.mock('../models/Application', () => ({ ApplicationModel: { find: vi.fn() } }))
-vi.mock('../models/GpaRecord', () => ({ GpaRecordModel: { find: vi.fn(), bulkWrite: vi.fn() } }))
+vi.mock('../models/GpaRecord', () => ({ GpaRecordModel: { find: vi.fn(), bulkWrite: vi.fn(), deleteMany: vi.fn(), countDocuments: vi.fn() } }))
 vi.mock('../models/Review', () => ({ ReviewModel: { find: vi.fn() } }))
 vi.mock('../models/ReviewStage', () => ({ ReviewStageModel: { find: vi.fn() } }))
 vi.mock('../models/Metadata', () => ({ MetadataModel: { findOne: vi.fn(() => ({ select: () => ({ lean: async () => undefined }) })) } }))
@@ -41,6 +41,8 @@ describe('review completion GPA resolution', () => {
     vi.mocked(ReviewModel.find).mockReturnValue({ lean: async () => reviews } as never)
     vi.mocked(GpaRecordModel.find).mockReturnValue({ lean: async () => gpaRecords } as never)
     vi.mocked(GpaRecordModel.bulkWrite).mockResolvedValue({ modifiedCount: 1 } as never)
+    vi.mocked(GpaRecordModel.deleteMany).mockResolvedValue({ deletedCount: 0 } as never)
+    vi.mocked(GpaRecordModel.countDocuments).mockResolvedValue(0)
     vi.mocked(SubmissionModel.bulkWrite).mockResolvedValue({ modifiedCount: 1 } as never)
   })
 
@@ -116,5 +118,20 @@ describe('review completion GPA resolution', () => {
       }
     })
     expect(vi.mocked(GpaRecordModel.bulkWrite).mock.lastCall?.[0]?.[0]).not.toHaveProperty('updateOne.update.$set.dpscd')
+  })
+
+  it('removes GPA records for withdrawn submissions and does not recreate them', async () => {
+    gpaRecords = [{ submissionId: 'sub-1', dpscd: { cumulativeGpa: 3.2, quartersAvailable: 6 } }]
+    vi.mocked(SubmissionModel.find).mockReturnValue({
+      sort: () => ({ limit: () => ({ lean: async () => [{ ...submission, status: 'Withdrawn' }] }) })
+    } as never)
+    vi.mocked(GpaRecordModel.deleteMany).mockResolvedValue({ deletedCount: 1 } as never)
+
+    const result = await refreshReviewCompletion({ cycleId: 'cycle-1' })
+
+    expect(result.clearedWithdrawn).toBe(1)
+    expect(GpaRecordModel.deleteMany).toHaveBeenCalledWith({ cycleId: 'cycle-1', submissionId: { $in: ['sub-1'] } })
+    expect(GpaRecordModel.bulkWrite).not.toHaveBeenCalled()
+    expect(SubmissionModel.bulkWrite).toHaveBeenCalled()
   })
 })

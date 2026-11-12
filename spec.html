@@ -638,11 +638,12 @@ the endpoint normalizes both before staging.</p>
 and returns <code>{ uploadId, jobId }</code>. <code>GET
 /api/gpa/dpscd/{uploadId}</code> returns upload + job status for
 polling.</li>
-<li>The job matches each record to a <code>Submission</code> within the
-cycle by <code>submissionId</code> GUID, then
-<code>submissionIdInt</code>, then <code>StudentNumber</code>. Payloads
-may span multiple years/projects; records that do not match a
-submission in the cycle are counted as unmatched, not fatal.</li>
+<li>The job matches each record to a non-withdrawn
+<code>Submission</code> within the cycle by <code>submissionId</code>
+GUID, then <code>submissionIdInt</code>, then
+<code>StudentNumber</code>. Payloads may span multiple years/projects;
+records that do not match a submission in the cycle are counted as
+unmatched, not fatal.</li>
 <li>The preferred record contract uses <code>STUDENT_NUMBER</code>,
 <code>StudentName</code>, <code>DOB</code>,
 <code>SchoolNumber</code>, <code>SchoolName</code>,
@@ -663,9 +664,11 @@ fields are preserved under <code>dpscd.extra</code>.</li>
 <li>Results are upserted into <code>GpaRecord.dpscd</code> keyed
 <code>(cycleId, submissionId)</code> — the last import wins and
 provenance (<code>importJobId</code>, <code>importedAt</code>) is
-stamped. The job result reports processed/matched/updated/unmatched
-counts plus per-record warnings and errors, and is visible in the Jobs
-log.</li>
+stamped. Withdrawn submissions are skipped and their stale
+<code>GpaRecord</code> documents are deleted during the import or
+review-completion refresh. The job result reports
+processed/matched/updated/unmatched/withdrawn counts plus per-record
+warnings and errors, and is visible in the Jobs log.</li>
 </ul>
 <h3 id="opt-in-gpa-upload-ui">Opt-In GPA Upload (UI)</h3>
 <p>Out-of-district opt-in schools return per-school XLSX files
@@ -686,9 +689,10 @@ absent from the files.</li>
 and re-uploading. Rows whose submission lacks the Opt-In label are
 imported but flagged as warnings.</li>
 <li>Confirming queues a commit job that upserts
-<code>GpaRecord.optIn</code> for matched rows only — only submissions
-whose <code>submissionIdInt</code> appears in the uploaded files are
-modified.</li>
+<code>GpaRecord.optIn</code> for matched, non-withdrawn rows only —
+only active submissions whose <code>submissionIdInt</code> appears in
+the uploaded files are modified, while stale <code>GpaRecord</code>
+documents for withdrawn submissions are cleared.</li>
 </ul>
 <h3 id="gpa-review-and-duplicates">GPA Review and Duplicates</h3>
 <p>The GPA review page lists every submission in the selected cycle with

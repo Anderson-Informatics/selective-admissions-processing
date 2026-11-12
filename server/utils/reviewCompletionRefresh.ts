@@ -11,6 +11,7 @@ import { normalizeRoutingConfig } from './routingConfig'
 import { computeReviewCompletion, resolveGpa, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
 import { computeGpaScore, deriveGpaMultiplier, resolveGpaBonusLabelId } from './gpaScoring'
 import { normalizeScoringConfig } from './scoreCompilation'
+import { clearGpaRecordsForSubmissions, isWithdrawnSubmission } from './withdrawnGpa'
 
 export interface RefreshProgress {
   (update: { phase?: string, processed?: number, total?: number, percent?: number, message?: string }): Promise<void>
@@ -29,6 +30,8 @@ export interface RefreshResult {
   updated: number
   diagnostics: number
   applications: number
+  clearedWithdrawn: number
+  wouldClearWithdrawn?: number
   dryRun: boolean
 }
 
@@ -117,7 +120,7 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
     stagesByApplication.set(key, list)
   }
 
-  const result: RefreshResult = { processed: 0, updated: 0, diagnostics: 0, applications: applicationIds.length, dryRun: options.dryRun === true }
+  const result: RefreshResult = { processed: 0, updated: 0, diagnostics: 0, applications: applicationIds.length, clearedWithdrawn: 0, dryRun: options.dryRun === true }
   await options.setProgress?.({ phase: 'refreshing', processed: 0, total, percent: total ? 0 : 100, message: `Refreshing ${total} submissions` })
 
   let lastId: unknown
@@ -127,6 +130,10 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
     if (!submissions.length) break
     lastId = submissions[submissions.length - 1]?._id
     const submissionIds = submissions.map(submission => submission.submissionId)
+    const withdrawnSubmissionIds = submissions.filter(isWithdrawnSubmission).map(submission => submission.submissionId)
+    if (!options.dryRun) {
+      result.clearedWithdrawn += await clearGpaRecordsForSubmissions(options.cycleId, withdrawnSubmissionIds)
+    }
     const [reviews, gpaRecords] = await Promise.all([
       ReviewModel.find({ cycleId: options.cycleId, submissionId: { $in: submissionIds } }).lean(),
       GpaRecordModel.find({ cycleId: options.cycleId, submissionId: { $in: submissionIds } }).lean()
@@ -137,6 +144,10 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
       list.push(review as Record<string, any>)
       reviewsBySubmission.set(review.submissionId, list)
     }
+    const withdrawnIds = new Set(withdrawnSubmissionIds)
+    if (options.dryRun) {
+      result.wouldClearWithdrawn = (result.wouldClearWithdrawn || 0) + gpaRecords.filter(record => withdrawnIds.has(record.submissionId)).length
+    }
     const gpaBySubmission = new Map(gpaRecords.map(record => [record.submissionId, record]))
     const operations = []
     const gpaOperations: AnyBulkWriteOperation<GpaRecord>[] = []
@@ -145,7 +156,8 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
       const stages = stagesByApplication.get(String(submission.applicationId)) || []
       const round = resolveSubmissionRound(submission, roundsByApplication.get(String(submission.applicationId)) || [])
       const submissionReviews = reviewsBySubmission.get(submission.submissionId) || []
-      const storedGpa = gpaBySubmission.get(submission.submissionId)
+      const withdrawn = withdrawnIds.has(submission.submissionId)
+      const storedGpa = withdrawn ? undefined : gpaBySubmission.get(submission.submissionId)
       const gpaRecord = storedGpa ? { ...storedGpa, dpscd: selectDpscdSnapshot(storedGpa.dpscd, submission, roundsByApplication.get(String(submission.applicationId)) || []) } : undefined
       const completion = buildReviewCompletionForSubmission(
         submission as Record<string, any>,
@@ -157,46 +169,48 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
       result.processed += 1
       result.diagnostics += completion.diagnostics.length
       if (!options.dryRun) {
-        const scoring = scoringByApplication.get(String(submission.applicationId)) || normalizeScoringConfig(undefined)
-        const partialReview = latestCompletedReview(
-          submissionReviews.filter(review => /partial\s*gpa|gpa\s*partial/i.test(review.stageName || '') || Object.hasOwn(review.mappedData || {}, 'PartialGPA'))
-        )
-        const gpaMultiplier = deriveGpaMultiplier({
-          resolvedSource: completion.resolvedGpa.source,
-          hasResolvedGpa: completion.resolvedGpa.cumulativeGpa != null,
-          semesters: partialReview?.mappedData?.Semesters,
-          quartersAvailable: gpaRecord?.dpscd?.quartersAvailable
-        }, scoring.multiplierMap)
-        const gpaBonusEligible = Boolean(gpaBonusLabelId) && (submission.labelIds || []).includes(gpaBonusLabelId!)
-        const gpaBonus = gpaBonusEligible ? scoring.gpaBonusPoints : 0
-        const gpaScore = completion.resolvedGpa.cumulativeGpa == null ? null : computeGpaScore(completion.resolvedGpa.cumulativeGpa, gpaMultiplier, gpaBonus, scoring.gpaTable)
-        gpaOperations.push({
-          updateOne: {
-            filter: { cycleId: options.cycleId, submissionId: submission.submissionId },
-            update: {
-              $setOnInsert: { cycleId: options.cycleId, submissionId: submission.submissionId },
-              $set: {
-                ...(gpaRecord?.dpscd?.snapshots
-                  ? {
-                      'dpscd.cumulativeGpa': gpaRecord.dpscd.cumulativeGpa ?? null,
-                      'dpscd.quartersAvailable': gpaRecord.dpscd.quartersAvailable ?? null,
-                      'dpscd.gpaStatus': gpaRecord.dpscd.gpaStatus ?? null,
-                      'dpscd.selectedSnapshot': gpaRecord.dpscd.selectedSnapshot ?? null,
-                      'dpscd.selectedRound': gpaRecord.dpscd.selectedRound ?? null,
-                      'dpscd.selectionIssue': gpaRecord.dpscd.selectionIssue ?? null
-                    }
-                  : {}),
-                resolvedCumulativeGpa: completion.resolvedGpa.cumulativeGpa,
-                resolvedSource: completion.resolvedGpa.source,
-                gpaMultiplier,
-                gpaBonusEligible,
-                gpaBonus,
-                gpaScore
-              }
-            },
-            upsert: true
-          }
-        })
+        if (!withdrawn) {
+          const scoring = scoringByApplication.get(String(submission.applicationId)) || normalizeScoringConfig(undefined)
+          const partialReview = latestCompletedReview(
+            submissionReviews.filter(review => /partial\s*gpa|gpa\s*partial/i.test(review.stageName || '') || Object.hasOwn(review.mappedData || {}, 'PartialGPA'))
+          )
+          const gpaMultiplier = deriveGpaMultiplier({
+            resolvedSource: completion.resolvedGpa.source,
+            hasResolvedGpa: completion.resolvedGpa.cumulativeGpa != null,
+            semesters: partialReview?.mappedData?.Semesters,
+            quartersAvailable: gpaRecord?.dpscd?.quartersAvailable
+          }, scoring.multiplierMap)
+          const gpaBonusEligible = Boolean(gpaBonusLabelId) && (submission.labelIds || []).includes(gpaBonusLabelId!)
+          const gpaBonus = gpaBonusEligible ? scoring.gpaBonusPoints : 0
+          const gpaScore = completion.resolvedGpa.cumulativeGpa == null ? null : computeGpaScore(completion.resolvedGpa.cumulativeGpa, gpaMultiplier, gpaBonus, scoring.gpaTable)
+          gpaOperations.push({
+            updateOne: {
+              filter: { cycleId: options.cycleId, submissionId: submission.submissionId },
+              update: {
+                $setOnInsert: { cycleId: options.cycleId, submissionId: submission.submissionId },
+                $set: {
+                  ...(gpaRecord?.dpscd?.snapshots
+                    ? {
+                        'dpscd.cumulativeGpa': gpaRecord.dpscd.cumulativeGpa ?? null,
+                        'dpscd.quartersAvailable': gpaRecord.dpscd.quartersAvailable ?? null,
+                        'dpscd.gpaStatus': gpaRecord.dpscd.gpaStatus ?? null,
+                        'dpscd.selectedSnapshot': gpaRecord.dpscd.selectedSnapshot ?? null,
+                        'dpscd.selectedRound': gpaRecord.dpscd.selectedRound ?? null,
+                        'dpscd.selectionIssue': gpaRecord.dpscd.selectionIssue ?? null
+                      }
+                    : {}),
+                  resolvedCumulativeGpa: completion.resolvedGpa.cumulativeGpa,
+                  resolvedSource: completion.resolvedGpa.source,
+                  gpaMultiplier,
+                  gpaBonusEligible,
+                  gpaBonus,
+                  gpaScore
+                }
+              },
+              upsert: true
+            }
+          })
+        }
         operations.push({
           updateOne: {
             filter: { cycleId: options.cycleId, submissionId: submission.submissionId },

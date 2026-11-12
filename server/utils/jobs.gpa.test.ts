@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.spyOn(JobModel, 'findById').mockReturnValue({ select: () => ({ lean: async () => ({ progress: {} }) }) } as never)
   vi.spyOn(JobModel, 'findByIdAndUpdate').mockResolvedValue({} as never)
   vi.spyOn(JobModel, 'create').mockResolvedValue({} as never)
-  vi.mocked(importDpscdGpaRecords).mockResolvedValue({ processed: 1, matched: 1, inserted: 0, updated: 0, unmatched: 0, warnings: [], errors: [] })
+  vi.mocked(importDpscdGpaRecords).mockResolvedValue({ processed: 1, matched: 1, inserted: 0, updated: 0, unmatched: 0, skippedWithdrawn: 0, warnings: [], errors: [] })
   vi.mocked(refreshReviewCompletion).mockResolvedValue({ processed: 1, updated: 1, dryRun: false, diagnostics: [] } as never)
   vi.mocked(syncGpaStatusLabels).mockResolvedValue({ dryRun: false, applications: 1, applicationsSkipped: 0, applicationsFailed: 0, submissions: 1, labelsAdded: 1, labelsRemoved: 0, unchanged: 0, skipped: 0, failures: [] })
 })

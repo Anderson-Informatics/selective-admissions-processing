@@ -668,9 +668,10 @@ formFieldId:lastName</code></pre>
   <ol>
     <li>Load the staged <code>GpaUpload</code> referenced by the job payload.</li>
     <li>Normalize each record's keys and coerce integer-semantic floats (<code>STUDENT_NUMBER</code>, optional <code>submissionIdInt</code>, <code>SchoolNumber</code>, <code>Latest_GRADE_LEVEL</code>, and quarter fields) to integers; GPA fields remain decimals and enrollment/DOB fields become dates.</li>
-    <li>Match each record to a submission in the cycle by optional <code>submissionId</code>, then optional <code>submissionIdInt</code>, then <code>StudentNumber</code>.</li>
-    <li>Validate values; out-of-range or mismatched fields become warnings, unmatched records become errors, neither is fatal.</li>
+    <li>Match each record to a non-withdrawn submission in the cycle by optional <code>submissionId</code>, then optional <code>submissionIdInt</code>, then <code>StudentNumber</code>.</li>
+    <li>Validate values; out-of-range or mismatched fields become warnings, unmatched records become errors, and withdrawn matches are counted as skipped.</li>
     <li>Bulk-upsert <code>GpaRecord</code> documents keyed <code>(cycleId, submissionId)</code>, setting only the <code>dpscd</code> subdocument plus provenance (<code>importJobId</code>, <code>importedAt</code>).</li>
+    <li>Delete stale <code>GpaRecord</code> documents belonging to withdrawn submissions; dry runs only report the count that would be cleared.</li>
     <li>Mark the staged upload <code>completed</code> or <code>failed</code> and store the result summary.</li>
   </ol>
 
@@ -682,7 +683,7 @@ formFieldId:lastName</code></pre>
     <tbody>
       <tr><td><code>gpauploads</code> / GpaUpload</td><td>Read and update</td><td>Staged records, status, result, error.</td></tr>
       <tr><td><code>submissions</code> / Submission</td><td>Read</td><td>Match keys (<code>submissionId</code>, <code>submissionIdInt</code>, <code>mappedFields.StudentNumber</code>).</td></tr>
-      <tr><td><code>gparecords</code> / GpaRecord</td><td>Upsert</td><td>Sets <code>dpscd</code> subdocument and provenance.</td></tr>
+      <tr><td><code>gparecords</code> / GpaRecord</td><td>Upsert and delete</td><td>Sets <code>dpscd</code> subdocument and provenance; deletes records for withdrawn submissions.</td></tr>
       <tr><td><code>jobs</code> / Job</td><td>Read and update</td><td>Status, progress, result, error.</td></tr>
     </tbody>
   </table>
@@ -693,7 +694,9 @@ formFieldId:lastName</code></pre>
   "processed": 1000,
   "matched": 380,
   "updated": 380,
-  "unmatched": 620,
+  "unmatched": 619,
+  "skippedWithdrawn": 1,
+  "clearedWithdrawn": 1,
   "warnings": [ "..." ],
   "errors": [ "..." ]
 }</code></pre>
@@ -728,8 +731,8 @@ formFieldId:lastName</code></pre>
     <li>Parse each workbook: extract the school name from the <code>SCHOOL NAME:</code> banner row, locate the header row, and read the student rows.</li>
     <li>Ensure submissions carry <code>labelIds</code>; backfill them from Submittable for the cycle's projects when missing.</li>
     <li>Resolve the Opt-In label id from the synced label metadata (case-insensitive <code>opt-in</code>/<code>opt in</code>/<code>optin</code> match).</li>
-    <li>Match each row to a submission by <code>submissionIdInt</code> and classify it: <code>matched</code>, <code>missing_optin_label</code>, <code>unmatched</code>, <code>invalid_gpa</code>, or <code>not_enrolled</code>.</li>
-    <li>Count Opt-In-labeled submissions absent from all files (<code>optInMissingFromFile</code>).</li>
+    <li>Match each row to a non-withdrawn submission by <code>submissionIdInt</code> and classify it: <code>matched</code>, <code>missing_optin_label</code>, <code>unmatched</code>, <code>invalid_gpa</code>, or <code>not_enrolled</code>. Withdrawn matches are reported as unmatched with a withdrawn warning.</li>
+    <li>Count Opt-In-labeled submissions absent from all files (<code>optInMissingFromFile</code>) and report how many stale withdrawn GPA records would be cleared.</li>
     <li>Store the preview on the upload document and set its status to <code>ready</code>.</li>
   </ol>
 
@@ -765,6 +768,8 @@ formFieldId:lastName</code></pre>
   "unmatched": 3,
   "invalidGpa": 0,
   "notEnrolled": 6,
+  "skippedWithdrawn": 1,
+  "wouldClearWithdrawn": 1,
   "optInMissingFromFile": 12,
   "rows": [ { "file": "...", "row": 5, "submissionIdInt": 52137704, "status": "matched", "warnings": [] } ]
 }</code></pre>
@@ -790,9 +795,10 @@ formFieldId:lastName</code></pre>
   <h3>Execution flow</h3>
   <ol>
     <li>Load the staged upload and re-parse each XLSX file.</li>
-    <li>Match rows to submissions by <code>submissionIdInt</code>; skip unmatched rows.</li>
+    <li>Match rows to non-withdrawn submissions by <code>submissionIdInt</code>; skip unmatched and withdrawn rows.</li>
     <li>Normalize enrollment answers (Yes/No, case-insensitive) and GPA values.</li>
     <li>Bulk-upsert <code>GpaRecord.optIn</code> for matched rows, flagging rows whose submission lacks the Opt-In label as warnings (they are still imported).</li>
+    <li>Delete stale <code>GpaRecord</code> documents belonging to withdrawn submissions.</li>
     <li>Mark the upload <code>completed</code>, clear stored file payloads, and save the result summary.</li>
   </ol>
 
@@ -801,6 +807,8 @@ formFieldId:lastName</code></pre>
   "processed": 87,
   "updated": 80,
   "skippedUnmatched": 3,
+  "skippedWithdrawn": 1,
+  "clearedWithdrawn": 1,
   "missingOptInLabel": 4,
   "warnings": [ "..." ],
   "errors": []
@@ -820,7 +828,7 @@ formFieldId:lastName</code></pre>
     <thead><tr><th>Job</th><th>Trigger and behavior</th><th>Writes</th></tr></thead>
     <tbody>
       <tr><td><code>run_validation</code></td><td>Jobs page. Checks DOB, student number, names, duplicates, required plan documents, and geocoding. Automatically resolves stale issues and respects manual overrides.</td><td>ValidationIssue records and managed Check labels in Submittable; local submission label cache after successful synchronization.</td></tr>
-      <tr><td><code>refresh_review_completion</code></td><td>Jobs page, Routing page step 1, or queued after mapping and HSPT/GPA commits. Evaluates configured stage requirements and statuses from the current application data, then synchronizes each application's configured GPA status labels after non-dry-run refreshes.</td><td>Submission review-completion ledgers, derived status fields, configured GPA status labels in Submittable, and the local submission label cache. Does not move submissions between stages.</td></tr>
+      <tr><td><code>refresh_review_completion</code></td><td>Jobs page, Routing page step 1, or queued after mapping and HSPT/GPA commits. Evaluates configured stage requirements and statuses from the current application data, then synchronizes each application's configured GPA status labels after non-dry-run refreshes. Withdrawn submissions do not receive GPA record upserts.</td><td>Submission review-completion ledgers, derived status fields, configured GPA status labels in Submittable, the local submission label cache, and deletion of stale GpaRecords for withdrawn submissions. Does not move submissions between stages.</td></tr>
       <tr><td><code>gpa_status_label_sync</code></td><td>Jobs page manual repair action. Synchronizes each selected application's <code>scoring.gpaStatusLabels</code> mapping from persisted <code>Submission.gpaStatus</code>; payload supports <code>applicationId</code> and <code>dryRun</code>.</td><td>Configured GPA status labels in Submittable and local <code>Submission.labelIds</code> after successful remote changes.</td></tr>
       <tr><td><code>catchment_lookup</code></td><td>Jobs page; a single-submission lookup is also available from submission details. Uses HERE geocoding and MongoDB catchment zones.</td><td>Submission geocode/catchment fields and seeded catchment zones. Does not compile a Marygrove score.</td></tr>
       <tr><td><code>hspt_upload_preview</code></td><td>HSPT upload flow. Parses staged CSV files and previews matching without importing results.</td><td>HSPTUpload preview/status.</td></tr>

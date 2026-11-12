@@ -106,6 +106,8 @@ interface UploadPreview {
   unmatched: number
   invalidGpa: number
   notEnrolled: number
+  skippedWithdrawn: number
+  wouldClearWithdrawn: number
   optInMissingFromFile: number
   optInLabelResolved: boolean
   rows: PreviewRow[]
@@ -118,6 +120,8 @@ interface UploadResult {
   inserted: number
   skippedUnmatched: number
   skippedInvalid: number
+  skippedWithdrawn: number
+  clearedWithdrawn: number
   missingOptInLabel: number
   notEnrolled: number
   warnings: string[]
@@ -426,6 +430,7 @@ function gpaStatusColor(status?: string) {
 }
 
 function requiredGpaAction(record: GpaReviewItem) {
+  if (record.gpaStatus === 'Complete') return 'None — Complete'
   const action = (record.reviewCompletion || []).find(entry => entry.required && !entry.complete && /gpa/i.test(entry.name))
   return action ? `${action.name} — ${action.status}` : '—'
 }
@@ -843,6 +848,12 @@ function formatDate(value?: string) {
               variant="subtle"
             />
             <UBadge
+              v-if="uploadPreview.skippedWithdrawn || uploadPreview.wouldClearWithdrawn"
+              :label="`${uploadPreview.skippedWithdrawn || 0} withdrawn skipped · ${uploadPreview.wouldClearWithdrawn || 0} stale records`"
+              color="neutral"
+              variant="subtle"
+            />
+            <UBadge
               :label="`${uploadPreview.optInMissingFromFile} Opt-In not in file`"
               color="neutral"
               variant="subtle"
@@ -892,7 +903,7 @@ function formatDate(value?: string) {
             color="success"
             variant="subtle"
             title="Opt-In GPA import complete"
-            :description="`${uploadResult.updated + uploadResult.inserted} records written (${uploadResult.inserted} new, ${uploadResult.updated} updated), ${uploadResult.skippedUnmatched} unmatched skipped, ${uploadResult.missingOptInLabel} imported without Opt-In label.`"
+            :description="`${uploadResult.updated + uploadResult.inserted} records written (${uploadResult.inserted} new, ${uploadResult.updated} updated), ${uploadResult.skippedUnmatched} unmatched skipped, ${uploadResult.skippedWithdrawn || 0} withdrawn skipped, ${uploadResult.clearedWithdrawn || 0} withdrawn records cleared, ${uploadResult.missingOptInLabel} imported without Opt-In label.`"
           />
           <pre
             v-if="uploadResult.warnings.length"
