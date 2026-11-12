@@ -402,4 +402,44 @@ describe('review completion evaluator', () => {
       diagnostics: [{ code: 'invalid_target_stage', stageIds: ['missing'] }]
     })
   })
+
+  it('limits withdrawn submissions to the Withdrawn Application stage and system move', () => {
+    const withdrawnStage = { ...stage('withdrawn', 99, 'final', { enabled: false }), name: 'Withdrawn Application' }
+    const stages = [
+      stage('new', 0, 'initial'),
+      stage('essay', 10, 'work'),
+      withdrawnStage
+    ]
+    const withdrawn = context({ submission: { ...context().submission, status: 'Withdrawn', currentStageId: 'essay' } })
+
+    const completion = computeReviewCompletion(stages, withdrawn)
+    expect(completion.diagnostics).toEqual([])
+    expect(completion.reviewCompletion.filter(entry => entry.required)).toEqual([
+      expect.objectContaining({ stageId: 'withdrawn', status: 'Withdrawn', complete: false })
+    ])
+    expect(routeSubmission(stages, withdrawn)).toMatchObject({ action: 'move', reason: 'withdrawn', toStageId: 'withdrawn' })
+  })
+
+  it('marks the withdrawn stage complete only when the submission is already there', () => {
+    const withdrawnStage = { ...stage('withdrawn', 99, 'final', { enabled: false }), name: 'Withdrawn Application' }
+    const withdrawn = context({ submission: { ...context().submission, status: 'withdrawn', currentStageId: 'withdrawn' } })
+
+    expect(computeReviewCompletion([withdrawnStage], withdrawn).reviewCompletion[0]).toMatchObject({
+      stageId: 'withdrawn',
+      required: true,
+      status: 'Withdrawn',
+      complete: true
+    })
+    expect(routeSubmission([withdrawnStage], withdrawn)).toMatchObject({ action: 'stay', reason: 'already_current' })
+  })
+
+  it('does not fail withdrawn evaluation when the Withdrawn Application stage is missing', () => {
+    const withdrawn = context({ submission: { ...context().submission, status: 'Withdrawn' } })
+    const completion = computeReviewCompletion([stage('essay', 10, 'work')], withdrawn)
+    const decision = routeSubmission([stage('essay', 10, 'work')], withdrawn)
+
+    expect(completion.reviewCompletion.every(entry => !entry.required)).toBe(true)
+    expect(decision).toMatchObject({ action: 'stay', reason: 'no_required_stage' })
+    expect(decision.diagnostics).toEqual([expect.objectContaining({ code: 'missing_withdrawn_stage' })])
+  })
 })

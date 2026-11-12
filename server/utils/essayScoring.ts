@@ -24,6 +24,7 @@ import {
 import { buildEssayExport } from './essayExport'
 import { persistJobExport } from './exportFiles'
 import { buildEssayStats, reviewerKey, type EssayStats } from './essayStats'
+import { isWithdrawnSubmission } from './submissionStatus'
 
 type ProgressFn = (update: Partial<JobProgress>) => Promise<void>
 
@@ -113,7 +114,7 @@ export async function syncEssayStatusLabels(
     const submissionId = item.submission.submissionId
     const current = new Set(item.submission.labelIds || [])
     const entry = essayLedgerEntry(item, ctx)
-    const desired = entry ? ctx.statusLabels[entry.status] : undefined
+    const desired = isWithdrawnSubmission(item.submission) ? undefined : entry ? ctx.statusLabels[entry.status] : undefined
     const next = new Set(current)
     for (const labelId of mappedLabelIds) {
       if (labelId === desired) {
@@ -182,18 +183,23 @@ async function loadReviewerNames(reviewerKeys: string[]): Promise<Map<string, st
 }
 
 async function computeEssayStats(ctx: EssayContext, cycleId: string, includeOverall: boolean): Promise<EssayStats> {
-  const [reviews, submissions] = await Promise.all([
-    ReviewModel.find({ cycleId, applicationId: ctx.applicationId, stageId: ctx.essayStageId })
-      .select('reviewerId createdBy score status completedAt createdAt')
-      .lean(),
-    SubmissionModel.find({ cycleId, applicationId: ctx.applicationId })
-      .select('reviewCompletion')
-      .lean()
-  ])
+  const submissions = await SubmissionModel.find({ cycleId, applicationId: ctx.applicationId })
+    .select('submissionId status reviewCompletion')
+    .lean()
+  const activeSubmissions = submissions.filter(submission => !isWithdrawnSubmission(submission))
+  const activeSubmissionIds = activeSubmissions.map(submission => submission.submissionId)
+  const reviews = await ReviewModel.find({
+    cycleId,
+    applicationId: ctx.applicationId,
+    stageId: ctx.essayStageId,
+    submissionId: { $in: activeSubmissionIds }
+  })
+    .select('reviewerId createdBy score status completedAt createdAt submissionId')
+    .lean()
   const reviewerIds = [...new Set(reviews.map(review => reviewerKey(review)).filter(id => id !== 'unknown'))]
   const reviewerNames = await loadReviewerNames(reviewerIds)
   const counts = new Map<string, number>()
-  for (const submission of submissions) {
+  for (const submission of activeSubmissions) {
     const entry = (submission.reviewCompletion || []).find(item => item.stageId === ctx.essayStageId)
     if (entry?.status) counts.set(entry.status, (counts.get(entry.status) || 0) + 1)
   }

@@ -16,6 +16,7 @@ import {
 } from './gpaScoring'
 import { resolveGpa, type RoutingReview } from './routingEvaluator'
 import { selectDpscdSnapshot } from './dpscdSnapshots'
+import { isWithdrawnSubmission } from './submissionStatus'
 import type { CycleRoundInput } from './cycleRounds'
 
 // ---------------------------------------------------------------------------
@@ -143,11 +144,15 @@ export interface CompilationSummary {
   missingExam: number
   missingGpa: number
   missingEssay: number
+  skippedWithdrawn: number
+  clearedWithdrawnScoreRecords?: number
+  wouldClearWithdrawnScoreRecords?: number
 }
 
 export interface CompilationOutput {
   records: CompiledScore[]
   gpaOperations: AnyBulkWriteOperation<GpaRecord>[]
+  withdrawnSubmissionIds: string[]
   summary: CompilationSummary
 }
 
@@ -165,7 +170,11 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
   const now = input.now || new Date()
   const has = (component: ScoreComponent) => config.components.includes(component)
 
-  const submissions = await SubmissionModel.find({ cycleId, applicationId }).lean()
+  const allSubmissions = await SubmissionModel.find({ cycleId, applicationId }).lean()
+  const submissions = allSubmissions.filter(submission => !isWithdrawnSubmission(submission))
+  const withdrawnSubmissionIds = allSubmissions
+    .filter(isWithdrawnSubmission)
+    .map(submission => submission.submissionId)
   const submissionIds = submissions.map(submission => submission.submissionId)
 
   const [hsptResults, gpaRecords, reviews, essayStages] = await Promise.all([
@@ -217,7 +226,8 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     ready: 0,
     missingExam: 0,
     missingGpa: 0,
-    missingEssay: 0
+    missingEssay: 0,
+    skippedWithdrawn: withdrawnSubmissionIds.length
   }
 
   for (const submission of submissions) {
@@ -338,7 +348,7 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     }
   }
 
-  return { records, gpaOperations, summary }
+  return { records, gpaOperations, withdrawnSubmissionIds, summary }
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +422,20 @@ export async function runScoreCompilation(options: RunScoreCompilationOptions) {
     const percentiles = computePercentiles(output.records)
     for (const item of output.records) {
       item.record.percentiles = percentiles.get(item.submissionId) || {}
+    }
+
+    if (output.withdrawnSubmissionIds.length) {
+      const withdrawnScoreFilter = {
+        cycleId: options.cycleId,
+        applicationId,
+        submissionId: { $in: output.withdrawnSubmissionIds }
+      }
+      if (options.dryRun) {
+        output.summary.wouldClearWithdrawnScoreRecords = await ScoreRecordModel.countDocuments(withdrawnScoreFilter)
+      } else {
+        const cleared = await ScoreRecordModel.deleteMany(withdrawnScoreFilter)
+        output.summary.clearedWithdrawnScoreRecords = cleared.deletedCount || 0
+      }
     }
 
     if (!options.dryRun) {

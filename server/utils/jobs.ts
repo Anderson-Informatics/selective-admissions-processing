@@ -13,6 +13,7 @@ import { reconcileValidationLabelsForCycle } from './validationLabels'
 import { runCatchmentForCycle } from './catchment'
 import { commitOptInGpaUpload, importDpscdGpaRecords, previewOptInGpaUpload } from './gpa'
 import { syncGpaStatusLabels } from './gpaStatusLabels'
+import { clearWithdrawnStatusLabels } from './withdrawnStatusLabels'
 import { fetchForm, fetchForms, fetchLabels, fetchProjects, fetchTeam, type SubmittableClientConfig } from './submittable'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
 
@@ -267,6 +268,13 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
       dryRun: job.payload?.dryRun === true,
       setProgress
     })
+    const withdrawnLabelCleanup = await clearWithdrawnStatusLabels({
+      cycleId: job.cycleId,
+      applicationId: job.payload?.applicationId,
+      dryRun: job.payload?.dryRun === true,
+      setProgress,
+      submittable
+    })
     const labelSync = job.payload?.dryRun === true
       ? undefined
       : await syncGpaStatusLabels({
@@ -275,7 +283,7 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
           setProgress,
           submittable
         })
-    return { result: { ...result, labelSync } }
+    return { result: { ...result, withdrawnLabelCleanup, labelSync } }
   },
 
   gpa_status_label_sync: async (job, { setProgress, submittable }) => {

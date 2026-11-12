@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { ScoreRecordModel } from '../../models/ScoreRecord'
+import { SubmissionModel } from '../../models/Submission'
 import { recordDisclosure } from '../../utils/disclosureAudit'
 
 export default defineEventHandler(async (event) => {
@@ -12,6 +13,8 @@ export default defineEventHandler(async (event) => {
 
   const filter: Record<string, unknown> = { cycleId }
   if (applicationId) filter.applicationId = applicationId
+  const withdrawnIds = await SubmissionModel.distinct('submissionId', { cycleId, status: /^withdrawn$/i })
+  if (withdrawnIds.length) filter.submissionId = { $nin: withdrawnIds }
   const records = await ScoreRecordModel.find(filter).sort({ applicationId: 1, submissionId: 1 }).limit(20000).lean()
 
   const rows = records.map(record => ({

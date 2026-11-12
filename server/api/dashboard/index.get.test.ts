@@ -88,7 +88,7 @@ describe('GET /api/dashboard HSPT completion', () => {
 })
 
 describe('GET /api/dashboard GPA completion', () => {
-  it('uses non-withdrawn submissions for totals and label-based GPA status groups, but keeps withdrawn stage entries', async () => {
+  it('uses non-withdrawn submissions for totals, stage ledger metrics, and label-based GPA status groups', async () => {
     vi.mocked(MetadataModel.find).mockReturnValue({
       select: () => ({ lean: async () => [
         { externalId: 'dpscd', name: 'DPSCD' },
@@ -143,7 +143,7 @@ describe('GET /api/dashboard GPA completion', () => {
       const match = stages[0]?.$match
       const group = stages.find(stage => stage.$group)?.$group
       if (stages.some(stage => stage.$unwind)) {
-        expect(match).toEqual({ cycleId: 'cycle-1' })
+        expect(match).toEqual(activeFilter)
         return Promise.resolve([{
           _id: { applicationId: 'exam-1', stageId: 'withdrawn' },
           name: 'Withdrawn Application',

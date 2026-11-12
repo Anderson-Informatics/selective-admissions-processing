@@ -122,6 +122,23 @@ describe('compileApplicationScores', () => {
     expect(record.gpa?.score).toBe(12) // 30 * 0.4
     expect(record.totalAppScore).toBe(20 + 12 + 10)
   })
+
+  it('skips withdrawn submissions and does not create GPA operations for them', async () => {
+    mockData({
+      submissions: [
+        { submissionId: 'active', status: 'Submitted', labelIds: [] },
+        { submissionId: 'withdrawn', status: 'Withdrawn', labelIds: [] }
+      ],
+      gpa: [{ submissionId: 'withdrawn', resolvedCumulativeGpa: 4, resolvedSource: 'dpscd' }]
+    })
+
+    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: minimalConfig })
+
+    expect(output.records.map(record => record.submissionId)).toEqual(['active'])
+    expect(output.withdrawnSubmissionIds).toEqual(['withdrawn'])
+    expect(output.gpaOperations.map(operation => (operation as { updateOne: { filter: { submissionId: string } } }).updateOne.filter.submissionId)).toEqual(['active'])
+    expect(output.summary).toMatchObject({ submissions: 1, skippedWithdrawn: 1 })
+  })
 })
 
 describe('computePercentiles', () => {
@@ -147,6 +164,36 @@ describe('runScoreCompilation', () => {
     const result = await runScoreCompilation({ cycleId: 'c1', dryRun: true })
     expect(result.result.applications[0]).toMatchObject({ name: '9th Grade', summary: { compiled: 1, missingExam: 0 } })
     expect(bulkSpy).not.toHaveBeenCalled()
+  })
+
+  it('clears stale score records for withdrawn submissions on non-dry-run compilations', async () => {
+    vi.mocked(ApplicationModel.find).mockReturnValue(lean([{ _id: 'a1', name: '9th Grade', scoring: { enabled: true, components: ['exam'] } }]) as never)
+    mockData({ submissions: [
+      { submissionId: 'active', status: 'Submitted' },
+      { submissionId: 'withdrawn', status: 'Withdrawn' }
+    ] })
+    const { ScoreRecordModel } = await import('../models/ScoreRecord')
+    const deleteSpy = vi.spyOn(ScoreRecordModel, 'deleteMany').mockResolvedValue({ deletedCount: 1 } as never)
+    vi.spyOn(ScoreRecordModel, 'bulkWrite').mockResolvedValue({} as never)
+
+    const result = await runScoreCompilation({ cycleId: 'c1' })
+
+    expect(deleteSpy).toHaveBeenCalledWith({ cycleId: 'c1', applicationId: 'a1', submissionId: { $in: ['withdrawn'] } })
+    expect(result.result.applications[0]?.summary).toMatchObject({ skippedWithdrawn: 1, clearedWithdrawnScoreRecords: 1 })
+  })
+
+  it('reports stale withdrawn score records without deleting them in dry runs', async () => {
+    vi.mocked(ApplicationModel.find).mockReturnValue(lean([{ _id: 'a1', name: '9th Grade', scoring: { enabled: true, components: ['exam'] } }]) as never)
+    mockData({ submissions: [{ submissionId: 'withdrawn', status: 'Withdrawn' }] })
+    const { ScoreRecordModel } = await import('../models/ScoreRecord')
+    const countSpy = vi.spyOn(ScoreRecordModel, 'countDocuments').mockResolvedValue(2 as never)
+    const deleteSpy = vi.spyOn(ScoreRecordModel, 'deleteMany')
+
+    const result = await runScoreCompilation({ cycleId: 'c1', dryRun: true })
+
+    expect(countSpy).toHaveBeenCalledWith({ cycleId: 'c1', applicationId: 'a1', submissionId: { $in: ['withdrawn'] } })
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(result.result.applications[0]?.summary.wouldClearWithdrawnScoreRecords).toBe(2)
   })
 
   it('reports when no applications have scoring enabled', async () => {

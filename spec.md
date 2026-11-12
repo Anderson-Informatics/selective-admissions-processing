@@ -130,6 +130,16 @@ Each major legacy script step becomes a discrete, triggerable job. Jobs are stor
 - Jobs are idempotent and resumable: progress is persisted after each batch.
 - The UI polls `Job` documents for status updates.
 
+### Withdrawn Submissions
+
+Withdrawn submissions are synchronized from Submittable like all other records, but they are governed by system-level workflow rules rather than configurable routing rules:
+
+- `Submission.status` values matching `/^withdrawn$/i` make `Withdrawn Application` the only required stage in the persisted review ledger. The stage is incomplete until the submission is physically moved there.
+- Routing may move a withdrawn submission only to `Withdrawn Application`; configured outcomes, entry/exit actions, assignments, editing actions, and status-label additions are suppressed.
+- Review-completion refresh removes managed stage `statusLabels` (including Essay Status) and `scoring.gpaStatusLabels` from withdrawn submissions. GPA records and score records are removed and are not recreated.
+- Withdrawn records remain available to extraction, response mapping, review history, registration deletion, validation-label cleanup, submission details, audit history, and the duplicate-student-number audit.
+- Withdrawn records are excluded from active dashboard/status metrics, the main GPA table, score records/exports, essay statistics, HSPT matching/linking, score compilation, and internal-form score write-back.
+
 ## 9. Data Extraction & Form Mapping
 
 The legacy `get_form_data` contains a giant hard-coded dictionary mapping Submittable field labels to column names. The new system replaces that with dynamic `FormDefinition.fieldMappings`:
@@ -238,7 +248,7 @@ Out-of-district opt-in schools return per-school XLSX files containing a `SCHOOL
 
 ### GPA Review and Duplicates
 
-The GPA review page lists every submission in the selected cycle with its persisted GPA status, resolved GPA/source, enrollment evidence, and source-specific details. When the final GPA source filter is set to DPSCD / PowerSchool, a cycle-wide **Duplicate student numbers** report appears below the main table. It groups submissions by nonblank `mappedFields.StudentNumber`, lists every number assigned to multiple submissions, and remains independent of search, sorting, and pagination so staff can identify potential duplicate submissions before relying on student-number GPA matching.
+The GPA review page lists every non-withdrawn submission in the selected cycle with its persisted GPA status, resolved GPA/source, enrollment evidence, and source-specific details. When the final GPA source filter is set to DPSCD / PowerSchool, a cycle-wide **Duplicate student numbers** report appears below the main table. It groups submissions by nonblank `mappedFields.StudentNumber`, lists every number assigned to multiple submissions, and remains independent of search, sorting, and pagination so staff can identify potential duplicate submissions before relying on student-number GPA matching.
 
 ### Cumulative GPA Resolution (score compilation scope)
 
@@ -267,14 +277,14 @@ The dashboard gives admissions staff a real-time view of the pipeline.
 
 The scoring job replaces `compile_internal_form`:
 
-1. Load the cycle's scoring config.
+1. Load the cycle's scoring config and select non-withdrawn submissions.
 2. Merge linked `HSPTResult` scaled scores (Reading, Math, Language, Science, Overall) for each applicant.
 3. Merge essay scores.
 4. Merge GPA composite (GPA, multiplier, GPA score, GPA bonus).
 5. Apply DPSCD bonus and Marygrove bonus/catchment.
 6. Compute `Total_App_Score` and `Total_MG_Score`.
-7. Persist in `ScoreRecord`.
-8. Write back to Submittable internal forms (`updateInternalForms`).
+7. Persist in `ScoreRecord` and delete stale `ScoreRecord`s for withdrawn submissions.
+8. Write back to Submittable internal forms (`updateInternalForms`) for non-withdrawn applicants.
 9. Compute percentile ranks for total, GPA, essay, exam, and exam subcomponent scores.
 10. Export the scored dataset for use by the placement algorithm and external reports.
 

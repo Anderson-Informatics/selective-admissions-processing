@@ -10,7 +10,8 @@ import { MetadataModel } from '../models/Metadata'
 import { SubmissionModel } from '../models/Submission'
 import { fetchSubmissionsForProject, type SubmittableClientConfig } from './submittable'
 import { mapWithConcurrency } from './concurrency'
-import { clearGpaRecordsForSubmissions, isWithdrawnSubmission } from './withdrawnGpa'
+import { clearGpaRecordsForSubmissions } from './withdrawnGpa'
+import { isWithdrawnSubmission } from './submissionStatus'
 
 type ProgressFn = (update: Partial<JobProgress>) => Promise<void>
 

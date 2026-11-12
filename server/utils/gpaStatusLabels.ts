@@ -2,6 +2,7 @@ import { ApplicationModel, type Application } from '../models/Application'
 import type { JobProgress } from '../models/Job'
 import { SubmissionModel, type Submission } from '../models/Submission'
 import { canonicalGpaStatus } from './routingEvaluator'
+import { isWithdrawnSubmission } from './submissionStatus'
 import { addSubmissionLabelBulk, removeSubmissionLabel, type SubmittableClientConfig } from './submittable'
 
 export interface GpaStatusLabelSyncOptions {
@@ -72,7 +73,7 @@ export async function syncGpaStatusLabels(options: GpaStatusLabelSyncOptions): P
   const submissions = await SubmissionModel.find({
     cycleId: options.cycleId,
     ...(options.applicationId ? { applicationId: options.applicationId } : { applicationId: { $in: applications.map(application => String(application._id)) } })
-  }).select('submissionId applicationId gpaStatus labelIds').lean()
+  }).select('submissionId applicationId status gpaStatus labelIds').lean()
 
   result.submissions = submissions.length
   const submissionsByApplication = new Map<string, typeof submissions>()
@@ -123,7 +124,7 @@ export async function syncGpaStatusLabels(options: GpaStatusLabelSyncOptions): P
     for (const submission of submissionsByApplication.get(applicationId) || []) {
       const currentLabelIds = submission.labelIds || []
       const status = canonicalGpaStatus(submission.gpaStatus)
-      const desiredLabelId = mapping[status]
+      const desiredLabelId = isWithdrawnSubmission(submission) ? undefined : mapping[status]
       const managedCurrent = currentLabelIds.filter(labelId => managedLabels.includes(labelId))
       const nextLabelIds = [
         ...currentLabelIds.filter(labelId => !managedLabels.includes(labelId)),

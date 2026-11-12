@@ -1,5 +1,6 @@
 import { normalizeConditionGroup } from '../../shared/routingConditions'
 import type { ConditionGroup, RoutingConfig } from './routingConfig'
+import { isWithdrawnSubmission } from './submissionStatus'
 
 export type ReviewStageRole = 'initial' | 'work' | 'hold' | 'final'
 
@@ -66,7 +67,7 @@ export interface ReviewCompletionEntry {
 }
 
 export interface RoutingDiagnostic {
-  code: 'no_required_stage' | 'invalid_target_stage'
+  code: 'no_required_stage' | 'invalid_target_stage' | 'missing_withdrawn_stage'
   message: string
   stageIds?: string[]
 }
@@ -78,7 +79,7 @@ export interface ReviewCompletionResult {
 
 export interface RoutingDecision {
   action: 'stay' | 'move'
-  reason: 'already_current' | 'final_stage' | 'outcome' | 'next_required' | 'no_required_stage' | 'invalid_target'
+  reason: 'already_current' | 'final_stage' | 'outcome' | 'next_required' | 'no_required_stage' | 'invalid_target' | 'withdrawn'
   fromStageId?: string
   toStageId?: string
   backward: boolean
@@ -306,7 +307,11 @@ function getStatus(stage: RoutingStage, context: RoutingContext): { status: stri
 }
 
 export function computeReviewCompletion(stages: RoutingStage[], context: RoutingContext): ReviewCompletionResult {
-  const reviewCompletion = [...stages].sort((a, b) => a.order - b.order).map((stage) => {
+  const sorted = [...stages].sort((a, b) => a.order - b.order)
+  const withdrawn = isWithdrawnSubmission(context.submission)
+  const withdrawnStage = withdrawn ? sorted.find(stage => /^\s*withdrawn\s+application\s*$/i.test(stage.name)) : undefined
+
+  const reviewCompletion = sorted.map((stage) => {
     const status = getStatus(stage, context)
     let required = false
     if (stage.role !== 'final') {
@@ -317,15 +322,47 @@ export function computeReviewCompletion(stages: RoutingStage[], context: Routing
           ? evaluateConditionGroup(stage.routing.requiredWhen, context)
           : stage.routing.enabled)
     }
-    return { stageId: stage.stageId, name: stage.name, order: stage.order, role: stage.role, required, ...status }
+    const entry = { stageId: stage.stageId, name: stage.name, order: stage.order, role: stage.role, required, ...status }
+    if (!withdrawn) return entry
+    if (stage.stageId !== withdrawnStage?.stageId) return { ...entry, required: false }
+    return {
+      ...entry,
+      required: true,
+      status: 'Withdrawn',
+      complete: context.submission.currentStageId === stage.stageId
+    }
   })
 
-  return { reviewCompletion, diagnostics: [] }
+  return {
+    reviewCompletion,
+    diagnostics: withdrawn && !withdrawnStage
+      ? [{ code: 'missing_withdrawn_stage', message: 'No stage named Withdrawn Application is configured for this application.' }]
+      : []
+  }
 }
 
 export function routeSubmission(stages: RoutingStage[], context: RoutingContext): RoutingDecision {
   const current = stages.find(stage => stage.stageId === context.submission.currentStageId)
   const completion = computeReviewCompletion(stages, context)
+
+  if (isWithdrawnSubmission(context.submission)) {
+    const withdrawnStage = stages.find(stage => /^\s*withdrawn\s+application\s*$/i.test(stage.name))
+    if (!withdrawnStage) {
+      return { action: 'stay', reason: 'no_required_stage', fromStageId: current?.stageId, backward: false, diagnostics: completion.diagnostics }
+    }
+    if (withdrawnStage.stageId === current?.stageId) {
+      return { action: 'stay', reason: 'already_current', fromStageId: current.stageId, backward: false, diagnostics: completion.diagnostics }
+    }
+    return {
+      action: 'move',
+      reason: 'withdrawn',
+      fromStageId: current?.stageId,
+      toStageId: withdrawnStage.stageId,
+      backward: Boolean(current && withdrawnStage.order < current.order),
+      diagnostics: completion.diagnostics
+    }
+  }
+
   if (current?.role === 'final') return { action: 'stay', reason: 'final_stage', fromStageId: current.stageId, backward: false, diagnostics: completion.diagnostics }
 
   if (current?.routing.enabled) {

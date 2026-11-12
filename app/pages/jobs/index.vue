@@ -163,9 +163,10 @@ function formatResult(job: Job) {
     return `${processed} rows — ${Number(updated) + Number(inserted)} written, ${skippedUnmatched} unmatched skipped`
   }
   if (job.type === 'refresh_review_completion') {
-    const { processed = 0, updated = 0, diagnostics = 0, dryRun = false, labelSync } = job.result as { processed?: number, updated?: number, diagnostics?: number, dryRun?: boolean, labelSync?: { labelsAdded?: number, labelsRemoved?: number, failures?: unknown[] } }
+    const { processed = 0, updated = 0, diagnostics = 0, dryRun = false, withdrawnLabelCleanup, labelSync } = job.result as { processed?: number, updated?: number, diagnostics?: number, dryRun?: boolean, withdrawnLabelCleanup?: { labelsRemoved?: number }, labelSync?: { labelsAdded?: number, labelsRemoved?: number, failures?: unknown[] } }
     const labels = labelSync ? `, ${labelSync.labelsAdded || 0} GPA labels added, ${labelSync.labelsRemoved || 0} removed` : ''
-    return `${processed} processed — ${dryRun ? 'dry run' : `${updated} updated`}, ${diagnostics} diagnostics${labels}`
+    const withdrawnLabels = withdrawnLabelCleanup?.labelsRemoved ? `, ${withdrawnLabelCleanup.labelsRemoved} withdrawn status labels ${dryRun ? 'would be' : ''} removed` : ''
+    return `${processed} processed — ${dryRun ? 'dry run' : `${updated} updated`}, ${diagnostics} diagnostics${labels}${withdrawnLabels}`
   }
   if (job.type === 'gpa_status_label_sync') {
     const { submissions = 0, labelsAdded = 0, labelsRemoved = 0, failures = [], dryRun = false } = job.result as { submissions?: number, labelsAdded?: number, labelsRemoved?: number, failures?: unknown[], dryRun?: boolean }

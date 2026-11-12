@@ -92,7 +92,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const submissionFilter = { cycleId, status: { $not: /^withdrawn$/i } }
-  const stageSubmissionFilter = { cycleId }
+  const stageSubmissionFilter = submissionFilter
   const jobFilter = { cycleId, parentJobId: { $exists: false } }
   const labels = await MetadataModel.find({
     type: 'label',

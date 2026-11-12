@@ -1,6 +1,7 @@
 import { renderDeadline } from './deadlineDate'
 import { evaluateConditionGroup, type RoutingContext, type RoutingDecision, type RoutingStage } from './routingEvaluator'
 import type { ConditionGroup } from './routingConfig'
+import { isWithdrawnSubmission } from './submissionStatus'
 
 export interface EditingActionConfig {
   templateId?: string
@@ -88,6 +89,24 @@ export function resolveRoutingActions(
   }
 
   let move: ResolvedRoutingActions['move']
+  if (isWithdrawnSubmission(context.submission)) {
+    if (decision.action === 'move' && decision.toStageId) {
+      move = { fromStageId: decision.fromStageId, toStageId: decision.toStageId, backward: decision.backward, reason: decision.reason }
+    }
+    const managedLabelIds = stages.flatMap(stage => Object.values(stage.routing.statusLabels || {}))
+      .filter((id): id is string => typeof id === 'string' && Boolean(id))
+    return {
+      move,
+      labelsToAdd: [],
+      labelsToRemove: [...new Set(managedLabelIds)],
+      assignUserIds: [],
+      unassignUserIds: [],
+      statusLabelIds: [],
+      statusLabelSync: managedLabelIds.length > 0,
+      diagnostics
+    }
+  }
+
   if (decision.action === 'move' && decision.toStageId) {
     const fromStage = stages.find(stage => stage.stageId === decision.fromStageId)
     const toStage = stages.find(stage => stage.stageId === decision.toStageId)

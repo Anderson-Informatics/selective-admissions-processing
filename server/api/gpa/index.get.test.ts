@@ -54,7 +54,7 @@ describe('GET /api/gpa', () => {
     query = { ...query, gpaStatus: 'OOD Partial', source: 'optIn', page: '2', limit: '50', sortBy: 'resolvedCumulativeGpa', sortOrder: 'desc' }
     expect(await handler({})).toEqual({ records: [{ _id: 'sub-1' }], total: 75, page: 2, limit: 50, duplicateStudentNumbers: [] })
     const stages = pipeline()
-    expect(stages[0]).toEqual({ $match: { cycleId: 'cycle-1' } })
+    expect(stages[0]).toEqual({ $match: { cycleId: 'cycle-1', status: { $not: /^withdrawn$/i } } })
     expect(stages.filter(stage => stage.$lookup).map(stage => stage.$lookup?.as)).toEqual(['_gpa', '_recordingReviews', '_partialReviews'])
     expect(stages.find(stage => stage.$match?.$and)).toMatchObject({ $match: { $and: [
       {}, { gpaStatus: 'Opt-In Partial' }, { 'gpa.resolvedSource': 'optIn' }

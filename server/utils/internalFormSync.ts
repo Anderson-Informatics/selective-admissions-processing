@@ -4,6 +4,7 @@ import { HSPTResultModel, type HSPTResult } from '../models/HSPTResult'
 import { ScoreRecordModel, type ScoreRecord } from '../models/ScoreRecord'
 import { SubmissionModel, type Submission } from '../models/Submission'
 import { mapWithConcurrency } from './concurrency'
+import { isWithdrawnSubmission } from './submissionStatus'
 import type { InternalFieldMapping, ScoringConfig } from './scoreCompilation'
 import {
   createInternalFormEntry,
@@ -268,9 +269,11 @@ export async function syncInternalForms(options: {
   const submissionById = new Map(submissions.map(item => [item.submissionId, item]))
   const gpaById = new Map(gpaRecords.map(item => [item.submissionId, item]))
   const hsptById = new Map(hsptResults.map(item => [item.linkedSubmissionId!, item]))
-  await options.setProgress?.({ phase: 'syncing_internal_forms', processed: 0, total: records.length, message: `Writing ${records.length} internal form entries` })
+  const activeRecords = records.filter(record => !isWithdrawnSubmission(submissionById.get(record.submissionId) || {}))
+  result.skipped += records.length - activeRecords.length
+  await options.setProgress?.({ phase: 'syncing_internal_forms', processed: 0, total: activeRecords.length, message: `Writing ${activeRecords.length} internal form entries` })
 
-  await mapWithConcurrency(records, 3, async (record, index) => {
+  await mapWithConcurrency(activeRecords, 3, async (record, index) => {
     const submissionId = record.submissionId
     const markStatus = async (status: string, error?: string) => {
       if (options.dryRun) return
@@ -331,7 +334,7 @@ export async function syncInternalForms(options: {
       result.failures.push({ submissionId, error: message })
       await markStatus('failed', message)
     }
-    await options.setProgress?.({ phase: 'syncing_internal_forms', processed: index + 1, total: records.length })
+    await options.setProgress?.({ phase: 'syncing_internal_forms', processed: index + 1, total: activeRecords.length })
   })
 
   return result

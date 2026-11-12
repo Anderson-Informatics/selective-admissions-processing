@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
   const direction = sortOrder === 'desc' ? -1 : 1
 
   const [result] = await SubmissionModel.aggregate([
-    { $match: { cycleId } },
+    { $match: { cycleId, status: { $not: /^withdrawn$/i } } },
     { $lookup: {
       from: GpaRecordModel.collection.name,
       let: { submissionId: '$submissionId', cycleId: '$cycleId' },

@@ -9,7 +9,7 @@ vi.mock('../models/Submission', () => ({ SubmissionModel: { find: vi.fn(), bulkW
 vi.mock('./submittable', () => ({ addSubmissionLabelBulk: vi.fn(), removeSubmissionLabel: vi.fn() }))
 
 interface MockApplication { _id: string, name: string, scoring?: Record<string, unknown> }
-interface MockSubmission { submissionId: string, applicationId: string, gpaStatus?: string, labelIds?: string[] }
+interface MockSubmission { submissionId: string, applicationId: string, status?: string, gpaStatus?: string, labelIds?: string[] }
 
 function mockData(applications: MockApplication[], submissions: MockSubmission[]) {
   vi.mocked(ApplicationModel.find).mockReturnValue({
@@ -114,6 +114,23 @@ describe('syncGpaStatusLabels', () => {
     expect(addSubmissionLabelBulk).not.toHaveBeenCalled()
     expect(removeSubmissionLabel).not.toHaveBeenCalled()
     expect(SubmissionModel.bulkWrite).not.toHaveBeenCalled()
+  })
+
+  it('removes managed GPA labels from withdrawn submissions without adding a replacement', async () => {
+    mockData([
+      { _id: 'app-a', name: 'App A', scoring: { gpaStatusLabels: { Complete: 'complete-a', Incomplete: 'incomplete-a' } } }
+    ], [
+      { submissionId: 's1', applicationId: 'app-a', status: 'Withdrawn', gpaStatus: 'Complete', labelIds: ['complete-a', 'other-label'] }
+    ])
+
+    const result = await syncGpaStatusLabels({ cycleId: 'cycle' })
+
+    expect(addSubmissionLabelBulk).not.toHaveBeenCalled()
+    expect(removeSubmissionLabel).toHaveBeenCalledWith('s1', 'complete-a', undefined)
+    expect(result.labelsRemoved).toBe(1)
+    expect(SubmissionModel.bulkWrite).toHaveBeenCalledWith([
+      expect.objectContaining({ updateOne: expect.objectContaining({ update: { $set: { labelIds: ['other-label'] } } }) })
+    ])
   })
 
   it('does not update local labels when the remote add fails', async () => {

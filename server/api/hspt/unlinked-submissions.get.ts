@@ -1,4 +1,5 @@
 import { SubmissionModel } from '~~/server/models/Submission'
+import { activeSubmissionFilter } from '~~/server/utils/submissionStatus'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
@@ -24,7 +25,7 @@ export default defineEventHandler(async (event) => {
 
   const submissions = await SubmissionModel.find({
     cycleId,
-    status: { $ne: 'withdrawn' },
+    ...activeSubmissionFilter(),
     $or: conditions
   }).select('submissionId submissionIdInt mappedFields')
     .sort({ 'mappedFields.FullName': 1 })

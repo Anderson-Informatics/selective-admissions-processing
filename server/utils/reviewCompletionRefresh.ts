@@ -11,7 +11,8 @@ import { normalizeRoutingConfig } from './routingConfig'
 import { computeReviewCompletion, resolveGpa, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
 import { computeGpaScore, deriveGpaMultiplier, resolveGpaBonusLabelId } from './gpaScoring'
 import { normalizeScoringConfig } from './scoreCompilation'
-import { clearGpaRecordsForSubmissions, isWithdrawnSubmission } from './withdrawnGpa'
+import { clearGpaRecordsForSubmissions } from './withdrawnGpa'
+import { isWithdrawnSubmission } from './submissionStatus'
 
 export interface RefreshProgress {
   (update: { phase?: string, processed?: number, total?: number, percent?: number, message?: string }): Promise<void>

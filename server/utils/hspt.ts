@@ -3,6 +3,7 @@ import type { AnyBulkWriteOperation } from 'mongoose'
 import { CycleModel } from '../models/Cycle'
 import { HSPTResultModel, type HSPTResult } from '../models/HSPTResult'
 import { SubmissionModel } from '../models/Submission'
+import { activeSubmissionFilter, isWithdrawnSubmission } from './submissionStatus'
 
 export interface HSPTParseResult {
   processed: number
@@ -314,7 +315,7 @@ async function loadMatchContext(cycleId: string): Promise<MatchContext> {
   })
   const submissions = await SubmissionModel.find({
     cycleId,
-    status: { $ne: 'withdrawn' },
+    ...activeSubmissionFilter(),
     submissionId: { $nin: linkedSubmissionIds }
   }).select('submissionId submissionIdInt mappedFields').lean()
 
@@ -514,6 +515,8 @@ export async function runHSPTMatching(cycleId: string, threshold?: number): Prom
 }
 
 export async function linkHSPTResult(hsptResultId: string, submissionId: string): Promise<HSPTResult | null> {
+  const submission = await SubmissionModel.findOne({ submissionId }).select('status').lean()
+  if (isWithdrawnSubmission(submission || {})) throw new Error('Cannot link an HSPT result to a withdrawn submission')
   const result = await HSPTResultModel.findByIdAndUpdate(
     hsptResultId,
     { $set: { linkedSubmissionId: submissionId, status: 'linked', matchType: 'manual', matchScore: 1, updatedAt: new Date() } },

@@ -485,6 +485,32 @@ functions</strong> to avoid timeout limits.</li>
 batch.</li>
 <li>The UI polls <code>Job</code> documents for status updates.</li>
 </ul>
+<h3 id="withdrawn-submissions">Withdrawn Submissions</h3>
+<p>Withdrawn submissions are synchronized from Submittable like all other
+records, but they are governed by system-level workflow rules rather than
+configurable routing rules:</p>
+<ul>
+<li><code>Submission.status</code> values matching
+<code>/^withdrawn$/i</code> make <code>Withdrawn Application</code> the
+only required stage in the persisted review ledger. The stage is
+incomplete until the submission is physically moved there.</li>
+<li>Routing may move a withdrawn submission only to
+<code>Withdrawn Application</code>; configured outcomes, entry/exit
+actions, assignments, editing actions, and status-label additions are
+suppressed.</li>
+<li>Review-completion refresh removes managed stage
+<code>statusLabels</code> (including Essay Status) and
+<code>scoring.gpaStatusLabels</code> from withdrawn submissions. GPA
+records and score records are removed and are not recreated.</li>
+<li>Withdrawn records remain available to extraction, response mapping,
+review history, registration deletion, validation-label cleanup,
+submission details, audit history, and the duplicate-student-number
+audit.</li>
+<li>Withdrawn records are excluded from active dashboard/status metrics,
+the main GPA table, score records/exports, essay statistics, HSPT
+matching/linking, score compilation, and internal-form score
+write-back.</li>
+</ul>
 <h2 id="data-extraction-form-mapping">9. Data Extraction &amp; Form
 Mapping</h2>
 <p>The legacy <code>get_form_data</code> contains a giant hard-coded
@@ -695,9 +721,9 @@ the uploaded files are modified, while stale <code>GpaRecord</code>
 documents for withdrawn submissions are cleared.</li>
 </ul>
 <h3 id="gpa-review-and-duplicates">GPA Review and Duplicates</h3>
-<p>The GPA review page lists every submission in the selected cycle with
-its persisted GPA status, resolved GPA/source, enrollment evidence, and
-source-specific details. When the final GPA source filter is set to
+<p>The GPA review page lists every non-withdrawn submission in the
+selected cycle with its persisted GPA status, resolved GPA/source,
+enrollment evidence, and source-specific details. When the final GPA source filter is set to
 DPSCD / PowerSchool, a cycle-wide <strong>Duplicate student
 numbers</strong> report appears below the main table. It groups
 submissions by nonblank <code>mappedFields.StudentNumber</code>, lists
@@ -748,7 +774,8 @@ validation issues, scores, routing history, audit log.</li>
 <h2 id="scoring-file-compilation">14. Scoring File Compilation</h2>
 <p>The scoring job replaces <code>compile_internal_form</code>:</p>
 <ol type="1">
-<li>Load the cycle’s scoring config.</li>
+<li>Load the cycle’s scoring config and select non-withdrawn
+submissions.</li>
 <li>Merge linked <code>HSPTResult</code> scaled scores (Reading, Math,
 Language, Science, Overall) for each applicant.</li>
 <li>Merge essay scores.</li>
@@ -756,9 +783,10 @@ Language, Science, Overall) for each applicant.</li>
 <li>Apply DPSCD bonus and Marygrove bonus/catchment.</li>
 <li>Compute <code>Total_App_Score</code> and
 <code>Total_MG_Score</code>.</li>
-<li>Persist in <code>ScoreRecord</code>.</li>
+<li>Persist in <code>ScoreRecord</code> and delete stale
+<code>ScoreRecord</code>s for withdrawn submissions.</li>
 <li>Write back to Submittable internal forms
-(<code>updateInternalForms</code>).</li>
+(<code>updateInternalForms</code>) for non-withdrawn applicants.</li>
 <li>Compute percentile ranks for total, GPA, essay, exam, and exam
 subcomponent scores.</li>
 <li>Export the scored dataset for use by the placement algorithm and

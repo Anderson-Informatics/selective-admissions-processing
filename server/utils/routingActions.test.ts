@@ -105,6 +105,29 @@ describe('resolveRoutingActions', () => {
     const actions = resolveRoutingActions(stages, context(), moveDecision, [])
     expect(actions.diagnostics.some(d => d.code === 'set_fields_deferred')).toBe(true)
   })
+
+  it('suppresses configured actions and clears managed status labels for withdrawn submissions', () => {
+    const stages = [
+      stage('new', 0, 'initial', {
+        exitActions: [{ addLabelIds: ['exit-label'], assignUserIds: ['user-1'] }],
+        statusLabels: { Mapped: 'mapped-label' }
+      }),
+      stage('withdrawn-stage', 99, 'final', {
+        entryActions: [{ addLabelIds: ['entry-label'], openForEditing: { subjectTemplate: 'Hi' } }],
+        statusLabels: { Withdrawn: 'withdrawn-label' }
+      })
+    ]
+    const decision: RoutingDecision = { action: 'move', reason: 'withdrawn', fromStageId: 'new', toStageId: 'withdrawn-stage', backward: false, diagnostics: [] }
+    const actions = resolveRoutingActions(stages, context({
+      submission: { ...context().submission, status: 'Withdrawn' }
+    }), decision, [])
+
+    expect(actions.move?.toStageId).toBe('withdrawn-stage')
+    expect(actions.labelsToAdd).toEqual([])
+    expect(actions.labelsToRemove.sort()).toEqual(['mapped-label', 'withdrawn-label'])
+    expect(actions.assignUserIds).toEqual([])
+    expect(actions.openForEditing).toBeUndefined()
+  })
 })
 
 describe('matchedOutcomeRule', () => {
