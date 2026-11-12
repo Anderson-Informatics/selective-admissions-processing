@@ -173,6 +173,19 @@ export interface ResolvedGpa {
   source: 'recording' | 'dpscd' | 'optIn' | 'partial' | null
 }
 
+export const LEGACY_OPT_IN_PARTIAL_STATUS = 'OOD Partial'
+export const OPT_IN_PARTIAL_STATUS = 'Opt-In Partial'
+
+export function canonicalGpaStatus(value: unknown): string {
+  const status = String(value ?? '').trim()
+  return status === LEGACY_OPT_IN_PARTIAL_STATUS ? OPT_IN_PARTIAL_STATUS : status
+}
+
+export function canonicalGpaStatusValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalGpaStatus)
+  return canonicalGpaStatus(value)
+}
+
 function validGpa(value: unknown): number | null {
   if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null
   const number = Number(value)
@@ -214,12 +227,12 @@ export function resolveGpa(context: RoutingContext): ResolvedGpa {
   if (typeof quarters === 'number' && quarters > 0 && quarters < 6) {
     return { status: 'DPSCD Partial', cumulativeGpa: null, source: null }
   }
-  if (attendance === 'no') return { status: 'OOD Partial', cumulativeGpa: null, source: null }
+  if (attendance === 'no') return { status: OPT_IN_PARTIAL_STATUS, cumulativeGpa: null, source: null }
   return { status: 'Incomplete', cumulativeGpa: null, source: null }
 }
 
 export function deriveGpaStatus(context: RoutingContext): string {
-  return context.gpaStatus || resolveGpa(context).status
+  return canonicalGpaStatus(context.gpaStatus || resolveGpa(context).status)
 }
 
 export function evaluateCondition(condition: unknown, context: RoutingContext): boolean {
@@ -265,7 +278,7 @@ export function evaluateCondition(condition: unknown, context: RoutingContext): 
       if (value.source === 'optIn' && value.termsEnrolled !== undefined) return compareValue(context.gpa?.optIn?.termsEnrolled, op, value.termsEnrolled)
       return exists
     }
-    case 'gpaStatus': return compareValue(deriveGpaStatus(context), op, expected)
+    case 'gpaStatus': return compareValue(deriveGpaStatus(context), op, canonicalGpaStatusValue(expected))
     case 'cycleRound': return compareValue(context.cycleRound, op, expected)
     case 'mappedInitialForm': return compareValue(context.submission.isMapped, op || 'eq', expected ?? true)
     case 'pipelinePrerequisitesComplete': return context.prerequisitesComplete === true

@@ -58,10 +58,10 @@ export const pageHelp = {
   },
   gpa: {
     title: 'GPA Records',
-    purpose: 'Review applicants’ grade point average (GPA) information from Opt-In schools and Detroit Public Schools Community District (DPSCD).',
-    tasks: ['Filter records by admission cycle and information source.', 'Compare Opt-In GPA, DPSCD GPA, school, enrollment information, and available quarters.', 'Upload Opt-In school Excel files, inspect matched applicants and warnings, and confirm the import.', 'Check the status and summary of the latest DPSCD import.'],
-    gettingStarted: 'Select a cycle. To add Opt-In grades, choose the school files and use Preview import. Check submission IDs, names, GPA values, and warnings before confirming.',
-    important: ['Opt-In files are matched using Submission IDs. Only submissions represented in the files are updated.', 'Missing Opt-In labels, invalid grades, unmatched rows, and enrollment warnings need attention. A preview does not mean every row will be imported successfully.', 'This page uploads Opt-In files; the DPSCD section reports the latest DPSCD import rather than providing a DPSCD upload control.']
+    purpose: 'Review every submission’s final GPA, source, enrollment evidence, current stage, and missing GPA information.',
+    tasks: ['Filter submissions by cycle, GPA status, or final GPA source.', 'Search by applicant name, DPSCD student number, or integer Submission ID.', 'Expand a row to compare GPA Recording, Partial GPA, DPSCD/PowerSchool, and Opt-In data.', 'Upload Opt-In school Excel files, inspect matched applicants and warnings, and confirm the import.', 'Check the status and summary of the latest DPSCD import.'],
+    gettingStarted: 'Select a cycle, then use GPA Status or Final GPA Source to focus the list. Expand a row when staff need to see every source available for that student.',
+    important: ['Final GPA comes from the stored completion refresh and follows the configured source precedence.', 'Opt-In files are matched using Submission IDs. Only submissions represented in the files are updated.', 'Missing Opt-In labels, invalid grades, unmatched rows, and enrollment warnings need attention. A preview does not mean every row will be imported successfully.', 'This page uploads Opt-In files; the DPSCD section reports the latest DPSCD/PowerSchool import rather than providing a DPSCD upload control.']
   },
   cycles: {
     title: 'Cycles',

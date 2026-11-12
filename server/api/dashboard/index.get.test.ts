@@ -106,7 +106,7 @@ describe('GET /api/dashboard GPA completion', () => {
       { labelIds: ['dpscd'], gpaStatus: 'Complete', status: 'submitted' },
       { labelIds: ['dpscd'], gpaStatus: 'DPSCD Partial', status: 'submitted' },
       { labelIds: ['opt-in'], gpaStatus: 'Complete', status: 'submitted' },
-      { labelIds: ['opt-in'], gpaStatus: 'OOD Partial', status: 'submitted' },
+      { labelIds: ['opt-in'], gpaStatus: 'Opt-In Partial', status: 'submitted' },
       { labelIds: ['opt-in', 'dpscd'], gpaStatus: 'Complete', status: 'submitted' },
       { labelIds: ['dpscd'], gpaStatus: 'Complete', status: 'Withdrawn' }
     ]

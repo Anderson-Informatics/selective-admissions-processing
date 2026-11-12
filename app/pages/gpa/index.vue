@@ -8,43 +8,65 @@ interface Cycle {
   active: boolean
 }
 
-interface GpaRecordItem {
+interface GpaReviewItem {
   _id: string
   submissionId: string
   submissionIdInt?: number
-  submissionName: string
-  hasOptInLabel: boolean
-  dpscd?: {
-    snapshots?: { r1?: { cumulativeGpa?: number, quartersAvailable?: number, gpaStatus?: string }, all?: { cumulativeGpa?: number, quartersAvailable?: number, gpaStatus?: string } }
-    selectedSnapshot?: 'r1' | 'all'
-    selectedRound?: string
-    selectionIssue?: string
-    studentNumber?: number
-    quartersAvailable?: number
-    cumulativeGpa?: number
-    gpaStatus?: string
-    yearEnd?: number
-    importedAt?: string
-  }
-  optIn?: {
-    studentName: string
-    firstName: string
-    lastName: string
-    enrolledMinTerms?: 'yes' | 'no' | ''
-    enrolledMinTermsFlag?: boolean
-    termsEnrolled?: number
-    cumulativeGpa?: number
-    schoolName: string
-    sourceFile: string
-    importedAt?: string
-  }
+  submissionName?: string
+  student?: string
+  status?: string
+  currentStageName?: string
+  gpaStatus?: string
   resolvedCumulativeGpa?: number | null
-  resolvedSource?: string | null
-  gpaMultiplier?: number | null
-  gpaBonusEligible?: boolean
-  gpaBonus?: number | null
-  gpaScore?: number | null
-  updatedAt?: string
+  resolvedSource?: 'recording' | 'dpscd' | 'optIn' | 'partial' | null
+  enrollmentConsidered?: string | number | null
+  hasOptInLabel?: boolean
+  reviewCompletion?: Array<{ name: string, status: string, required: boolean, complete: boolean }>
+  gpa?: {
+    dpscd?: {
+      snapshots?: { r1?: { cumulativeGpa?: number, quartersAvailable?: number, gpaStatus?: string }, all?: { cumulativeGpa?: number, quartersAvailable?: number, gpaStatus?: string } }
+      selectedSnapshot?: 'r1' | 'all'
+      selectedRound?: string
+      selectionIssue?: string
+      studentNumber?: number
+      studentName?: string
+      dob?: string
+      schoolNumber?: number
+      schoolName?: string
+      gradeLevel?: number
+      minimumEntryDate?: string
+      latestExitDate?: string
+      quartersAvailable?: number
+      cumulativeGpa?: number
+      gpaStatus?: string
+      importedAt?: string
+    }
+    optIn?: {
+      studentName?: string
+      enrolledMinTerms?: 'yes' | 'no' | ''
+      termsEnrolled?: number
+      cumulativeGpa?: number
+      schoolName?: string
+      sourceFile?: string
+      importedAt?: string
+    }
+    gpaMultiplier?: number | null
+    gpaBonusEligible?: boolean
+    gpaBonus?: number | null
+    gpaScore?: number | null
+    updatedAt?: string
+  } | null
+  recordingReview?: GpaReview
+  partialReview?: GpaReview
+  updatedAtTimestamp?: string
+}
+
+interface GpaReview {
+  stageName?: string
+  status?: string
+  mappedData?: Record<string, unknown>
+  completedAt?: string
+  createdAt?: string
 }
 
 interface PreviewRow {
@@ -108,32 +130,44 @@ watchEffect(() => {
   }
 })
 
-const sourceItems: SelectItem[] = [
-  { label: 'All sources', value: 'all' },
-  { label: 'Opt-In', value: 'opt_in' },
-  { label: 'DPSCD', value: 'dpscd' }
+const statusItems: SelectItem[] = [
+  { label: 'All statuses', value: 'all' },
+  { label: 'Complete', value: 'Complete' },
+  { label: 'Partial', value: 'Partial' },
+  { label: 'DPSCD Partial', value: 'DPSCD Partial' },
+  { label: 'Opt-In Partial', value: 'Opt-In Partial' },
+  { label: 'Incomplete', value: 'Incomplete' }
 ]
+const sourceItems: SelectItem[] = [
+  { label: 'All final sources', value: 'all' },
+  { label: 'GPA Recording', value: 'recording' },
+  { label: 'Partial GPA', value: 'partial' },
+  { label: 'DPSCD / PowerSchool', value: 'dpscd' },
+  { label: 'Opt-In', value: 'optIn' },
+  { label: 'No resolved source', value: 'none' }
+]
+const selectedStatus = ref('all')
 const selectedSource = ref('all')
 const page = ref(1)
 const limit = 50
 
 const searchInput = ref('')
 const search = ref('')
-const sorting = ref([{ id: 'updatedAt', desc: true }])
+const sorting = ref([{ id: 'student', desc: false }])
 const expanded = ref({})
 
 function applySearch() {
   search.value = searchInput.value.trim()
 }
 
-watch([selectedCycleId, selectedSource, search, sorting], () => {
+watch([selectedCycleId, selectedStatus, selectedSource, search, sorting], () => {
   page.value = 1
   expanded.value = {}
 }, { deep: true })
 
 const requestFetch = useRequestFetch()
 const { data, status, refresh } = useAsyncData<{
-  records: GpaRecordItem[]
+  records: GpaReviewItem[]
   total: number
   page: number
   limit: number
@@ -148,12 +182,13 @@ const { data, status, refresh } = useAsyncData<{
     params.set('page', String(page.value))
     params.set('limit', String(limit))
     params.set('search', search.value)
-    params.set('sortBy', sorting.value[0]?.id || 'updatedAt')
+    params.set('sortBy', sorting.value[0]?.id || 'student')
     params.set('sortOrder', sorting.value[0]?.desc === false ? 'asc' : 'desc')
+    if (selectedStatus.value !== 'all') params.set('gpaStatus', selectedStatus.value)
     if (selectedSource.value !== 'all') params.set('source', selectedSource.value)
-    return requestFetch(`/api/gpa/optin?${params.toString()}`)
+    return requestFetch(`/api/gpa?${params.toString()}`)
   },
-  { default: () => ({ records: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedSource, search, sorting, page] }
+  { default: () => ({ records: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedStatus, selectedSource, search, sorting, page] }
 )
 
 const totalPages = computed(() => Math.ceil((data.value?.total || 0) / limit))
@@ -310,7 +345,7 @@ const previewColumns: TableColumn<PreviewRow>[] = [
 
 const UButton = resolveComponent('UButton')
 
-function sortableColumn(id: string, label: string): TableColumn<GpaRecordItem> {
+function sortableColumn(id: string, label: string): TableColumn<GpaReviewItem> {
   return {
     id,
     accessorKey: id,
@@ -327,49 +362,67 @@ function sortableColumn(id: string, label: string): TableColumn<GpaRecordItem> {
   }
 }
 
-const recordColumns = computed<TableColumn<GpaRecordItem>[]>(() => {
-  const shared: TableColumn<GpaRecordItem>[] = [
-    { id: 'expand', header: 'Details', enableSorting: false },
-    sortableColumn('submissionIdInt', 'Submission ID'),
-    sortableColumn('student', 'Student')
-  ]
-  const optIn = [
-    sortableColumn('optIn.studentName', 'Name in Uploaded File'),
-    sortableColumn('optIn.schoolName', 'Opt-In School'),
-    sortableColumn('optIn.cumulativeGpa', 'Opt-In GPA'),
-    sortableColumn('optIn.enrolledMinTerms', 'Minimum Enrollment Met?'),
-    sortableColumn('optIn.termsEnrolled', 'Terms Enrolled'),
-    sortableColumn('hasOptInLabel', 'Opt-In Label'),
-    sortableColumn('optIn.sourceFile', 'Source File'),
-    sortableColumn('optIn.importedAt', 'Imported At')
-  ]
-  const dpscd = [
-    sortableColumn('dpscd.studentNumber', 'DPSCD Student Number'),
-    sortableColumn('dpscd.cumulativeGpa', 'DPSCD GPA'),
-    sortableColumn('dpscd.quartersAvailable', 'Quarters Available'),
-    sortableColumn('dpscd.gpaStatus', 'GPA Status'),
-    sortableColumn('dpscd.selectedRound', 'Admission Round'),
-    sortableColumn('dpscd.selectedSnapshot', 'Selected Snapshot'),
-    sortableColumn('dpscd.selectionIssue', 'DPSCD Review Issues'),
-    sortableColumn('dpscd.importedAt', 'Imported At')
-  ]
-  if (selectedSource.value === 'opt_in') return [...shared, ...optIn]
-  if (selectedSource.value === 'dpscd') return [...shared, ...dpscd]
-  return [
-    ...shared,
-    { id: 'sources', header: 'Sources Present', enableSorting: false },
-    ...optIn.slice(1, 4),
-    ...dpscd.slice(1, 3),
-    { id: 'issues', header: 'Review Issues', enableSorting: false }
-  ]
-})
+const recordColumns: TableColumn<GpaReviewItem>[] = [
+  { id: 'expand', header: 'Details', enableSorting: false },
+  sortableColumn('submissionIdInt', 'Submission ID'),
+  sortableColumn('student', 'Full Name'),
+  sortableColumn('gpaStatus', 'GPA Status'),
+  sortableColumn('resolvedCumulativeGpa', 'Final GPA'),
+  sortableColumn('resolvedSource', 'Final GPA Source'),
+  sortableColumn('enrollmentConsidered', 'Enrollment Considered'),
+  sortableColumn('currentStageName', 'Current Stage'),
+  { id: 'requiredAction', header: 'Required GPA Action', enableSorting: false }
+]
 
-function reviewIssues(record: GpaRecordItem) {
-  return [
-    record.dpscd?.selectionIssue,
-    record.optIn && !record.hasOptInLabel ? 'Missing Opt-In label' : '',
-    record.optIn && record.optIn.enrolledMinTerms !== 'yes' ? 'Minimum enrollment not met or unknown' : ''
-  ].filter(Boolean).join('; ') || '—'
+const sourceLabels: Record<string, string> = {
+  recording: 'GPA Recording',
+  dpscd: 'DPSCD / PowerSchool',
+  optIn: 'Opt-In',
+  partial: 'Partial GPA'
+}
+
+function sourceLabel(source?: string | null) {
+  return source ? sourceLabels[source] || source : '—'
+}
+
+function gpaStatusColor(status?: string) {
+  if (status === 'Complete') return 'success' as const
+  if (status === 'Incomplete') return 'error' as const
+  return 'warning' as const
+}
+
+function requiredGpaAction(record: GpaReviewItem) {
+  const action = (record.reviewCompletion || []).find(entry => entry.required && !entry.complete && /gpa/i.test(entry.name))
+  return action ? `${action.name} — ${action.status}` : '—'
+}
+
+function formatEnrollment(record: GpaReviewItem) {
+  const value = record.enrollmentConsidered
+  if (value == null || value === '') return '—'
+  if (record.resolvedSource === 'dpscd' || record.gpaStatus === 'DPSCD Partial') return `${value} quarter${value === 1 ? '' : 's'}`
+  if (record.resolvedSource === 'optIn' || record.gpaStatus === 'Opt-In Partial') return `${value} term${value === 1 ? '' : 's'}`
+  return String(value)
+}
+
+function formatOptInEnrollment(record: GpaReviewItem) {
+  const optIn = record.gpa?.optIn
+  if (!optIn) return '—'
+  const terms = optIn.termsEnrolled != null ? ` (${optIn.termsEnrolled} term${optIn.termsEnrolled === 1 ? '' : 's'})` : ''
+  if (optIn.enrolledMinTerms === 'yes') return `Yes${terms}`
+  if (optIn.enrolledMinTerms === 'no') return `No${terms}`
+  return terms ? `Unknown${terms}` : '—'
+}
+
+function reviewIssues(record: GpaReviewItem) {
+  const issues = [
+    record.gpa?.dpscd?.selectionIssue,
+    record.gpa?.optIn && !record.hasOptInLabel ? 'Missing Opt-In label' : '',
+    record.gpa?.optIn && record.gpa.optIn.enrolledMinTerms !== 'yes' ? 'Opt-In enrollment not confirmed' : ''
+  ]
+  if (record.gpaStatus !== 'Complete' && !record.recordingReview && !record.partialReview) {
+    issues.push('No completed GPA Recording or Partial GPA review')
+  }
+  return issues.filter(Boolean).join('; ') || '—'
 }
 
 function formatDate(value?: string) {
@@ -385,7 +438,7 @@ function formatDate(value?: string) {
       class="mb-6"
     />
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
       <UFormField label="Cycle">
         <USelect
           v-model="selectedCycleId"
@@ -395,7 +448,15 @@ function formatDate(value?: string) {
         />
       </UFormField>
 
-      <UFormField label="Source">
+      <UFormField label="GPA Status">
+        <USelect
+          v-model="selectedStatus"
+          :items="statusItems"
+          class="w-full"
+        />
+      </UFormField>
+
+      <UFormField label="Final GPA Source">
         <USelect
           v-model="selectedSource"
           :items="sourceItems"
@@ -480,121 +541,120 @@ function formatDate(value?: string) {
       :loading="status === 'pending'"
       :data="data?.records || []"
       :columns="recordColumns"
-      :get-row-id="(row: GpaRecordItem) => row._id"
+      :get-row-id="(row: GpaReviewItem) => row._id"
+      empty="No submissions found for the selected cycle and filters."
     >
-      <template #student-cell="{ row }">
-        {{ row.original.submissionName || row.original.optIn?.studentName || '—' }}
-      </template>
       <template #expand-cell="{ row }">
         <UButton
           variant="ghost"
           color="neutral"
           size="xs"
-          :aria-label="row.getIsExpanded() ? 'Collapse audit details' : 'Expand audit details'"
+          :aria-label="row.getIsExpanded() ? 'Collapse GPA details' : 'Expand GPA details'"
           :icon="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
           @click="row.toggleExpanded()"
         />
       </template>
-      <template #sources-cell="{ row }">
-        {{ [row.original.optIn ? 'Opt-In' : '', row.original.dpscd ? 'DPSCD' : ''].filter(Boolean).join(', ') }}
+      <template #student-cell="{ row }">
+        <a
+          :href="`https://dpscd.submittable.com/submissions/${row.original.submissionId}`"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="font-medium text-primary hover:underline"
+        >
+          {{ row.original.student || row.original.submissionName || '—' }}
+        </a>
       </template>
-      <template #issues-cell="{ row }">
-        {{ reviewIssues(row.original) }}
-      </template>
-      <template #[`hasOptInLabel-cell`]="{ row }">
+      <template #gpaStatus-cell="{ row }">
         <UBadge
-          v-if="row.original.optIn"
-          :label="row.original.hasOptInLabel ? 'Opt-In' : 'No label'"
-          :color="row.original.hasOptInLabel ? 'success' : 'warning'"
+          :label="row.original.gpaStatus || 'Incomplete'"
+          :color="gpaStatusColor(row.original.gpaStatus)"
           variant="subtle"
         />
-        <span
-          v-else
-          class="text-muted"
-        >—</span>
       </template>
-      <template #[`optIn.schoolName-cell`]="{ row }">
-        {{ row.original.optIn?.schoolName || '—' }}
+      <template #resolvedSource-cell="{ row }">
+        {{ sourceLabel(row.original.resolvedSource) }}
       </template>
-      <template #[`optIn.cumulativeGpa-cell`]="{ row }">
-        {{ row.original.optIn?.cumulativeGpa ?? '—' }}
+      <template #enrollmentConsidered-cell="{ row }">
+        {{ formatEnrollment(row.original) }}
       </template>
-      <template #[`optIn.enrolledMinTerms-cell`]="{ row }">
-        <span v-if="row.original.optIn">
-          {{ row.original.optIn.enrolledMinTerms === 'yes' ? 'Yes' : row.original.optIn.enrolledMinTerms === 'no' ? 'No' : '—' }}
-        </span>
-        <span
-          v-else
-          class="text-muted"
-        >—</span>
-      </template>
-      <template #[`dpscd.cumulativeGpa-cell`]="{ row }">
-        {{ row.original.dpscd?.cumulativeGpa ?? '—' }}
-        <div
-          v-if="row.original.dpscd?.selectedSnapshot"
-          class="text-xs text-muted"
-        >
-          {{ row.original.dpscd.selectedRound || 'Round unknown' }} · {{ row.original.dpscd.selectedSnapshot === 'r1' ? 'Round 1 snapshot' : 'All available' }}
-        </div>
-        <div
-          v-if="row.original.dpscd?.selectionIssue"
-          class="text-xs text-error"
-        >
-          {{ row.original.dpscd.selectionIssue }}
-        </div>
-      </template>
-      <template #[`dpscd.selectedSnapshot-cell`]="{ row }">
-        {{ row.original.dpscd?.selectedSnapshot === 'r1' ? 'Round 1' : row.original.dpscd?.selectedSnapshot === 'all' ? 'All available' : '—' }}
-      </template>
-      <template #[`dpscd.importedAt-cell`]="{ row }">
-        {{ formatDate(row.original.dpscd?.importedAt) }}
-      </template>
-      <template #[`optIn.importedAt-cell`]="{ row }">
-        {{ formatDate(row.original.optIn?.importedAt) }}
+      <template #requiredAction-cell="{ row }">
+        {{ requiredGpaAction(row.original) }}
       </template>
       <template #expanded="{ row }">
-        <div class="grid gap-6 p-4 md:grid-cols-3 text-sm">
+        <div class="grid gap-6 p-4 md:grid-cols-2 xl:grid-cols-4 text-sm">
           <section>
             <h3 class="font-semibold mb-2">
-              DPSCD import
+              GPA Recording review
             </h3>
-            <p>Student number: {{ row.original.dpscd?.studentNumber ?? '—' }}</p>
-            <p>Round: {{ row.original.dpscd?.selectedRound || '—' }}</p>
+            <p>GPA: {{ row.original.recordingReview?.mappedData?.CumulativeGPA ?? '—' }}</p>
+            <p>Able to record: {{ row.original.recordingReview?.mappedData?.AbleToRecord || '—' }}</p>
+            <p>Status: {{ row.original.recordingReview?.status || '—' }}</p>
+            <p>Completed: {{ formatDate(row.original.recordingReview?.completedAt) }}</p>
+          </section>
+          <section>
+            <h3 class="font-semibold mb-2">
+              Partial GPA review
+            </h3>
+            <p>GPA: {{ row.original.partialReview?.mappedData?.PartialGPA ?? '—' }}</p>
+            <p>Semesters: {{ row.original.partialReview?.mappedData?.Semesters || '—' }}</p>
+            <p>Status: {{ row.original.partialReview?.status || '—' }}</p>
+            <p>Completed: {{ formatDate(row.original.partialReview?.completedAt) }}</p>
+          </section>
+          <section>
+            <h3 class="font-semibold mb-2">
+              DPSCD / PowerSchool
+            </h3>
+            <p>Student number: {{ row.original.gpa?.dpscd?.studentNumber ?? '—' }}</p>
+            <p>Name in import: {{ row.original.gpa?.dpscd?.studentName || '—' }}</p>
+            <p>DOB: {{ formatDate(row.original.gpa?.dpscd?.dob) }}</p>
+            <p>Current school: {{ row.original.gpa?.dpscd?.schoolName || '—' }}<span v-if="row.original.gpa?.dpscd?.schoolNumber != null"> ({{ row.original.gpa.dpscd.schoolNumber }})</span></p>
+            <p>Grade level: {{ row.original.gpa?.dpscd?.gradeLevel ?? '—' }}</p>
+            <p>Enrollment dates: {{ formatDate(row.original.gpa?.dpscd?.minimumEntryDate) }} – {{ formatDate(row.original.gpa?.dpscd?.latestExitDate) }}</p>
+            <p>GPA: {{ row.original.gpa?.dpscd?.cumulativeGpa ?? '—' }}</p>
+            <p>Quarters: {{ row.original.gpa?.dpscd?.quartersAvailable ?? '—' }}</p>
+            <p>Round: {{ row.original.gpa?.dpscd?.selectedRound || '—' }}</p>
             <p
               v-for="snapshot in (['r1', 'all'] as const)"
               :key="snapshot"
             >
-              {{ snapshot === 'r1' ? 'Round 1' : 'All available' }}: GPA {{ row.original.dpscd?.snapshots?.[snapshot]?.cumulativeGpa ?? '—' }} · Quarters {{ row.original.dpscd?.snapshots?.[snapshot]?.quartersAvailable ?? '—' }} · Status {{ row.original.dpscd?.snapshots?.[snapshot]?.gpaStatus || '—' }}
+              {{ snapshot === 'r1' ? 'Round 1' : 'All available' }}: GPA {{ row.original.gpa?.dpscd?.snapshots?.[snapshot]?.cumulativeGpa ?? '—' }} · Quarters {{ row.original.gpa?.dpscd?.snapshots?.[snapshot]?.quartersAvailable ?? '—' }} · Status {{ row.original.gpa?.dpscd?.snapshots?.[snapshot]?.gpaStatus || '—' }}
             </p>
-            <p>Imported: {{ formatDate(row.original.dpscd?.importedAt) }}</p>
+            <p>Issue: {{ row.original.gpa?.dpscd?.selectionIssue || '—' }}</p>
+            <p>Imported: {{ formatDate(row.original.gpa?.dpscd?.importedAt) }}</p>
           </section>
           <section>
             <h3 class="font-semibold mb-2">
-              Opt-In import
+              Opt-In upload
             </h3>
-            <p>Name in file: {{ row.original.optIn?.studentName || '—' }}</p>
-            <p>School: {{ row.original.optIn?.schoolName || '—' }}</p>
-            <p>Terms enrolled: {{ row.original.optIn?.termsEnrolled ?? '—' }}</p>
-            <p>Source file: {{ row.original.optIn?.sourceFile || '—' }}</p>
-            <p>Imported: {{ formatDate(row.original.optIn?.importedAt) }}</p>
+            <p>Name in file: {{ row.original.gpa?.optIn?.studentName || '—' }}</p>
+            <p>School: {{ row.original.gpa?.optIn?.schoolName || '—' }}</p>
+            <p>GPA: {{ row.original.gpa?.optIn?.cumulativeGpa ?? '—' }}</p>
+            <p>Minimum enrollment met: {{ formatOptInEnrollment(row.original) }}</p>
+            <p>Source file: {{ row.original.gpa?.optIn?.sourceFile || '—' }}</p>
+            <p>Opt-In label: {{ row.original.gpa?.optIn ? (row.original.hasOptInLabel ? 'Present' : 'Missing') : '—' }}</p>
+            <p>Imported: {{ formatDate(row.original.gpa?.optIn?.importedAt) }}</p>
           </section>
-          <section>
+          <section class="md:col-span-2 xl:col-span-3">
             <h3 class="font-semibold mb-2">
               Stored scoring results
             </h3>
             <p class="text-muted mb-2">
-              From the last scoring refresh; distinct from raw imported GPA.
+              From the last completion refresh; distinct from raw imported values.
             </p>
             <p>Resolved GPA: {{ row.original.resolvedCumulativeGpa ?? '—' }}</p>
-            <p>Resolved source: {{ row.original.resolvedSource ?? '—' }}</p>
-            <p>Multiplier: {{ row.original.gpaMultiplier ?? '—' }}</p>
-            <p>Bonus eligible: {{ row.original.gpaBonusEligible == null ? '—' : row.original.gpaBonusEligible ? 'Yes' : 'No' }}</p>
-            <p>Bonus points: {{ row.original.gpaBonus ?? '—' }}</p>
-            <p>GPA score: {{ row.original.gpaScore ?? '—' }}</p>
+            <p>Resolved source: {{ sourceLabel(row.original.resolvedSource) }}</p>
+            <p>Multiplier: {{ row.original.gpa?.gpaMultiplier ?? '—' }}</p>
+            <p>Bonus eligible: {{ row.original.gpa?.gpaBonusEligible == null ? '—' : row.original.gpa.gpaBonusEligible ? 'Yes' : 'No' }}</p>
+            <p>Bonus points: {{ row.original.gpa?.gpaBonus ?? '—' }}</p>
+            <p>GPA score: {{ row.original.gpa?.gpaScore ?? '—' }}</p>
+            <p>Record updated: {{ formatDate(row.original.gpa?.updatedAt || row.original.updatedAtTimestamp) }}</p>
           </section>
-          <p class="md:col-span-3">
-            Review issues: {{ reviewIssues(row.original) }}
-          </p>
+          <section>
+            <h3 class="font-semibold mb-2">
+              Review issues
+            </h3>
+            <p>{{ reviewIssues(row.original) }}</p>
+          </section>
         </div>
       </template>
     </UTable>

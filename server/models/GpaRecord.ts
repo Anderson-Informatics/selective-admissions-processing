@@ -13,18 +13,16 @@ export interface DpscdGpa {
   selectionIssue?: string
   selectedRound?: string
   studentNumber?: number
+  studentName?: string
+  dob?: Date
+  schoolNumber?: number
+  schoolName?: string
+  gradeLevel?: number
+  minimumEntryDate?: Date
+  latestExitDate?: Date
   quartersAvailable?: number
   cumulativeGpa?: number
   gpaStatus?: string
-  yearEnd?: number
-  gradeLevel?: number
-  middleSchoolNumber?: number
-  projectName?: string
-  submissionStatus?: string
-  stageName?: string
-  acceptingHighSchool?: string
-  acceptingHighSchoolNumber?: number
-  completedAt?: Date
   importJobId?: string
   importedAt?: Date
   extra?: Record<string, unknown>
@@ -78,18 +76,16 @@ const gpaRecordSchema = new Schema<GpaRecord>({
     selectionIssue: String,
     selectedRound: String,
     studentNumber: Number,
+    studentName: String,
+    dob: Date,
+    schoolNumber: Number,
+    schoolName: String,
+    gradeLevel: Number,
+    minimumEntryDate: Date,
+    latestExitDate: Date,
     quartersAvailable: Number,
     cumulativeGpa: Number,
     gpaStatus: String,
-    yearEnd: Number,
-    gradeLevel: Number,
-    middleSchoolNumber: Number,
-    projectName: String,
-    submissionStatus: String,
-    stageName: String,
-    acceptingHighSchool: String,
-    acceptingHighSchoolNumber: Number,
-    completedAt: Date,
     importJobId: String,
     importedAt: Date,
     extra: { type: Schema.Types.Mixed }

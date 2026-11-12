@@ -95,7 +95,7 @@ describe('review completion evaluator', () => {
     } }))).toEqual({ status: 'Partial', cumulativeGpa: 2.9, source: 'partial' })
     expect(resolveGpa(context({ reviews: [{ ...partial, status: 'in_progress' }], gpa: {
       optIn: { enrolledMinTerms: 'no', cumulativeGpa: 3 }
-    } }))).toEqual({ status: 'OOD Partial', cumulativeGpa: null, source: null })
+    } }))).toEqual({ status: 'Opt-In Partial', cumulativeGpa: null, source: null })
     expect(resolveGpa(context({ reviews: [partial], gpa: {
       dpscd: { quartersAvailable: 6, cumulativeGpa: 3.6 }
     } })).source).toBe('dpscd')
@@ -104,18 +104,20 @@ describe('review completion evaluator', () => {
     })
   })
 
-  it('classifies an uploaded Opt-In GPA with explicitly insufficient attendance as OOD Partial', () => {
+  it('classifies an uploaded Opt-In GPA with explicitly insufficient attendance as Opt-In Partial', () => {
     const partial = context({
       submission: { ...context().submission, mappedFields: { CumulativeGPA: 3.5 } },
       gpa: { optIn: { enrolledMinTerms: 'no', enrolledMinTermsFlag: false, termsEnrolled: 2, cumulativeGpa: 3.2 } }
     })
 
-    expect(deriveGpaStatus(partial)).toBe('OOD Partial')
+    expect(deriveGpaStatus(partial)).toBe('Opt-In Partial')
+    expect(evaluateCondition({ kind: 'gpaStatus', op: 'eq', value: 'Opt-In Partial' }, partial)).toBe(true)
     expect(evaluateCondition({ kind: 'gpaStatus', op: 'eq', value: 'OOD Partial' }, partial)).toBe(true)
-    expect(buildReviewCompletionForSubmission(partial.submission, [], [], partial.gpa).gpaStatus).toBe('OOD Partial')
+    expect(deriveGpaStatus({ ...partial, gpaStatus: 'OOD Partial' })).toBe('Opt-In Partial')
+    expect(buildReviewCompletionForSubmission(partial.submission, [], [], partial.gpa).gpaStatus).toBe('Opt-In Partial')
   })
 
-  it('does not classify sufficient or unanswered Opt-In attendance as OOD Partial', () => {
+  it('does not classify sufficient or unanswered Opt-In attendance as Opt-In Partial', () => {
     for (const attendance of ['yes', ''] as const) {
       expect(deriveGpaStatus(context({
         gpa: { optIn: { enrolledMinTerms: attendance, enrolledMinTermsFlag: attendance === 'yes', cumulativeGpa: 3.2 } }

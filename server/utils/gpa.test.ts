@@ -56,8 +56,33 @@ describe('GPA ingestion', () => {
     expect(parseDpscdBody('[{\'gpa_cumulative\': nan, \'missing\': None, \'active\': True, \'flag\': False}]').records).toEqual([{ gpa_cumulative: null, missing: null, active: true, flag: false }])
   })
 
-  it('preserves GPA decimals, normalizes integer fields, and retains source extras', () => {
-    expect(normalizeDpscdRecord({ 'STUDENT_NUMBER': '12345.0', 'Quarters Available': '6.0', 'gpa_cumulative': '3.725', 'School': 'Fixture School' })).toMatchObject({ studentNumber: 12345, quartersAvailable: 6, cumulativeGpa: 3.725, extra: { School: 'Fixture School' } })
+  it('preserves GPA decimals and normalizes the DPSCD identity and enrollment fields', () => {
+    expect(normalizeDpscdRecord({
+      'STUDENT_NUMBER': '12345.0',
+      'StudentName': 'Fixture Student',
+      'DOB': '2011-04-12',
+      'SchoolNumber': '456.0',
+      'SchoolName': 'Fixture School',
+      'latestGradeLevel': '8.0',
+      'minimumEntryDate': '2020-08-31',
+      'latestExitDate': '2025-06-15',
+      'Quarters Available': '6.0',
+      'gpa_cumulative': '3.725',
+      'OtherField': 'kept'
+    })).toMatchObject({
+      studentNumber: 12345,
+      studentName: 'Fixture Student',
+      dob: new Date('2011-04-12'),
+      schoolNumber: 456,
+      schoolName: 'Fixture School',
+      gradeLevel: 8,
+      minimumEntryDate: new Date('2020-08-31'),
+      latestExitDate: new Date('2025-06-15'),
+      quartersAvailable: 6,
+      cumulativeGpa: 3.725,
+      extra: { OtherField: 'kept' }
+    })
+    expect(normalizeDpscdRecord({ 'Middle School Number': '789' })).toMatchObject({ schoolNumber: 789 })
   })
 
   it('matches all three identifiers within the selected cycle and preserves the other GPA source', async () => {

@@ -95,29 +95,29 @@ function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
-const INT_FIELD_KEYS = new Set(['studentNumber', 'submissionIdInt', 'quartersAvailable', 'yearEnd', 'gradeLevel', 'middleSchoolNumber', 'acceptingHighSchoolNumber'])
+const INT_FIELD_KEYS = new Set(['studentNumber', 'submissionIdInt', 'quartersAvailable', 'gradeLevel', 'schoolNumber'])
 
 const DPSCD_FIELD_MAP: Record<string, string> = {
   submissionid: 'submissionId',
   submissionidint: 'submissionIdInt',
   studentnumber: 'studentNumber',
+  studentname: 'studentName',
+  schoolnumber: 'schoolNumber',
+  middleschoolnumber: 'schoolNumber',
+  schoolname: 'schoolName',
   quartersavailable: 'quartersAvailable',
   gpacumulative: 'cumulativeGpa',
   cumulativegpa: 'cumulativeGpa',
   gpastatus: 'gpaStatus',
-  yearend: 'yearEnd',
   latestgradelevel: 'gradeLevel',
-  gradelevel: 'gradeLevel',
-  middleschoolnumber: 'middleSchoolNumber',
-  projectname: 'projectName',
-  submissionstatus: 'submissionStatus',
-  stagename: 'stageName',
-  completedat: 'completedAt',
-  acceptinghighschool: 'acceptingHighSchool',
-  acceptinghighschoolnumber: 'acceptingHighSchoolNumber'
+  gradelevel: 'gradeLevel'
 }
 
-const DPSCD_DATE_FIELDS = new Set(['completedat', 'dob', 'minimumentrydate', 'latestexitdate'])
+const DPSCD_DATE_FIELD_MAP: Record<string, 'dob' | 'minimumEntryDate' | 'latestExitDate'> = {
+  dob: 'dob',
+  minimumentrydate: 'minimumEntryDate',
+  latestexitdate: 'latestExitDate'
+}
 
 function toInt(value: unknown): number | undefined {
   if (value == null || value === '') return undefined
@@ -143,18 +143,16 @@ interface NormalizedDpscdRecord {
   submissionId?: string
   submissionIdInt?: number
   studentNumber?: number
+  studentName?: string
+  dob?: Date
+  schoolNumber?: number
+  schoolName?: string
+  gradeLevel?: number
+  minimumEntryDate?: Date
+  latestExitDate?: Date
   quartersAvailable?: number
   cumulativeGpa?: number
   gpaStatus?: string
-  yearEnd?: number
-  gradeLevel?: number
-  middleSchoolNumber?: number
-  projectName?: string
-  submissionStatus?: string
-  stageName?: string
-  acceptingHighSchool?: string
-  acceptingHighSchoolNumber?: number
-  completedAt?: Date
   extra: Record<string, unknown>
 }
 
@@ -187,14 +185,12 @@ export function normalizeDpscdRecord(raw: Record<string, unknown>): NormalizedDp
       out[field as 'studentNumber'] = toInt(value)
     } else if (field === 'cumulativeGpa') {
       out.cumulativeGpa = toFloat(value)
-    } else if (field === 'completedAt') {
-      out.completedAt = toDate(value)
     } else if (field) {
       out[field as 'gpaStatus'] = value == null ? undefined : String(value).trim() || undefined
-    } else if (DPSCD_DATE_FIELDS.has(normalizeKey(key))) {
-      out.extra[key] = toDate(value)
     } else {
-      out.extra[key] = value
+      const dateField = DPSCD_DATE_FIELD_MAP[normalized]
+      if (dateField) out[dateField] = toDate(value)
+      else out.extra[key] = value
     }
   }
   return out
@@ -363,15 +359,13 @@ export async function importDpscdGpaRecords(
                   quartersAvailable: selected.quartersAvailable,
                   cumulativeGpa: selected.cumulativeGpa,
                   gpaStatus: selected.gpaStatus,
-                  yearEnd: record.yearEnd,
+                  studentName: record.studentName,
+                  dob: record.dob,
+                  schoolNumber: record.schoolNumber,
+                  schoolName: record.schoolName,
                   gradeLevel: record.gradeLevel,
-                  middleSchoolNumber: record.middleSchoolNumber,
-                  projectName: record.projectName,
-                  submissionStatus: record.submissionStatus,
-                  stageName: record.stageName,
-                  acceptingHighSchool: record.acceptingHighSchool,
-                  acceptingHighSchoolNumber: record.acceptingHighSchoolNumber,
-                  completedAt: record.completedAt,
+                  minimumEntryDate: record.minimumEntryDate,
+                  latestExitDate: record.latestExitDate,
                   importJobId: jobId,
                   importedAt,
                   extra: record.extra

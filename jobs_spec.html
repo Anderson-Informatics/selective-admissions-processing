@@ -660,15 +660,15 @@ formFieldId:lastName</code></pre>
 
 {
   "cycleId": "selected-cycle-id",
-  "records": [ { "submissionId": "...", "submissionIdInt": "...", "STUDENT_NUMBER": 21165451.0, "Quarters Available": 11.0, "gpa_cumulative": 3.0, ... } ]
+  "records": [ { "STUDENT_NUMBER": 21165451.0, "StudentName": "...", "DOB": "...", "SchoolNumber": 123, "SchoolName": "...", "latestGradeLevel": 8, "minimumEntryDate": "...", "latestExitDate": "...", "gpa_r1": 3.0, "quarters_available_r1": 5, "gpa_all": 3.2, "quarters_available_all": 11, ... } ]
 }</code></pre>
   <p>A bare top-level array of records is also accepted. Strict JSON is parsed first; if that fails the body is normalized from Python-style repr output (single quotes, <code>None</code>/<code>True</code>/<code>False</code>/<code>nan</code>) before parsing. The caller polls <code>GET /api/gpa/dpscd/{uploadId}</code> for status.</p>
 
   <h3>Execution flow</h3>
   <ol>
     <li>Load the staged <code>GpaUpload</code> referenced by the job payload.</li>
-    <li>Normalize each record's keys and coerce integer-semantic floats (<code>STUDENT_NUMBER</code>, <code>submissionIdInt</code>, <code>Quarters Available</code>, <code>Latest_GRADE_LEVEL</code>, <code>Middle School Number</code>, <code>Accepting High School Number</code>) to integers; <code>gpa_cumulative</code> remains a decimal.</li>
-    <li>Match each record to a submission in the cycle by <code>submissionId</code>, then <code>submissionIdInt</code>, then <code>StudentNumber</code>.</li>
+    <li>Normalize each record's keys and coerce integer-semantic floats (<code>STUDENT_NUMBER</code>, optional <code>submissionIdInt</code>, <code>SchoolNumber</code>, <code>Latest_GRADE_LEVEL</code>, and quarter fields) to integers; GPA fields remain decimals and enrollment/DOB fields become dates.</li>
+    <li>Match each record to a submission in the cycle by optional <code>submissionId</code>, then optional <code>submissionIdInt</code>, then <code>StudentNumber</code>.</li>
     <li>Validate values; out-of-range or mismatched fields become warnings, unmatched records become errors, neither is fatal.</li>
     <li>Bulk-upsert <code>GpaRecord</code> documents keyed <code>(cycleId, submissionId)</code>, setting only the <code>dpscd</code> subdocument plus provenance (<code>importJobId</code>, <code>importedAt</code>).</li>
     <li>Mark the staged upload <code>completed</code> or <code>failed</code> and store the result summary.</li>

@@ -295,7 +295,8 @@ const MAPPING_SOURCE_FIELDS: Record<string, string[]> = {
   ],
   gpa: [
     'resolvedCumulativeGpa', 'resolvedSource', 'gpaMultiplier', 'gpaBonusEligible', 'gpaBonus', 'gpaScore',
-    'dpscd.cumulativeGpa', 'dpscd.quartersAvailable', 'dpscd.gpaStatus', 'dpscd.studentNumber', 'dpscd.middleSchoolNumber',
+    'dpscd.cumulativeGpa', 'dpscd.quartersAvailable', 'dpscd.gpaStatus', 'dpscd.studentNumber', 'dpscd.studentName',
+    'dpscd.dob', 'dpscd.schoolNumber', 'dpscd.schoolName', 'dpscd.gradeLevel', 'dpscd.minimumEntryDate', 'dpscd.latestExitDate',
     'optIn.cumulativeGpa', 'optIn.schoolName', 'optIn.termsEnrolled', 'optIn.enrolledMinTerms'
   ],
   submission: [

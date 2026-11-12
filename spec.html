@@ -638,11 +638,22 @@ cycle by <code>submissionId</code> GUID, then
 <code>submissionIdInt</code>, then <code>StudentNumber</code>. Payloads
 may span multiple years/projects; records that do not match a
 submission in the cycle are counted as unmatched, not fatal.</li>
+<li>The preferred record contract uses <code>STUDENT_NUMBER</code>,
+<code>StudentName</code>, <code>DOB</code>,
+<code>SchoolNumber</code>, <code>SchoolName</code>,
+<code>latestGradeLevel</code>, <code>minimumEntryDate</code>,
+<code>latestExitDate</code>, and <code>_r1</code>/<code>_all</code>
+GPA snapshot fields. <code>StudentNumber</code> matching updates
+every submission in the cycle with that mapped student number;
+optional <code>submissionId</code>/<code>submissionIdInt</code>
+fields remain supported as higher-priority matches.</li>
 <li>Integer-semantic fields (<code>STUDENT_NUMBER</code>,
-<code>submissionIdInt</code>, <code>Quarters Available</code>,
-<code>Latest_GRADE_LEVEL</code>, <code>Middle School Number</code>,
-<code>Accepting High School Number</code>) are coerced to integers;
-<code>gpa_cumulative</code> remains a decimal. All remaining payload
+<code>submissionIdInt</code>, <code>SchoolNumber</code>,
+<code>Latest_GRADE_LEVEL</code>, and quarter fields) are coerced to
+integers; GPA fields remain decimals and <code>DOB</code>,
+<code>minimumEntryDate</code>, and <code>latestExitDate</code>
+become dates. <code>Middle School Number</code> is accepted as a
+legacy alias for <code>SchoolNumber</code>. All remaining payload
 fields are preserved under <code>dpscd.extra</code>.</li>
 <li>Results are upserted into <code>GpaRecord.dpscd</code> keyed
 <code>(cycleId, submissionId)</code> — the last import wins and

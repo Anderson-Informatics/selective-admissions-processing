@@ -102,7 +102,7 @@
       "role": "work",
       "routing": {
         "enabled": false,
-        "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["Incomplete", "Partial", "DPSCD Partial"] }] },
+        "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["Incomplete", "Partial", "DPSCD Partial", "Opt-In Partial"] }] },
         "statusRules": [
           { "name": "unsure", "when": { "all": [{ "kind": "reviewScore", "stageName": "GPA Completion", "op": "eq", "value": 2 }] }, "status": "Awaiting Final GPA Completion Review", "complete": false },
           { "name": "eligible", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Completion", "field": "RequirementsSatisfied", "op": "eq", "value": "Yes" }] }, "status": "GPA Requirements Satisfied", "complete": true },
@@ -148,7 +148,7 @@
       "role": "work",
       "routing": {
         "enabled": false,
-        "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["Incomplete", "Partial", "DPSCD Partial"] }] },
+        "requiredWhen": { "all": [{ "kind": "gpaStatus", "op": "in", "value": ["Incomplete", "Partial", "DPSCD Partial", "Opt-In Partial"] }] },
         "statusRules": [
           { "name": "valid GPA", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Recording", "field": "CumulativeGPA", "op": "gte", "value": 0 }, { "kind": "reviewField", "stageName": "GPA Recording", "field": "CumulativeGPA", "op": "lte", "value": 4.3 }, { "kind": "reviewField", "stageName": "GPA Recording", "field": "AbleToRecord", "op": "eq", "value": "Yes" }] }, "status": "GPA Recording Complete", "complete": true },
           { "name": "invalid response", "when": { "all": [{ "kind": "reviewField", "stageName": "GPA Recording", "field": "AbleToRecord", "op": "eq", "value": "No" }] }, "status": "GPA Value Requires Review", "complete": false },
