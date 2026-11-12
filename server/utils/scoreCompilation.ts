@@ -57,6 +57,7 @@ export interface ScoringConfig {
   marygroveBonuses: { primary: number, secondary: number }
   multiplierMap: MultiplierMap
   internalForm?: InternalFormConfig
+  gpaStatusLabels?: Record<string, string>
 }
 
 const ALL_COMPONENTS: ScoreComponent[] = ['gpa', 'exam', 'essay', 'dpscdBonus', 'marygroveBonus']
@@ -64,6 +65,7 @@ const ALL_COMPONENTS: ScoreComponent[] = ['gpa', 'exam', 'essay', 'dpscdBonus', 
 export function normalizeScoringConfig(raw: unknown): ScoringConfig {
   const config = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
   const internalForm = (config.internalForm && typeof config.internalForm === 'object' ? config.internalForm : undefined) as Record<string, unknown> | undefined
+  const gpaStatusLabels = (config.gpaStatusLabels && typeof config.gpaStatusLabels === 'object' ? config.gpaStatusLabels : {}) as Record<string, unknown>
   const marygrove = (config.marygroveBonuses && typeof config.marygroveBonuses === 'object' ? config.marygroveBonuses : {}) as Record<string, unknown>
   const multiplier = (config.multiplierMap && typeof config.multiplierMap === 'object' ? config.multiplierMap : {}) as Record<string, unknown>
   return {
@@ -82,6 +84,11 @@ export function normalizeScoringConfig(raw: unknown): ScoringConfig {
       semesters: (multiplier.semesters && typeof multiplier.semesters === 'object' ? multiplier.semesters : {}) as Record<string, number>,
       quarters: (multiplier.quarters && typeof multiplier.quarters === 'object' ? multiplier.quarters : {}) as Record<string, number>
     },
+    gpaStatusLabels: Object.fromEntries(
+      Object.entries(gpaStatusLabels)
+        .filter(([status, labelId]) => status.trim() !== '' && typeof labelId === 'string' && labelId.trim() !== '')
+        .map(([status, labelId]) => [status, labelId as string])
+    ),
     ...(internalForm
       ? { internalForm: {
           formId: typeof internalForm.formId === 'string' ? internalForm.formId : undefined,

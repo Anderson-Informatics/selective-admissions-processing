@@ -449,6 +449,11 @@ submissions and upsert <code>GpaRecord.dpscd</code>.</td>
 <code>GpaRecord.optIn</code>.</td>
 </tr>
 <tr>
+<td><code>gpaStatusLabelSync</code></td>
+<td>Synchronize each application's configured GPA-status labels in
+Submittable from persisted <code>Submission.gpaStatus</code>.</td>
+</tr>
+<tr>
 <td><code>compileScores</code></td>
 <td>Combine HSPT, GPA, essay, DPSCD bonus, Marygrove
 bonus/catchment.</td>
@@ -685,6 +690,16 @@ imported but flagged as warnings.</li>
 whose <code>submissionIdInt</code> appears in the uploaded files are
 modified.</li>
 </ul>
+<h3 id="gpa-review-and-duplicates">GPA Review and Duplicates</h3>
+<p>The GPA review page lists every submission in the selected cycle with
+its persisted GPA status, resolved GPA/source, enrollment evidence, and
+source-specific details. When the final GPA source filter is set to
+DPSCD / PowerSchool, a cycle-wide <strong>Duplicate student
+numbers</strong> report appears below the main table. It groups
+submissions by nonblank <code>mappedFields.StudentNumber</code>, lists
+every number assigned to multiple submissions, and remains independent
+of search, sorting, and pagination so staff can identify potential
+duplicate submissions before relying on student-number GPA matching.</p>
 <h3 id="cumulative-gpa-resolution-score-compilation-scope">Cumulative
 GPA Resolution (score compilation scope)</h3>
 <p>When <code>compileScores</code> runs, the effective GPA is selected
@@ -700,6 +715,18 @@ case-insensitive).</li>
 <li>The partial GPA review form
 (<code>PartialGPA</code>/<code>Semesters</code>).</li>
 </ol>
+<h3 id="gpa-status-labels">GPA Status Labels</h3>
+<p>Applications may configure <code>scoring.gpaStatusLabels</code> as a
+status-to-Submittable-label map. The mapping is application-specific
+rather than stage-specific because GPA resolution can come from GPA
+Recording, DPSCD/PowerSchool, Opt-In, or Partial GPA review sources.
+<code>refresh_review_completion</code> persists the resolved GPA status,
+then synchronizes the mapped label for each submission while removing the
+application's other managed GPA labels. A standalone
+<code>gpa_status_label_sync</code> job supports manual repair and dry
+runs. Legacy <code>OOD Partial</code> values are evaluated as
+<code>Opt-In Partial</code>, and each configured status must use a
+distinct label.</p>
 <h2 id="dashboard-reporting">13. Dashboard &amp; Reporting</h2>
 <p>The dashboard gives admissions staff a real-time view of the
 pipeline.</p>

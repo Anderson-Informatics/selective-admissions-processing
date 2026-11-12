@@ -69,6 +69,24 @@ interface GpaReview {
   createdAt?: string
 }
 
+interface DuplicateStudentNumberItem {
+  studentNumber: string
+  duplicateCount: number
+  submissionId: string
+  submissionIdInt?: number
+  applicationId?: string
+  applicationName?: string
+  projectId?: string
+  student?: string
+  status?: string
+  currentStageName?: string
+  gpaStatus?: string
+  resolvedCumulativeGpa?: number | null
+  resolvedSource?: 'recording' | 'dpscd' | 'optIn' | 'partial' | null
+  dpscdStudentName?: string
+  dpscdStudentNumber?: number
+}
+
 interface PreviewRow {
   file: string
   row: number
@@ -168,6 +186,7 @@ watch([selectedCycleId, selectedStatus, selectedSource, search, sorting], () => 
 const requestFetch = useRequestFetch()
 const { data, status, refresh } = useAsyncData<{
   records: GpaReviewItem[]
+  duplicateStudentNumbers: DuplicateStudentNumberItem[]
   total: number
   page: number
   limit: number
@@ -175,7 +194,7 @@ const { data, status, refresh } = useAsyncData<{
   'gpa-records',
   () => {
     if (!selectedCycleId.value) {
-      return Promise.resolve({ records: [], total: 0, page: 1, limit })
+      return Promise.resolve({ records: [], duplicateStudentNumbers: [], total: 0, page: 1, limit })
     }
     const params = new URLSearchParams()
     params.set('cycleId', selectedCycleId.value)
@@ -188,7 +207,7 @@ const { data, status, refresh } = useAsyncData<{
     if (selectedSource.value !== 'all') params.set('source', selectedSource.value)
     return requestFetch(`/api/gpa?${params.toString()}`)
   },
-  { default: () => ({ records: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedStatus, selectedSource, search, sorting, page] }
+  { default: () => ({ records: [], duplicateStudentNumbers: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedStatus, selectedSource, search, sorting, page] }
 )
 
 const totalPages = computed(() => Math.ceil((data.value?.total || 0) / limit))
@@ -373,6 +392,21 @@ const recordColumns: TableColumn<GpaReviewItem>[] = [
   sortableColumn('currentStageName', 'Current Stage'),
   { id: 'requiredAction', header: 'Required GPA Action', enableSorting: false }
 ]
+const duplicateColumns: TableColumn<DuplicateStudentNumberItem>[] = [
+  { accessorKey: 'studentNumber', header: 'Student Number' },
+  { accessorKey: 'duplicateCount', header: 'Matches' },
+  { accessorKey: 'submissionIdInt', header: 'Submission ID' },
+  { accessorKey: 'student', header: 'Applicant' },
+  { accessorKey: 'applicationName', header: 'Application' },
+  { accessorKey: 'status', header: 'Submission Status' },
+  { accessorKey: 'currentStageName', header: 'Current Stage' },
+  { accessorKey: 'gpaStatus', header: 'GPA Status' },
+  { accessorKey: 'resolvedSource', header: 'Final Source' },
+  { accessorKey: 'dpscdStudentName', header: 'DPSCD Name' }
+]
+const duplicateStudentNumberCount = computed(() => new Set((data.value?.duplicateStudentNumbers || []).map(row => row.studentNumber)).size)
+const duplicateSubmissionCount = computed(() => data.value?.duplicateStudentNumbers.length || 0)
+const showDuplicateStudentNumbers = computed(() => selectedSource.value === 'dpscd')
 
 const sourceLabels: Record<string, string> = {
   recording: 'GPA Recording',
@@ -669,6 +703,78 @@ function formatDate(value?: string) {
         :items-per-page="limit"
       />
     </div>
+
+    <section
+      v-if="showDuplicateStudentNumbers"
+      class="mt-8 rounded-lg border p-4"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 class="font-medium">
+            Duplicate student numbers
+          </h2>
+          <p class="text-sm text-muted">
+            Submissions in the selected cycle sharing the same mapped StudentNumber. This report covers all matching submissions when viewing DPSCD / PowerSchool GPA.
+          </p>
+        </div>
+        <UBadge
+          v-if="duplicateSubmissionCount"
+          :label="`${duplicateStudentNumberCount} numbers / ${duplicateSubmissionCount} submissions`"
+          color="warning"
+          variant="subtle"
+        />
+      </div>
+      <UTable
+        :data="data?.duplicateStudentNumbers || []"
+        :columns="duplicateColumns"
+        :get-row-id="(row: DuplicateStudentNumberItem) => row.submissionId"
+        :loading="status === 'pending'"
+        empty="No duplicate student numbers found."
+      >
+        <template #studentNumber-cell="{ row }">
+          <span class="font-medium">{{ row.original.studentNumber }}</span>
+        </template>
+        <template #duplicateCount-cell="{ row }">
+          <UBadge
+            :label="`${row.original.duplicateCount} matches`"
+            color="warning"
+            variant="subtle"
+          />
+        </template>
+        <template #student-cell="{ row }">
+          <a
+            :href="`https://dpscd.submittable.com/submissions/${row.original.submissionId}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-medium text-primary hover:underline"
+          >
+            {{ row.original.student || row.original.submissionIdInt || row.original.submissionId }}
+          </a>
+        </template>
+        <template #gpaStatus-cell="{ row }">
+          <UBadge
+            :label="row.original.gpaStatus || 'Incomplete'"
+            :color="gpaStatusColor(row.original.gpaStatus)"
+            variant="subtle"
+          />
+        </template>
+        <template #resolvedSource-cell="{ row }">
+          {{ sourceLabel(row.original.resolvedSource) }}
+        </template>
+        <template #applicationName-cell="{ row }">
+          {{ row.original.applicationName || '—' }}
+        </template>
+        <template #status-cell="{ row }">
+          {{ row.original.status || '—' }}
+        </template>
+        <template #currentStageName-cell="{ row }">
+          {{ row.original.currentStageName || '—' }}
+        </template>
+        <template #dpscdStudentName-cell="{ row }">
+          {{ row.original.dpscdStudentName || '—' }}
+        </template>
+      </UTable>
+    </section>
 
     <UModal
       v-model:open="uploadModalOpen"

@@ -116,6 +116,7 @@ Each major legacy script step becomes a discrete, triggerable job. Jobs are stor
 | `dpscdGpaImport` | Import DPSCD GPA records posted as a JSON payload; match to submissions and upsert `GpaRecord.dpscd`. |
 | `optinGpaPreview` | Parse uploaded Opt-In XLSX files, match rows by `submissionIdInt`, flag label/match issues. |
 | `optinGpaCommit` | Upsert confirmed Opt-In GPA rows into `GpaRecord.optIn`. |
+| `gpaStatusLabelSync` | Synchronize each application's configured GPA-status labels in Submittable from persisted `Submission.gpaStatus`. |
 | `compileScores` | Combine HSPT, GPA, essay, DPSCD bonus, Marygrove bonus/catchment. |
 | `updateInternalForms` | Write computed scores back to Submittable internal forms. |
 | `compileRosters` | Upsert exam/lookup rosters to MongoDB collections. |
@@ -235,6 +236,10 @@ Out-of-district opt-in schools return per-school XLSX files containing a `SCHOOL
 - The preview is read-only; corrections are made by fixing the file and re-uploading. Rows whose submission lacks the Opt-In label are imported but flagged as warnings.
 - Confirming queues a commit job that upserts `GpaRecord.optIn` for matched rows only — only submissions whose `submissionIdInt` appears in the uploaded files are modified.
 
+### GPA Review and Duplicates
+
+The GPA review page lists every submission in the selected cycle with its persisted GPA status, resolved GPA/source, enrollment evidence, and source-specific details. When the final GPA source filter is set to DPSCD / PowerSchool, a cycle-wide **Duplicate student numbers** report appears below the main table. It groups submissions by nonblank `mappedFields.StudentNumber`, lists every number assigned to multiple submissions, and remains independent of search, sorting, and pagination so staff can identify potential duplicate submissions before relying on student-number GPA matching.
+
 ### Cumulative GPA Resolution (score compilation scope)
 
 When `compileScores` runs, the effective GPA is selected by priority:
@@ -243,6 +248,10 @@ When `compileScores` runs, the effective GPA is selected by priority:
 2. `GpaRecord.dpscd.cumulativeGpa` when `quartersAvailable >= 6`.
 3. `GpaRecord.optIn.cumulativeGpa` when the student was enrolled at least 3 semesters/4 trimesters (Yes, case-insensitive).
 4. The partial GPA review form (`PartialGPA`/`Semesters`).
+
+### GPA Status Labels
+
+Applications may configure `scoring.gpaStatusLabels` as a status-to-Submittable-label map. The mapping is application-specific rather than stage-specific because GPA resolution can come from GPA Recording, DPSCD/PowerSchool, Opt-In, or Partial GPA review sources. `refresh_review_completion` persists the resolved GPA status, then synchronizes the mapped label for each submission while removing the application's other managed GPA labels. A standalone `gpa_status_label_sync` job supports manual repair and dry runs. Legacy `OOD Partial` values are evaluated as `Opt-In Partial`, and each configured status must use a distinct label.
 
 ## 13. Dashboard & Reporting
 

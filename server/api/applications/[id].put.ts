@@ -57,6 +57,18 @@ export default defineEventHandler(async (event) => {
     if (body.scoring != null && (typeof body.scoring !== 'object' || Array.isArray(body.scoring))) {
       throw createError({ statusCode: 400, statusMessage: 'Invalid scoring configuration' })
     }
+    const gpaStatusLabels = body.scoring?.gpaStatusLabels
+    if (gpaStatusLabels != null) {
+      if (typeof gpaStatusLabels !== 'object' || Array.isArray(gpaStatusLabels)
+        || Object.entries(gpaStatusLabels).some(([status, labelId]) => !status.trim() || typeof labelId !== 'string' || !labelId.trim())) {
+        throw createError({ statusCode: 400, statusMessage: 'Invalid GPA status label configuration' })
+      }
+      const labelIds = Object.values(gpaStatusLabels) as string[]
+      if (new Set(labelIds).size !== labelIds.length) {
+        throw createError({ statusCode: 400, statusMessage: 'Each GPA status must use a different label' })
+      }
+      body.scoring.gpaStatusLabels = { ...gpaStatusLabels }
+    }
     application.scoring = body.scoring || undefined
   }
   if (body.placementPathway !== undefined) {

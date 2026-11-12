@@ -1,3 +1,4 @@
+import { ApplicationModel } from '~~/server/models/Application'
 import { GpaRecordModel } from '~~/server/models/GpaRecord'
 import { MetadataModel } from '~~/server/models/Metadata'
 import { ReviewModel } from '~~/server/models/Review'
@@ -158,5 +159,76 @@ export default defineEventHandler(async (event) => {
     } }
   ]).collation({ locale: 'en', strength: 2 })
 
-  return { records: result?.records || [], total: result?.count[0]?.total || 0, page: pageNum, limit: limitNum }
+  const duplicateRows = await SubmissionModel.aggregate([
+    { $match: { cycleId } },
+    { $set: {
+      duplicateStudentNumber: {
+        $trim: {
+          input: {
+            $convert: {
+              input: { $ifNull: ['$mappedFields.StudentNumber', ''] },
+              to: 'string',
+              onError: '',
+              onNull: ''
+            }
+          }
+        }
+      },
+      student: {
+        $let: {
+          vars: {
+            fullName: { $trim: { input: { $ifNull: ['$mappedFields.FullName', ''] } } },
+            fallbackName: { $trim: { input: { $concat: [{ $ifNull: ['$mappedFields.FirstName', ''] }, ' ', { $ifNull: ['$mappedFields.LastName', ''] }] } } }
+          },
+          in: { $cond: [{ $ne: ['$$fullName', ''] }, '$$fullName', '$$fallbackName'] }
+        }
+      }
+    } },
+    { $match: { duplicateStudentNumber: { $ne: '' } } },
+    { $lookup: {
+      from: GpaRecordModel.collection.name,
+      let: { submissionId: '$submissionId', cycleId: '$cycleId' },
+      pipeline: [
+        { $match: { $expr: { $and: [
+          { $eq: ['$submissionId', '$$submissionId'] },
+          { $eq: ['$cycleId', '$$cycleId'] }
+        ] } } },
+        { $limit: 1 }
+      ],
+      as: '_gpa'
+    } },
+    { $set: { gpa: { $arrayElemAt: ['$_gpa', 0] } } },
+    { $group: {
+      _id: '$duplicateStudentNumber',
+      duplicateCount: { $sum: 1 },
+      submissions: { $push: {
+        submissionId: '$submissionId',
+        submissionIdInt: '$submissionIdInt',
+        applicationId: '$applicationId',
+        projectId: '$projectId',
+        student: '$student',
+        status: '$status',
+        currentStageName: '$currentStageName',
+        gpaStatus: '$gpaStatus',
+        resolvedCumulativeGpa: '$gpa.resolvedCumulativeGpa',
+        resolvedSource: '$gpa.resolvedSource',
+        dpscdStudentName: '$gpa.dpscd.studentName',
+        dpscdStudentNumber: '$gpa.dpscd.studentNumber'
+      } }
+    } },
+    { $match: { duplicateCount: { $gt: 1 } } },
+    { $unwind: '$submissions' },
+    { $replaceRoot: { newRoot: { $mergeObjects: ['$submissions', { studentNumber: '$_id', duplicateCount: '$duplicateCount' }] } } },
+    { $sort: { studentNumber: 1, submissionIdInt: 1, submissionId: 1 } }
+  ]) as Array<Record<string, unknown>>
+
+  const applications = await ApplicationModel.find({ cycleId }).select('name').lean()
+  const applicationNames = new Map(applications.map(application => [String(application._id), application.name]))
+  const duplicateStudentNumbers = duplicateRows.map(row => ({
+    ...row,
+    applicationName: applicationNames.get(String(row.applicationId || '')) || '',
+    gpaStatus: canonicalGpaStatus(row.gpaStatus || 'Incomplete')
+  }))
+
+  return { records: result?.records || [], total: result?.count[0]?.total || 0, page: pageNum, limit: limitNum, duplicateStudentNumbers }
 })

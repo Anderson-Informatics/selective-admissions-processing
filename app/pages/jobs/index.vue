@@ -163,8 +163,13 @@ function formatResult(job: Job) {
     return `${processed} rows — ${Number(updated) + Number(inserted)} written, ${skippedUnmatched} unmatched skipped`
   }
   if (job.type === 'refresh_review_completion') {
-    const { processed = 0, updated = 0, diagnostics = 0, dryRun = false } = job.result
-    return `${processed} processed — ${dryRun ? 'dry run' : `${updated} updated`}, ${diagnostics} diagnostics`
+    const { processed = 0, updated = 0, diagnostics = 0, dryRun = false, labelSync } = job.result as { processed?: number, updated?: number, diagnostics?: number, dryRun?: boolean, labelSync?: { labelsAdded?: number, labelsRemoved?: number, failures?: unknown[] } }
+    const labels = labelSync ? `, ${labelSync.labelsAdded || 0} GPA labels added, ${labelSync.labelsRemoved || 0} removed` : ''
+    return `${processed} processed — ${dryRun ? 'dry run' : `${updated} updated`}, ${diagnostics} diagnostics${labels}`
+  }
+  if (job.type === 'gpa_status_label_sync') {
+    const { submissions = 0, labelsAdded = 0, labelsRemoved = 0, failures = [], dryRun = false } = job.result as { submissions?: number, labelsAdded?: number, labelsRemoved?: number, failures?: unknown[], dryRun?: boolean }
+    return `${submissions} submissions — ${labelsAdded} labels ${dryRun ? 'would be' : ''} added, ${labelsRemoved} removed, ${failures.length} failures`
   }
   if (job.type === 'run_routing') {
     const { evaluated = 0, moves = 0, noAction = 0, failures = 0, dryRun = false, requiresReview = false, message = '' } = job.result
@@ -302,7 +307,7 @@ watch(() => route.query.jobId, async (id) => {
         </UFormField>
         <UCheckbox
           v-model="refreshDryRun"
-          label="Dry run (do not write ledgers)"
+          label="Dry run (do not write ledgers or labels)"
         />
         <UButton
           label="Refresh review completion"
@@ -314,9 +319,20 @@ watch(() => route.query.jobId, async (id) => {
             dryRun: refreshDryRun
           })"
         />
+        <UButton
+          label="Sync GPA status labels"
+          color="neutral"
+          variant="outline"
+          :loading="starting"
+          :disabled="!selectedCycleId"
+          @click="runJob('gpa_status_label_sync', {
+            applicationId: selectedApplicationId || undefined,
+            dryRun: refreshDryRun
+          })"
+        />
       </div>
       <p class="text-sm text-muted">
-        Recomputes each submission's reviewCompletion ledger from current mapped fields, reviews, GPA records, HSPT links, and routing configuration.
+        Recomputes each submission's reviewCompletion ledger from current mapped fields, reviews, GPA records, HSPT links, and routing configuration. Non-dry-run refreshes also synchronize configured GPA status labels; use Sync GPA status labels for a manual repair or label-only dry run.
       </p>
     </div>
 

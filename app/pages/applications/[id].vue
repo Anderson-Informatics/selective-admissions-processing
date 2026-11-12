@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 import RoutingConfigEditor from '../../components/routing/RoutingConfigEditor.vue'
+import ReferenceSelect from '../../components/routing/ReferenceSelect.vue'
 import { copyRoutingConfig, unmappedCopiedReviewFields, type CopyScope, type RoutingConfig } from '../../components/routing/copyRoutingConfig'
 
 interface ReviewStage {
@@ -26,6 +27,7 @@ interface ScoringConfig {
   dpscdBonusPoints: number
   marygroveBonuses: { primary: number, secondary: number }
   internalForm: { formId: string, fields: Record<string, InternalFieldMapping> }
+  gpaStatusLabels: Record<string, string>
 }
 interface Application { _id: string, cycleId: string, name: string, type: string, projectId: string, initialFormId?: string, active: boolean, rounds?: ApplicationRound[], scoring?: Partial<ScoringConfig>, placementPathway?: string | null, stages: ReviewStage[] }
 interface Template { key: string, name: string, description?: string, draft?: boolean }
@@ -67,7 +69,8 @@ const emptyScoring = (): ScoringConfig => ({
   gpaBonusPoints: 5,
   dpscdBonusPoints: 10,
   marygroveBonuses: { primary: 10, secondary: 5 },
-  internalForm: { formId: '', fields: {} }
+  internalForm: { formId: '', fields: {} },
+  gpaStatusLabels: {}
 })
 const state = reactive({ name: '', type: 'exam', active: true, rounds: [] as ApplicationRound[], stages: [] as ReviewStage[], scoring: emptyScoring(), placementPathway: null as string | null })
 const selectedStage = computed(() => selectedStageIndex.value == null ? undefined : state.stages[selectedStageIndex.value])
@@ -129,6 +132,7 @@ watchEffect(() => {
   const scoring = { ...emptyScoring(), ...(application.value.scoring || {}) }
   scoring.internalForm = { ...emptyScoring().internalForm, ...(application.value.scoring?.internalForm || {}) }
   scoring.marygroveBonuses = { ...emptyScoring().marygroveBonuses, ...(application.value.scoring?.marygroveBonuses || {}) }
+  scoring.gpaStatusLabels = { ...(application.value.scoring?.gpaStatusLabels || {}) }
   state.scoring = scoring
   state.placementPathway = application.value.placementPathway ?? 'none'
   state.stages = (application.value.stages || []).map(stage => ({
@@ -269,6 +273,30 @@ const pathwayItems: SelectItem[] = [
   { label: 'Score-based', value: 'score' },
   { label: 'Decision-based', value: 'decision' }
 ]
+const GPA_STATUS_ITEMS = [
+  { label: 'Complete', value: 'Complete' },
+  { label: 'Partial', value: 'Partial' },
+  { label: 'DPSCD Partial', value: 'DPSCD Partial' },
+  { label: 'Opt-In Partial', value: 'Opt-In Partial' },
+  { label: 'Incomplete', value: 'Incomplete' }
+]
+const gpaStatusLabelItems = computed<SelectItem[]>(() => [
+  { label: '— None —', value: '' },
+  ...(references.value?.labels || [])
+])
+const duplicateGpaStatusLabels = computed(() => {
+  const assigned = Object.values(state.scoring.gpaStatusLabels).filter(Boolean)
+  return assigned.filter((labelId, index) => assigned.indexOf(labelId) !== index)
+})
+function setGpaStatusLabel(status: string, labelId: string) {
+  const labels = { ...state.scoring.gpaStatusLabels }
+  if (labelId) labels[status] = labelId
+  else {
+    state.scoring.gpaStatusLabels = Object.fromEntries(Object.entries(labels).filter(([key]) => key !== status))
+    return
+  }
+  state.scoring.gpaStatusLabels = labels
+}
 interface InternalFieldMapping { source: string, field: string, default?: unknown }
 const MAPPING_SOURCES: SelectItem[] = [
   { label: '— Unmapped —', value: 'unmapped' },
@@ -386,6 +414,10 @@ function removeRound(index: number) {
 
 async function saveApplicationMetadata() {
   if (!application.value) return
+  if (duplicateGpaStatusLabels.value.length) {
+    toast.add({ title: 'Each GPA status must use a different label', color: 'error' })
+    return
+  }
   loading.value = true
   try {
     await flushDraftSaves()
@@ -659,6 +691,37 @@ async function applyTemplate() {
             v-model="state.scoring.requireComplete"
             label="Require HSPT + GPA + Essay before computing totals"
           />
+          <div class="border-t pt-4 space-y-3">
+            <div>
+              <h3 class="text-sm font-medium">
+                GPA status labels
+              </h3>
+              <p class="text-sm text-muted">
+                Map canonical resolved GPA statuses to Submittable labels for this application. Labels are synchronized after review-completion refreshes.
+              </p>
+            </div>
+            <UAlert
+              v-if="duplicateGpaStatusLabels.length"
+              color="warning"
+              variant="soft"
+              title="Duplicate GPA status labels"
+              description="Each GPA status must use a different Submittable label."
+            />
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <UFormField
+                v-for="gpaStatus in GPA_STATUS_ITEMS"
+                :key="gpaStatus.value"
+                :label="gpaStatus.label"
+              >
+                <ReferenceSelect
+                  :model-value="state.scoring.gpaStatusLabels[gpaStatus.value] || ''"
+                  :items="gpaStatusLabelItems"
+                  placeholder="No label"
+                  @update:model-value="setGpaStatusLabel(gpaStatus.value, String($event || ''))"
+                />
+              </UFormField>
+            </div>
+          </div>
           <div class="border-t pt-4 space-y-3">
             <div class="flex items-center justify-between gap-3">
               <div>

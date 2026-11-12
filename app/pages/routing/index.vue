@@ -108,7 +108,41 @@ async function previewRouting() {
 
 const confirmOpen = ref(false)
 const executing = ref(false)
+const refreshing = ref(false)
 const dryRun = ref(false)
+
+async function refreshReviewStatus() {
+  if (!selectedCycleId.value) return
+  refreshing.value = true
+  try {
+    await $fetch('/api/jobs', {
+      method: 'POST',
+      body: {
+        type: 'refresh_review_completion',
+        cycleId: selectedCycleId.value,
+        payload: {
+          applicationId: selectedApplicationId.value === ALL_APPLICATIONS ? undefined : selectedApplicationId.value
+        }
+      }
+    })
+    toast.add({
+      title: 'Review status refresh queued',
+      description: 'The job will refresh completion ledgers and configured GPA status labels.',
+      color: 'success',
+      actions: [{ label: 'View jobs', to: '/jobs' }]
+    })
+  } catch (error: unknown) {
+    const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Failed to queue review status refresh'
+    toast.add({ title: message, color: 'error' })
+  } finally {
+    refreshing.value = false
+  }
+}
+
+function openRoutingConfirm(isDryRun: boolean) {
+  dryRun.value = isDryRun
+  confirmOpen.value = true
+}
 
 async function executeRouting() {
   if (!selectedCycleId.value) return
@@ -227,36 +261,84 @@ function openDetail(detail: SubmissionDetail) {
       </UFormField>
     </div>
 
-    <div class="flex flex-wrap items-end gap-4 mb-6">
-      <UFormField label="Preview / limited-run size">
-        <UInput
-          v-model.number="limit"
-          type="number"
-          min="1"
-          max="500"
-          class="w-28"
-        />
-      </UFormField>
-      <UButton
-        label="Preview routing"
-        :loading="loading"
-        :disabled="!selectedCycleId"
-        @click="previewRouting"
-      />
-      <UFormField label="Execution scope">
-        <USelect
-          v-model="executionScope"
-          :items="[{ label: 'Limited submissions', value: 'limited' }, { label: 'All matching submissions', value: 'all' }]"
-          class="w-64"
-        />
-      </UFormField>
-      <UButton
-        label="Execute routing"
-        color="warning"
-        variant="outline"
-        :disabled="!selectedCycleId"
-        @click="confirmOpen = true"
-      />
+    <div class="rounded-lg border p-4 mb-6 space-y-4">
+      <div class="flex flex-wrap items-end gap-4">
+        <UFormField label="Preview / limited-run size">
+          <UInput
+            v-model.number="limit"
+            type="number"
+            min="1"
+            max="500"
+            class="w-28"
+          />
+        </UFormField>
+        <UFormField label="Execution scope">
+          <USelect
+            v-model="executionScope"
+            :items="[{ label: 'Limited submissions', value: 'limited' }, { label: 'All matching submissions', value: 'all' }]"
+            class="w-64"
+          />
+        </UFormField>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <UBadge
+            label="1"
+            color="primary"
+            variant="subtle"
+          />
+          <UButton
+            label="Refresh review status"
+            :loading="refreshing"
+            :disabled="!selectedCycleId"
+            @click="refreshReviewStatus"
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <UBadge
+            label="2"
+            color="primary"
+            variant="subtle"
+          />
+          <UButton
+            label="Preview routing"
+            :loading="loading"
+            :disabled="!selectedCycleId"
+            @click="previewRouting"
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <UBadge
+            label="3"
+            color="primary"
+            variant="subtle"
+          />
+          <UButton
+            label="Queue routing dry run"
+            color="neutral"
+            variant="outline"
+            :disabled="!selectedCycleId"
+            @click="openRoutingConfirm(true)"
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <UBadge
+            label="4"
+            color="warning"
+            variant="subtle"
+          />
+          <UButton
+            label="Execute routing"
+            color="warning"
+            variant="outline"
+            :disabled="!selectedCycleId"
+            @click="openRoutingConfirm(false)"
+          />
+        </div>
+      </div>
+      <p class="text-sm text-muted">
+        Recommended order: refresh the persisted review ledger and GPA labels, inspect a preview, run a full dry run, then execute routing.
+      </p>
     </div>
 
     <UAlert
@@ -406,14 +488,23 @@ function openDetail(detail: SubmissionDetail) {
 
     <UModal
       v-model:open="confirmOpen"
-      title="Execute routing?"
+      :title="dryRun ? 'Queue routing dry run?' : 'Execute routing?'"
     >
       <template #body>
         <div class="space-y-3 text-sm">
           <p>
-            This queues a routing job for {{ executionScope === 'all' ? 'all matching submissions' : `up to ${limit} submissions` }} in the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ', label' : '' }}{{ selectedCurrentStageId !== ALL_STAGES ? ', and current stage' : '' }}. Submissions are selected when processing starts and handled in batches. The job refreshes live data, so results may differ from the sample preview.
+            This queues a {{ dryRun ? 'dry-run' : 'live' }} routing job for {{ executionScope === 'all' ? 'all matching submissions' : `up to ${limit} submissions` }} in the selected cycle{{ selectedApplicationId !== ALL_APPLICATIONS ? ', application' : '' }}{{ selectedLabelId !== ALL_LABELS ? ', label' : '' }}{{ selectedCurrentStageId !== ALL_STAGES ? ', and current stage' : '' }}. Submissions are selected when processing starts and handled in batches. The job refreshes live data, so results may differ from the sample preview.
           </p>
           <UAlert
+            v-if="dryRun"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-eye"
+            title="Dry run only"
+            description="No stage moves, label changes, reviewer assignments, or applicant messages will be applied."
+          />
+          <UAlert
+            v-else
             color="warning"
             variant="subtle"
             icon="i-lucide-triangle-alert"

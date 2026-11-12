@@ -12,6 +12,7 @@ import { runValidationForCycle } from './validation'
 import { reconcileValidationLabelsForCycle } from './validationLabels'
 import { runCatchmentForCycle } from './catchment'
 import { commitOptInGpaUpload, importDpscdGpaRecords, previewOptInGpaUpload } from './gpa'
+import { syncGpaStatusLabels } from './gpaStatusLabels'
 import { fetchForm, fetchForms, fetchLabels, fetchProjects, fetchTeam, type SubmittableClientConfig } from './submittable'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
 
@@ -22,6 +23,7 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'catchment_lookup', label: 'Catchment lookup' },
   { value: 'run_validation', label: 'Run validation' },
   { value: 'refresh_review_completion', label: 'Refresh review completion' },
+  { value: 'gpa_status_label_sync', label: 'GPA status label sync' },
   { value: 'dpscd_gpa_import', label: 'DPSCD GPA import' },
   { value: 'optin_gpa_preview', label: 'Opt-In GPA preview' },
   { value: 'optin_gpa_commit', label: 'Opt-In GPA commit' },
@@ -257,13 +259,32 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
     return { result: { ...result, labels } }
   },
 
-  refresh_review_completion: async (job, { setProgress }) => {
+  refresh_review_completion: async (job, { setProgress, submittable }) => {
     const result = await refreshReviewCompletion({
       cycleId: job.cycleId,
       applicationId: job.payload?.applicationId,
       batchSize: job.payload?.batchSize,
       dryRun: job.payload?.dryRun === true,
       setProgress
+    })
+    const labelSync = job.payload?.dryRun === true
+      ? undefined
+      : await syncGpaStatusLabels({
+          cycleId: job.cycleId,
+          applicationId: job.payload?.applicationId,
+          setProgress,
+          submittable
+        })
+    return { result: { ...result, labelSync } }
+  },
+
+  gpa_status_label_sync: async (job, { setProgress, submittable }) => {
+    const result = await syncGpaStatusLabels({
+      cycleId: job.cycleId,
+      applicationId: job.payload?.applicationId,
+      dryRun: job.payload?.dryRun === true,
+      setProgress,
+      submittable
     })
     return { result }
   },

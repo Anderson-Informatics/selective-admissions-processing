@@ -7,6 +7,7 @@ const allowedTypes: JobType[] = [
   'form_response_mapping',
   'run_validation',
   'refresh_review_completion',
+  'gpa_status_label_sync',
   'catchment_lookup',
   'run_routing',
   'score_compilation',
@@ -37,6 +38,15 @@ export default defineEventHandler(async (event) => {
     const active = await hasConflictingJob(body.type, body.cycleId, payload.applicationId)
     if (active) throw createError({ statusCode: 409, statusMessage: 'An overlapping routing job is already in progress' })
     body.payload = { scope: payload.scope || 'limited', applicationId: payload.applicationId, labelId: payload.labelId, currentStageId: payload.currentStageId, limit: payload.limit || 250, dryRun: payload.dryRun === true, excludeSubmissionIds: payload.excludeSubmissionIds }
+  }
+
+  if (body.type === 'gpa_status_label_sync') {
+    const payload = body.payload || {}
+    if ((payload.applicationId != null && typeof payload.applicationId !== 'string')
+      || (payload.dryRun != null && typeof payload.dryRun !== 'boolean')) {
+      throw createError({ statusCode: 400, statusMessage: 'Invalid GPA label sync scope or dry-run setting' })
+    }
+    body.payload = { applicationId: payload.applicationId, dryRun: payload.dryRun === true }
   }
 
   if (ESSAY_JOB_TYPES.includes(body.type)) {
