@@ -57,12 +57,17 @@ export async function computeSessionAssignment(
   })
 }
 
-/** Resolves group label names → Submittable labelIds; returns per-group ids plus any missing names. */
-export function resolveGroupLabelIds(context: ExamScheduleContext): { labelIdsByGroup: Record<string, string[]>, missing: string[] } {
+/** Resolves group label names → Submittable labelIds; returns per-group ids plus any missing names. Only used groups are required. */
+export function resolveGroupLabelIds(
+  context: ExamScheduleContext,
+  usedGroupKeys?: Iterable<string>
+): { labelIdsByGroup: Record<string, string[]>, missing: string[] } {
+  const required = usedGroupKeys ? new Set(usedGroupKeys) : undefined
   const idByName = new Map(context.labels.map(label => [label.name.trim().toLowerCase(), label.externalId]))
   const labelIdsByGroup: Record<string, string[]> = {}
   const missing: string[] = []
   for (const def of EXAM_GROUP_DEFS) {
+    if (required && !required.has(def.key)) continue
     const ids: string[] = []
     for (const name of groupLabelNames(def, context.config)) {
       const id = idByName.get(name.trim().toLowerCase())

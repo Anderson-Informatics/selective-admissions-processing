@@ -41,7 +41,7 @@ export async function runExamScheduleFinalize(options: {
   const template = await MessageTemplateModel.findById(payload.templateId).lean()
   if (!template) throw new Error('Configured message template no longer exists')
 
-  const { labelIdsByGroup, missing } = resolveGroupLabelIds(context)
+  const { labelIdsByGroup, missing } = resolveGroupLabelIds(context, Object.values(assignments))
   if (missing.length) throw new Error(`Missing Submittable labels: ${missing.join(', ')}`)
 
   // Phase 1: apply group labels in Submittable and mirror them locally.

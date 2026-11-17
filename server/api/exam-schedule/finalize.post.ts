@@ -18,7 +18,8 @@ export default defineEventHandler(async (event) => {
   if (!session) throw createError({ statusCode: 404, statusMessage: 'Session label not found' })
 
   const result = await computeSessionAssignment(context, body.sessionLabelId)
-  const { missing } = resolveGroupLabelIds(context)
+  const usedGroupKeys = Object.keys(result.groups).filter(key => result.groups[key]!.length > 0)
+  const { missing } = resolveGroupLabelIds(context, usedGroupKeys)
   if (missing.length) {
     throw createError({
       statusCode: 400,

@@ -93,8 +93,12 @@ export function normalizeExamSchedulingConfig(raw?: Record<string, unknown> | nu
   }
   return {
     sessionLabelPattern: typeof input.sessionLabelPattern === 'string' && input.sessionLabelPattern ? input.sessionLabelPattern : '^HSPT\\s+[A-Z][a-z]{2}\\s+\\d{1,2}$',
-    examLabelPattern: typeof input.examLabelPattern === 'string' && input.examLabelPattern ? input.examLabelPattern : '^Exam\\s*-\\s*([A-Z])$',
-    examLabelTemplate: typeof input.examLabelTemplate === 'string' && input.examLabelTemplate ? input.examLabelTemplate : 'Exam - {letter}',
+    examLabelPattern: typeof input.examLabelPattern === 'string' && input.examLabelPattern && input.examLabelPattern !== '^Exam\\s*([A-Z])$'
+      ? input.examLabelPattern
+      : '^Exam\\s*-\\s*([A-Z])$',
+    examLabelTemplate: typeof input.examLabelTemplate === 'string' && input.examLabelTemplate && input.examLabelTemplate !== 'Exam {letter}'
+      ? input.examLabelTemplate
+      : 'Exam - {letter}',
     iep504LabelIds: Array.isArray(input.iep504LabelIds)
       ? input.iep504LabelIds
           .map(id => typeof id === 'string' ? id : (id && typeof id === 'object' ? String((id as { value?: unknown }).value ?? '') : ''))
