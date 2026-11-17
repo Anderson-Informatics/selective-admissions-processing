@@ -316,23 +316,26 @@ const previewColumns: TableColumn<PreviewRow>[] = [
             label="Test duration — General pool ({{examSession.testDuration}})"
             help="Supports **bold**, *italic*, and line breaks in email bodies."
           >
-            <UInput
+            <UTextarea
               v-model="config.testDurations.general"
               class="w-full"
+              :rows="3"
               placeholder="e.g. The exam lasts about 3 hours."
             />
           </UFormField>
           <UFormField label="Test duration — IEP/504">
-            <UInput
+            <UTextarea
               v-model="config.testDurations.iep504"
               class="w-full"
+              :rows="3"
               placeholder="e.g. The exam lasts about 4.5 hours with accommodations."
             />
           </UFormField>
           <UFormField label="Test duration — MLL">
-            <UInput
+            <UTextarea
               v-model="config.testDurations.mll"
               class="w-full"
+              :rows="3"
               placeholder="e.g. The exam lasts about 4 hours."
             />
           </UFormField>
