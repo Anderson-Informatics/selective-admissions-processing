@@ -392,12 +392,39 @@ export function formatSessionDateShort(sessionName: string, now?: Date): string 
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
 }
 
+export interface ExamEntranceDetails {
+  /** Authored markup for html-mode merge rendering. */
+  html: string
+  /** Plain-text variant for subjects and text-mode rendering. */
+  text: string
+}
+
+const POLICY_LINE = 'Please review the following policies prior to arrival.'
+
+export const EXAM_ENTRANCE_DETAILS: Record<ExamEntrance, ExamEntranceDetails> = {
+  'Main Entrance': {
+    html: `<p><strong>${POLICY_LINE}</strong></p>`
+      + '<blockquote><p style="font-size: 1.15em;">You will enter the building at the <strong>Main Entrance</strong>, which is in the center of the building, where you can see the flagpoles.</p></blockquote>'
+      + '<p><strong>Building Entry</strong> — Students should enter through the Main Entrance. You can enter the campus from Lafayette, McDougall or Larned. Park in the parking lot closest to the building.</p>',
+    text: `${POLICY_LINE}\n\nYou will enter the building at the Main Entrance, which is in the center of the building, where you can see the flagpoles.\n\nBuilding Entry — Students should enter through the Main Entrance. You can enter the campus from Lafayette, McDougall or Larned. Park in the parking lot closest to the building.`
+  },
+  'Performing Arts': {
+    html: `<p><strong>${POLICY_LINE}</strong></p>`
+      + '<blockquote><p style="font-size: 1.15em;">You will enter the building at the <strong>Performing Arts Entrance</strong>, which is near the intersection of McDougall and Lafayette.</p></blockquote>'
+      + '<p><strong>Building Entry</strong> — Students should enter through the Performing Arts entrance, near the intersection of McDougall and Lafayette. You can enter from either street. Park in the parking lot closest to the building.</p>',
+    text: `${POLICY_LINE}\n\nYou will enter the building at the Performing Arts Entrance, which is near the intersection of McDougall and Lafayette.\n\nBuilding Entry — Students should enter through the Performing Arts entrance, near the intersection of McDougall and Lafayette. You can enter from either street. Park in the parking lot closest to the building.`
+  }
+}
+
 export interface ExamSessionTokens {
   label: string
   arrivalTime: string
   entrance: string
   date: string
   note: string
+  /** Plain-text location block; html mode renders `locationHtml` instead. */
+  location: string
+  locationHtml: string
 }
 
 /** Merge-token payload for a group within a session. */
@@ -411,12 +438,15 @@ export function examSessionTokens(
   const primaryLabel = def?.examLetter
     ? examLabelName(def.examLetter, config)
     : (def?.colorKey ? config.colorLabels[def.colorKey] : '')
+  const details = def?.entrance ? EXAM_ENTRANCE_DETAILS[def.entrance] : undefined
   return {
     label: primaryLabel,
     arrivalTime: def?.arrivalTime || '',
     entrance: def?.entrance || '',
     date: formatSessionDateLong(sessionName, now),
-    note: (groupKey && config.groups[groupKey]?.note) || ''
+    note: (groupKey && config.groups[groupKey]?.note) || '',
+    location: details?.text || '',
+    locationHtml: details?.html || ''
   }
 }
 

@@ -329,7 +329,9 @@ export function renderMergeFields(
         return entryText === undefined ? null : renderNested(entryText)
       })
       .filter((item): item is string => item !== null)
-    return { kind: 'field' as const, value, format: format as MergeFormat | undefined, items, mappedItems, hasLibrary: libraryEntries !== undefined }
+    // `examSession.location` carries authored markup in `locationHtml`; html mode emits it raw.
+    const htmlText = name === 'examSession.location' ? context.examSession?.locationHtml : undefined
+    return { kind: 'field' as const, value, format: format as MergeFormat | undefined, items, mappedItems, hasLibrary: libraryEntries !== undefined, htmlText }
   }
 
   // List blocks are swapped for placeholders so rendered values are never re-scanned for tokens.
@@ -338,6 +340,10 @@ export function renderMergeFields(
   if (html) {
     output = output.replace(LIST_BLOCK, (match, rawToken: string) => {
       const token = resolve(rawToken)
+      if (token.kind === 'field' && token.htmlText !== undefined) {
+        blocks.push(token.htmlText)
+        return `\uE000${blocks.length - 1}\uE000`
+      }
       if (token.kind !== 'field' || (token.format !== 'list' && token.format !== 'numbered')) return match
       const items = token.value === undefined ? [] : token.hasLibrary ? token.mappedItems() : token.items().map(escapeHtml)
       const tag = token.format === 'numbered' ? 'ol' : 'ul'
@@ -351,6 +357,7 @@ export function renderMergeFields(
     if (token.kind === 'deadline') return escape(token.text || '')
     if (token.kind === 'link') return token.url === undefined ? '' : escape(token.url)
     if (token.value === undefined) return ''
+    if (token.kind === 'field' && html && token.htmlText !== undefined) return token.htmlText
     if (token.hasLibrary) return joinComma(token.mappedItems())
     if (token.format && (MERGE_FORMATS as readonly string[]).includes(token.format)) return escape(joinComma(token.items()))
     return escape(stringifyValue(token.value))

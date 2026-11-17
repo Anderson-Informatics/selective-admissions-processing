@@ -211,6 +211,16 @@ describe('examSessionTokens / examSessionForSubmission', () => {
     expect(examSessionTokens('RED', 'HSPT Jan 10', config).note).toBe('Please bring a copy of your IEP.')
   })
 
+  it('emits entrance-specific location text and markup', () => {
+    const main = examSessionTokens('B-green', 'HSPT Jan 10', config)
+    expect(main.location).toContain('You will enter the building at the Main Entrance')
+    expect(main.locationHtml).toContain('<strong>Main Entrance</strong>')
+    const pa = examSessionTokens('B-blue', 'HSPT Jan 10', config)
+    expect(pa.location).toContain('Performing Arts Entrance')
+    expect(pa.locationHtml).toContain('<strong>Performing Arts Entrance</strong>')
+    expect(examSessionTokens('unknown', 'HSPT Jan 10', config).location).toBe('')
+  })
+
   it('resolves a persisted assignment for a submission', () => {
     expect(examSessionForSubmission('s1', config)?.label).toBe('Exam - B')
     expect(examSessionForSubmission('s2', config)?.label).toBe('00-Red')

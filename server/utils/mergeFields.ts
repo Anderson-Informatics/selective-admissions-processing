@@ -25,6 +25,7 @@ const BUILTIN_FIELDS: MergeFieldOption[] = [
   { value: 'examSession.label', label: 'Exam Session — Group Label (supports | lib: libraries)' },
   { value: 'examSession.arrivalTime', label: 'Exam Session — Arrival Time' },
   { value: 'examSession.entrance', label: 'Exam Session — Entrance' },
+  { value: 'examSession.location', label: 'Exam Session — Location Details' },
   { value: 'examSession.note', label: 'Exam Session — Group Note' }
 ]
 

@@ -194,6 +194,16 @@ describe('renderMergeFields', () => {
     const { unresolved } = renderMergeFields('{{GPA Completion.Issues}}', ctx)
     expect(unresolved).toEqual(['GPA Completion.Issues'])
   })
+
+  it('renders examSession.location as authored markup in html mode and plain text otherwise', () => {
+    const ctx = context({
+      examSession: { location: 'Main Entrance details', locationHtml: '<p><strong>Main</strong></p>' }
+    })
+    expect(renderMergeFields('{{examSession.location}}', ctx).text).toBe('Main Entrance details')
+    expect(renderMergeFields('<p>{{examSession.location}}</p>', ctx, { mode: 'html' }).text).toBe('<p><strong>Main</strong></p>')
+    expect(renderMergeFields('Before {{examSession.location}} after', ctx, { mode: 'html' }).text)
+      .toBe('Before <p><strong>Main</strong></p> after')
+  })
 })
 
 describe('renderMergeFields list formats', () => {

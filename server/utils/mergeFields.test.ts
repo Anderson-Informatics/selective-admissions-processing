@@ -52,6 +52,7 @@ describe('buildMergeFieldSources', () => {
           { value: 'examSession.label', label: 'Exam Session — Group Label (supports | lib: libraries)', token: '{{examSession.label}}' },
           { value: 'examSession.arrivalTime', label: 'Exam Session — Arrival Time', token: '{{examSession.arrivalTime}}' },
           { value: 'examSession.entrance', label: 'Exam Session — Entrance', token: '{{examSession.entrance}}' },
+          { value: 'examSession.location', label: 'Exam Session — Location Details', token: '{{examSession.location}}' },
           { value: 'examSession.note', label: 'Exam Session — Group Note', token: '{{examSession.note}}' }
         ]
       }
