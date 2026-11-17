@@ -3,7 +3,7 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 interface Cycle { _id: string, year: string, name: string, active: boolean }
 interface MessageTemplate { _id: string, name: string }
-interface Session { labelId: string, name: string, count: number }
+interface Session { labelId: string, name: string, count: number, date: string }
 interface GroupDef { key: string, name: string, entrance: string, arrivalTime: string, schedulable?: boolean }
 interface ExamConfig {
   sessionLabelPattern: string
@@ -28,6 +28,7 @@ interface PreviewRow {
   overMax: boolean
 }
 interface PreviewResult { session: Session, rows: PreviewRow[], diagnostics: string[], missingLabels: string[] }
+const sessionDisplay = (session?: Session) => session ? `${session.date} (${session.name})` : ''
 
 const toast = useToast()
 const { data: cycles } = await useFetch<Cycle[]>('/api/cycles')
@@ -57,7 +58,7 @@ watch(data, (value) => {
 }, { immediate: true })
 
 const schedulableGroups = computed(() => (data.value?.groups || []).filter(group => group.schedulable))
-const sessionItems = computed<SelectItem[]>(() => (data.value?.sessions || []).map(session => ({ label: `${session.name} (${session.count})`, value: session.labelId })))
+const sessionItems = computed<SelectItem[]>(() => (data.value?.sessions || []).map(session => ({ label: `${session.date} — ${session.name} (${session.count})`, value: session.labelId })))
 const selectedSessionId = ref<string | undefined>()
 
 const saving = ref(false)
@@ -154,7 +155,7 @@ const previewColumns: TableColumn<PreviewRow>[] = [
 </script>
 
 <template>
-  <div class="space-y-6">
+  <UContainer class="space-y-6 py-8">
     <PageHeader
       title="Exam Scheduling"
       help="examScheduling"
@@ -179,7 +180,7 @@ const previewColumns: TableColumn<PreviewRow>[] = [
         class="min-w-36"
       >
         <div class="text-sm text-muted">
-          {{ session.name }}
+          {{ session.date }} · {{ session.name }}
         </div>
         <div class="text-2xl font-semibold">
           {{ session.count }}
@@ -194,120 +195,122 @@ const previewColumns: TableColumn<PreviewRow>[] = [
       description="No submissions in this cycle carry a label matching the session pattern (e.g. “HSPT Jan 10”)."
     />
 
-    <UCard v-if="config">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h2 class="font-semibold">
-            Scheduling configuration
-          </h2>
+    <UAccordion
+      v-if="config"
+      :items="[{ label: 'Scheduling configuration', icon: 'i-lucide-settings' }]"
+    >
+      <template #content>
+        <div class="flex justify-end pb-2">
           <UButton
             label="Save settings"
             :loading="saving"
             @click="saveConfig"
           />
         </div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <UFormField label="Message template">
+            <USelect
+              v-model="config.messageTemplateId"
+              :items="templateItems"
+              class="w-full"
+              placeholder="Select template"
+            />
+          </UFormField>
+          <UFormField label="IEP/504 labels">
+            <USelectMenu
+              v-model="config.iep504LabelIds"
+              :items="labelOptions || []"
+              value-key="value"
+              multiple
+              class="w-full"
+              placeholder="Select labels"
+            />
+          </UFormField>
+          <UFormField label="MLL label">
+            <USelect
+              v-model="config.mllLabelId"
+              :items="labelOptions || []"
+              value-key="value"
+              class="w-full"
+              placeholder="Select label"
+            />
+          </UFormField>
+          <UFormField label="Test submission ID">
+            <UInput
+              v-model="config.testSubmissionId"
+              class="w-full"
+            />
+          </UFormField>
+        </div>
+
+        <table class="mt-6 w-full text-sm">
+          <thead>
+            <tr class="text-left text-muted">
+              <th class="pb-2 font-medium">
+                Group
+              </th>
+              <th class="pb-2 font-medium">
+                Arrival
+              </th>
+              <th class="pb-2 font-medium">
+                Entrance
+              </th>
+              <th class="w-28 pb-2 font-medium">
+                Min
+              </th>
+              <th class="w-28 pb-2 font-medium">
+                Max
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="group in schedulableGroups"
+              :key="group.key"
+              class="border-t border-default"
+            >
+              <td class="py-2 pr-4">
+                {{ group.name }}
+              </td>
+              <td class="py-2 pr-4">
+                {{ group.arrivalTime }}
+              </td>
+              <td class="py-2 pr-4">
+                {{ group.entrance }}
+              </td>
+              <td class="py-2 pr-4">
+                <UInput
+                  v-model.number="config.groups[group.key]!.min"
+                  type="number"
+                  :min="0"
+                  class="w-24"
+                />
+              </td>
+              <td class="py-2">
+                <UInput
+                  v-model.number="config.groups[group.key]!.max"
+                  type="number"
+                  :min="0"
+                  class="w-24"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <UFormField
+          label="00-Red group note (extra text via {{examSession.note}})"
+          class="mt-4"
+        >
+          <UTextarea
+            v-model="config.groups.RED!.note"
+            class="w-full"
+            :rows="2"
+            placeholder="e.g. Please bring a copy of your child's IEP or 504 plan if you would like them to receive testing accommodations."
+          />
+        </UFormField>
       </template>
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <UFormField label="Message template">
-          <USelect
-            v-model="config.messageTemplateId"
-            :items="templateItems"
-            class="w-full"
-            placeholder="Select template"
-          />
-        </UFormField>
-        <UFormField label="IEP/504 labels">
-          <USelectMenu
-            v-model="config.iep504LabelIds"
-            :items="labelOptions || []"
-            multiple
-            class="w-full"
-            placeholder="Select labels"
-          />
-        </UFormField>
-        <UFormField label="MLL label">
-          <USelect
-            v-model="config.mllLabelId"
-            :items="labelOptions || []"
-            class="w-full"
-            placeholder="Select label"
-          />
-        </UFormField>
-        <UFormField label="Test submission ID">
-          <UInput
-            v-model="config.testSubmissionId"
-            class="w-full"
-          />
-        </UFormField>
-      </div>
-
-      <table class="mt-6 w-full text-sm">
-        <thead>
-          <tr class="text-left text-muted">
-            <th class="pb-2 font-medium">
-              Group
-            </th>
-            <th class="pb-2 font-medium">
-              Arrival
-            </th>
-            <th class="pb-2 font-medium">
-              Entrance
-            </th>
-            <th class="w-28 pb-2 font-medium">
-              Min
-            </th>
-            <th class="w-28 pb-2 font-medium">
-              Max
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="group in schedulableGroups"
-            :key="group.key"
-            class="border-t border-default"
-          >
-            <td class="py-2 pr-4">
-              {{ group.name }}
-            </td>
-            <td class="py-2 pr-4">
-              {{ group.arrivalTime }}
-            </td>
-            <td class="py-2 pr-4">
-              {{ group.entrance }}
-            </td>
-            <td class="py-2 pr-4">
-              <UInput
-                v-model.number="config.groups[group.key]!.min"
-                type="number"
-                :min="0"
-                class="w-24"
-              />
-            </td>
-            <td class="py-2">
-              <UInput
-                v-model.number="config.groups[group.key]!.max"
-                type="number"
-                :min="0"
-                class="w-24"
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <UFormField
-        label="00-Red group note (extra text via {{examSession.note}})"
-        class="mt-4"
-      >
-        <UTextarea
-          v-model="config.groups.RED!.note"
-          class="w-full"
-          :rows="2"
-          placeholder="e.g. Please bring a copy of your child's IEP or 504 plan if you would like them to receive testing accommodations."
-        />
-      </UFormField>
-    </UCard>
+    </UAccordion>
 
     <UCard>
       <template #header>
@@ -398,7 +401,7 @@ const previewColumns: TableColumn<PreviewRow>[] = [
       <template #body>
         <p class="text-sm">
           This applies the exam and color labels in Submittable for
-          <strong>{{ preview?.session.name }}</strong> and sends the configured
+          <strong>{{ sessionDisplay(preview?.session) }}</strong> and sends the configured
           message to every assigned applicant as a background job. This cannot be undone.
         </p>
       </template>
@@ -418,5 +421,5 @@ const previewColumns: TableColumn<PreviewRow>[] = [
         </div>
       </template>
     </UModal>
-  </div>
+  </UContainer>
 </template>

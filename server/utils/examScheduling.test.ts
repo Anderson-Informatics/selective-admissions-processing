@@ -5,6 +5,9 @@ import {
   detectSessions,
   examSessionForSubmission,
   examSessionTokens,
+  formatSessionDateLong,
+  formatSessionDateShort,
+  resolveSessionDate,
   EXAM_GROUP_DEFS,
   normalizeExamSchedulingConfig,
   type LabelInfo,
@@ -168,6 +171,30 @@ describe('assignGroups', () => {
   })
 })
 
+describe('resolveSessionDate', () => {
+  // "Now" is mid-November 2026 in Detroit.
+  const now = new Date('2026-11-15T12:00:00-05:00')
+
+  it('uses the current year for upcoming dates', () => {
+    const date = resolveSessionDate('HSPT Nov 21', now)!
+    expect([date.getFullYear(), date.getMonth(), date.getDate()]).toEqual([2026, 10, 21])
+  })
+
+  it('rolls to next year when the date has passed', () => {
+    const date = resolveSessionDate('HSPT Nov 7', now)!
+    expect(date.getFullYear()).toBe(2027)
+  })
+
+  it('formats long and short dates', () => {
+    expect(formatSessionDateLong('HSPT Nov 21', now)).toBe('Saturday, November 21, 2026')
+    expect(formatSessionDateShort('HSPT Nov 21', now)).toBe('11/21/2026')
+  })
+
+  it('returns null for unparseable names', () => {
+    expect(resolveSessionDate('HSPT Session A', now)).toBeNull()
+  })
+})
+
 describe('examSessionTokens / examSessionForSubmission', () => {
   const config = normalizeExamSchedulingConfig({
     groups: { RED: { min: 0, max: 0, note: 'Please bring a copy of your IEP.' } },
@@ -177,8 +204,9 @@ describe('examSessionTokens / examSessionForSubmission', () => {
   })
 
   it('emits group tokens', () => {
-    expect(examSessionTokens('B-green', 'HSPT Jan 10', config)).toMatchObject({
-      label: 'Exam - B', arrivalTime: '9:20 a.m.', entrance: 'Main Entrance', date: 'HSPT Jan 10'
+    const now = new Date('2026-11-15T12:00:00-05:00')
+    expect(examSessionTokens('B-green', 'HSPT Jan 10', config, now)).toMatchObject({
+      label: 'Exam - B', arrivalTime: '9:20 a.m.', entrance: 'Main Entrance', date: 'Sunday, January 10, 2027'
     })
     expect(examSessionTokens('RED', 'HSPT Jan 10', config).note).toBe('Please bring a copy of your IEP.')
   })

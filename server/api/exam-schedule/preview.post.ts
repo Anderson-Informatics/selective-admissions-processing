@@ -1,4 +1,4 @@
-import { EXAM_GROUP_DEFS, groupLabelNames } from '~~/server/utils/examScheduling'
+import { EXAM_GROUP_DEFS, formatSessionDateLong, groupLabelNames } from '~~/server/utils/examScheduling'
 import { computeSessionAssignment, loadExamScheduleContext, resolveGroupLabelIds } from '~~/server/utils/examSchedulingRun'
 
 export default defineEventHandler(async (event) => {
@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
     })
 
   return {
-    session: { labelId: session.externalId, name: session.name },
+    session: { labelId: session.externalId, name: session.name, date: formatSessionDateLong(session.name) },
     rows,
     assignments: result.assignments,
     diagnostics: result.diagnostics,

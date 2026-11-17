@@ -95,7 +95,11 @@ export function normalizeExamSchedulingConfig(raw?: Record<string, unknown> | nu
     sessionLabelPattern: typeof input.sessionLabelPattern === 'string' && input.sessionLabelPattern ? input.sessionLabelPattern : '^HSPT\\s+[A-Z][a-z]{2}\\s+\\d{1,2}$',
     examLabelPattern: typeof input.examLabelPattern === 'string' && input.examLabelPattern ? input.examLabelPattern : '^Exam\\s*-\\s*([A-Z])$',
     examLabelTemplate: typeof input.examLabelTemplate === 'string' && input.examLabelTemplate ? input.examLabelTemplate : 'Exam - {letter}',
-    iep504LabelIds: Array.isArray(input.iep504LabelIds) ? input.iep504LabelIds.filter((id): id is string => typeof id === 'string' && Boolean(id)) : [],
+    iep504LabelIds: Array.isArray(input.iep504LabelIds)
+      ? input.iep504LabelIds
+          .map(id => typeof id === 'string' ? id : (id && typeof id === 'object' ? String((id as { value?: unknown }).value ?? '') : ''))
+          .filter(Boolean)
+      : [],
     ...(typeof input.mllLabelId === 'string' && input.mllLabelId ? { mllLabelId: input.mllLabelId } : {}),
     iepReviewStagePattern: typeof input.iepReviewStagePattern === 'string' && input.iepReviewStagePattern ? input.iepReviewStagePattern : 'iep|504',
     noAccommodationsValue: typeof input.noAccommodationsValue === 'string' && input.noAccommodationsValue ? input.noAccommodationsValue : 'No Accommodations Required',
@@ -346,6 +350,44 @@ export function resolveSpecialLabelIds(
   return { iep504Ids, ...(mllId ? { mllId } : {}) }
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+}
+
+/** "Today" in America/Detroit at day granularity (exam dates are Detroit-local). */
+function detroitToday(now: Date): Date {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(now)
+  const get = (type: string) => Number(parts.find(part => part.type === type)?.value)
+  return new Date(get('year'), get('month') - 1, get('day'))
+}
+
+/** Resolves a session label name like "HSPT Nov 21" to the next upcoming month/day (next year if already past). */
+export function resolveSessionDate(sessionName: string, now: Date = new Date()): Date | null {
+  const match = /([A-Za-z]{3})\s+(\d{1,2})/.exec(sessionName.replace(/^\s*HSPT\s*/i, ''))
+  const month = match ? MONTH_INDEX[match[1]!.slice(0, 3).toLowerCase()] : undefined
+  if (month === undefined) return null
+  const day = Number(match![2])
+  const today = detroitToday(now)
+  let date = new Date(today.getFullYear(), month, day)
+  if (date.getTime() < today.getTime()) date = new Date(today.getFullYear() + 1, month, day)
+  return date
+}
+
+/** "Saturday, November 21, 2026" — used in applicant-facing messages. */
+export function formatSessionDateLong(sessionName: string, now?: Date): string {
+  const date = resolveSessionDate(sessionName, now)
+  if (!date) return sessionName
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+}
+
+/** "11/21/2026" — used on the exam scheduling page for admin display. */
+export function formatSessionDateShort(sessionName: string, now?: Date): string {
+  const date = resolveSessionDate(sessionName, now)
+  if (!date) return sessionName
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
+}
+
 export interface ExamSessionTokens {
   label: string
   arrivalTime: string
@@ -358,7 +400,8 @@ export interface ExamSessionTokens {
 export function examSessionTokens(
   groupKey: string,
   sessionName: string,
-  config: ExamSchedulingConfig
+  config: ExamSchedulingConfig,
+  now?: Date
 ): ExamSessionTokens {
   const def = EXAM_GROUP_DEFS.find(group => group.key === groupKey)
   const primaryLabel = def?.examLetter
@@ -368,7 +411,7 @@ export function examSessionTokens(
     label: primaryLabel,
     arrivalTime: def?.arrivalTime || '',
     entrance: def?.entrance || '',
-    date: sessionName,
+    date: formatSessionDateLong(sessionName, now),
     note: (groupKey && config.groups[groupKey]?.note) || ''
   }
 }
@@ -376,11 +419,12 @@ export function examSessionTokens(
 /** Resolves the examSession merge payload for a submission from persisted schedules. */
 export function examSessionForSubmission(
   submissionId: string,
-  config: ExamSchedulingConfig
+  config: ExamSchedulingConfig,
+  now?: Date
 ): ExamSessionTokens | undefined {
   for (const record of Object.values(config.schedules || {})) {
     const groupKey = record.assignments?.[submissionId]
-    if (groupKey) return examSessionTokens(groupKey, record.sessionName, config)
+    if (groupKey) return examSessionTokens(groupKey, record.sessionName, config, now)
   }
   return undefined
 }
