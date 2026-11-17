@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationModel } from '../models/Application'
+import { CycleModel } from '../models/Cycle'
+import { MetadataModel } from '../models/Metadata'
 import { ReviewModel } from '../models/Review'
 import { SubmissionModel } from '../models/Submission'
 import { runRegistrationSync, sanitizeAccommodations } from './registrationSync'
 
 vi.mock('../models/Application', () => ({ ApplicationModel: { find: vi.fn() } }))
+vi.mock('../models/Cycle', () => ({ CycleModel: { findById: vi.fn() } }))
+vi.mock('../models/Metadata', () => ({ MetadataModel: { find: vi.fn() } }))
 vi.mock('../models/Review', () => ({ ReviewModel: { find: vi.fn() } }))
 vi.mock('../models/Submission', () => ({ SubmissionModel: { find: vi.fn() } }))
 
@@ -13,10 +17,18 @@ const selectThenLean = (value: unknown) => ({ select: () => lean(value) })
 
 const fetchMock = vi.fn()
 
+const LABELS = [
+  { externalId: 'iep-label', name: 'IEP' },
+  { externalId: '504-label', name: '504 Plan' },
+  { externalId: 'mll-label', name: 'MLL' }
+]
+
 function mockModels({ submissions = [], reviews = [] }: { submissions?: unknown[], reviews?: unknown[] } = {}) {
   vi.mocked(ApplicationModel.find).mockReturnValue(selectThenLean([{ _id: 'app-1' }]) as never)
   vi.mocked(SubmissionModel.find).mockReturnValue(selectThenLean(submissions) as never)
   vi.mocked(ReviewModel.find).mockReturnValue(selectThenLean(reviews) as never)
+  vi.mocked(CycleModel.findById).mockReturnValue(selectThenLean(null) as never)
+  vi.mocked(MetadataModel.find).mockReturnValue(selectThenLean(LABELS) as never)
 }
 
 const submission = (overrides: Record<string, unknown> = {}) => ({
@@ -24,6 +36,7 @@ const submission = (overrides: Record<string, unknown> = {}) => ({
   submissionIdInt: 1001,
   applicationId: 'app-1',
   status: 'submitted',
+  labelIds: ['iep-label'],
   mappedFields: { FirstName: 'Jane', LastName: 'Doe', FullName: 'Jane Doe' },
   ...overrides
 })
@@ -120,9 +133,9 @@ describe('runRegistrationSync', () => {
     expect(body).toEqual([{ submissionIdUnique: 'uuid-1', SubmissionID: '1001' }])
   })
 
-  it('marks IEP as MLL when only MLL review accommodations exist', async () => {
+  it('marks IEP as MLL on the MLL label and keeps review accommodations', async () => {
     mockModels({
-      submissions: [submission()],
+      submissions: [submission({ labelIds: ['mll-label'] })],
       reviews: [review({ stageName: 'MLL Review', mappedData: { MLLAccommodations: '1/2 time <50%' } })]
     })
     const result = await runRegistrationSync({ cycleId: 'c1' })
@@ -132,12 +145,28 @@ describe('runRegistrationSync', () => {
     expect(result.inserts).toBe(1)
   })
 
-  it('marks IEP as No when no accommodations exist and omits Accommodations', async () => {
-    mockModels({ submissions: [submission()], reviews: [] })
+  it('marks IEP as No when no IEP/504 or MLL label exists and omits Accommodations', async () => {
+    mockModels({ submissions: [submission({ labelIds: [] })], reviews: [] })
     await runRegistrationSync({ cycleId: 'c1' })
     const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string)
     expect(body[0].IEP).toBe('No')
     expect(body[0]).not.toHaveProperty('Accommodations')
+  })
+
+  it('marks IEP as Yes from the label even without review accommodations', async () => {
+    mockModels({ submissions: [submission()], reviews: [] })
+    await runRegistrationSync({ cycleId: 'c1' })
+    const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string)
+    expect(body[0].IEP).toBe('Yes')
+    expect(body[0]).not.toHaveProperty('Accommodations')
+  })
+
+  it('marks IEP as No when only review accommodations exist but no label', async () => {
+    mockModels({ submissions: [submission({ labelIds: [] })], reviews: [review()] })
+    await runRegistrationSync({ cycleId: 'c1' })
+    const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string)
+    expect(body[0].IEP).toBe('No')
+    expect(body[0].Accommodations).toBe('Extended time')
   })
 
   it('deletes remote records for withdrawn submissions', async () => {

@@ -1,4 +1,5 @@
 import { ApplicationModel } from '../models/Application'
+import { CycleModel } from '../models/Cycle'
 import { FieldMappingModel } from '../models/FieldMapping'
 import { GpaRecordModel } from '../models/GpaRecord'
 import { MetadataModel } from '../models/Metadata'
@@ -12,6 +13,7 @@ import { applicantName, routingPreviewFilter } from './routingPreview'
 import { resolveSubmissionRound } from './cycleRounds'
 import { selectDpscdSnapshot } from './dpscdSnapshots'
 import { computeReviewCompletion, resolveGpa, routeSubmission, type ReviewCompletionResult, type ResolvedGpa, type RoutingContext, type RoutingDecision, type RoutingStage } from './routingEvaluator'
+import { examSessionForSubmission, normalizeExamSchedulingConfig } from './examScheduling'
 
 export interface RoutingEvaluationOptions {
   cycleId: string
@@ -83,6 +85,14 @@ export async function loadListOptionLabels(cycleId: string): Promise<Record<stri
   if (!formIds.length) return {}
   const forms = await MetadataModel.find({ type: 'form', externalId: { $in: formIds } }).select('externalId name data.fields').lean()
   return buildListOptionLabels(mappings, forms)
+}
+
+export async function loadExamSessionContext(cycleId: string, submissionId: string): Promise<Record<string, string> | undefined> {
+  const cycle = await CycleModel.findById(cycleId).select('examScheduling').lean()
+  if (!cycle?.examScheduling) return undefined
+  const config = normalizeExamSchedulingConfig(cycle.examScheduling as Record<string, unknown>)
+  const tokens = examSessionForSubmission(submissionId, config)
+  return tokens ? { ...tokens } : undefined
 }
 
 export async function loadResponseLibraries(): Promise<Record<string, { match: string, text: string }[]>> {

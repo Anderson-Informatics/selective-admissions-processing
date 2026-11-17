@@ -97,8 +97,8 @@ describe('submission labels', () => {
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body).submissionIds).toEqual(['sub-500'])
   })
 
-  it('does not treat a partial bulk response as a fully applied label', async () => {
+  it('returns the submissions not echoed back by a partial bulk response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ submissionIds: ['sub-1'] }))))
-    await expect(addSubmissionLabelBulk(['sub-1', 'sub-2'], 'label-1', config)).rejects.toThrow('Bulk label')
+    await expect(addSubmissionLabelBulk(['sub-1', 'sub-2'], 'label-1', config)).resolves.toEqual(['sub-2'])
   })
 })

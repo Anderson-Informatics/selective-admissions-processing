@@ -2,7 +2,7 @@ import { ReviewModel } from '~~/server/models/Review'
 import { ReviewStageModel } from '~~/server/models/ReviewStage'
 import { SubmissionModel } from '~~/server/models/Submission'
 import { renderMergeFields } from '~~/server/utils/routingActions'
-import { buildRoutingContext, loadListOptionLabels, loadResponseLibraries } from '~~/server/utils/routingRun'
+import { buildRoutingContext, loadExamSessionContext, loadListOptionLabels, loadResponseLibraries } from '~~/server/utils/routingRun'
 import { normalizeRoutingConfig } from '~~/server/utils/routingConfig'
 import { sendSubmissionMessage } from '~~/server/utils/submittable'
 import { recordDisclosure } from '~~/server/utils/disclosureAudit'
@@ -19,11 +19,12 @@ export default defineEventHandler(async (event) => {
   const submission = await SubmissionModel.findOne({ submissionId: body.submissionId }).lean()
   if (!submission) throw createError({ statusCode: 404, statusMessage: 'Submission not found' })
 
-  const [stages, reviews, optionLabels, libraries] = await Promise.all([
+  const [stages, reviews, optionLabels, libraries, examSession] = await Promise.all([
     ReviewStageModel.find({ cycleId: submission.cycleId, applicationId: submission.applicationId }).lean(),
     ReviewModel.find({ cycleId: submission.cycleId, submissionId: submission.submissionId }).lean(),
     loadListOptionLabels(String(submission.cycleId)),
-    loadResponseLibraries()
+    loadResponseLibraries(),
+    loadExamSessionContext(String(submission.cycleId), submission.submissionId)
   ])
   const routingStages = stages.map(stage => ({
     stageId: stage.stageId,
@@ -33,6 +34,7 @@ export default defineEventHandler(async (event) => {
     routing: normalizeRoutingConfig(stage.routing)
   }))
   const context = buildRoutingContext(submission, routingStages, reviews)
+  if (examSession) context.examSession = examSession
 
   const subject = renderMergeFields(body.subject, context, { optionLabels, libraries })
   const rendered = renderMergeFields(body.bodyHtml, context, { mode: 'html', optionLabels, libraries })

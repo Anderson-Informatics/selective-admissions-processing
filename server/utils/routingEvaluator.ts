@@ -54,6 +54,8 @@ export interface RoutingContext {
   gpaStatus?: string
   cycleRound?: string
   prerequisitesComplete?: boolean
+  /** Resolved exam-session merge values (label, arrivalTime, entrance, date, note). */
+  examSession?: Record<string, string>
 }
 
 export interface ReviewCompletionEntry {

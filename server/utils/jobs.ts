@@ -33,7 +33,8 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'essay_begin_scoring', label: 'Essay — Begin Scoring' },
   { value: 'essay_update_scoring', label: 'Essay — Update Scoring' },
   { value: 'essay_finish_scoring', label: 'Essay — Finish Scoring' },
-  { value: 'registration_sync', label: 'Registration sync' }
+  { value: 'registration_sync', label: 'Registration sync' },
+  { value: 'exam_schedule_finalize', label: 'Exam schedule — finalize & send' }
 ]
 
 interface HandlerResult {
@@ -510,6 +511,17 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
       apiKey: registrationApiKey,
       baseUrl: registrationBaseUrl
     })
+    return { result }
+  },
+
+  exam_schedule_finalize: async (job, { setProgress, submittable }) => {
+    const { runExamScheduleFinalize } = await import('./examScheduleFinalize')
+    const result = await runExamScheduleFinalize({
+      cycleId: job.cycleId,
+      payload: job.payload as { sessionLabelId?: string, sessionName?: string, templateId?: string, assignments?: Record<string, string> },
+      setProgress,
+      submittable
+    }, job)
     return { result }
   }
 }

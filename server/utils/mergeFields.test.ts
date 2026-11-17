@@ -47,7 +47,12 @@ describe('buildMergeFieldSources', () => {
         fields: [
           { value: 'links.submission', label: 'Link to Submission', token: '{{links.submission}}' },
           { value: 'links.submissionForms', label: 'Link to Submission Forms Page', token: '{{links.submissionForms}}' },
-          { value: 'deadline', label: 'Deadline', token: '{{deadline}}' }
+          { value: 'deadline', label: 'Deadline', token: '{{deadline}}' },
+          { value: 'examSession.date', label: 'Exam Session — Test Date', token: '{{examSession.date}}' },
+          { value: 'examSession.label', label: 'Exam Session — Group Label (supports | lib: libraries)', token: '{{examSession.label}}' },
+          { value: 'examSession.arrivalTime', label: 'Exam Session — Arrival Time', token: '{{examSession.arrivalTime}}' },
+          { value: 'examSession.entrance', label: 'Exam Session — Entrance', token: '{{examSession.entrance}}' },
+          { value: 'examSession.note', label: 'Exam Session — Group Note', token: '{{examSession.note}}' }
         ]
       }
     ])

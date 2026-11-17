@@ -16,6 +16,7 @@ export interface Cycle {
   startDate?: Date
   endDate?: Date
   scoreWeights?: Record<string, number>
+  examScheduling?: Record<string, unknown>
   hsptResultIdCounter?: number
   createdAt?: Date
   updatedAt?: Date
@@ -28,6 +29,7 @@ const cycleSchema = new Schema<Cycle>({
   startDate: Date,
   endDate: Date,
   scoreWeights: { type: Schema.Types.Mixed, default: {} },
+  examScheduling: { type: Schema.Types.Mixed },
   hsptResultIdCounter: { type: Number, default: 1000 }
 }, { timestamps: true })
 

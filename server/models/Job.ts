@@ -1,6 +1,6 @@
 import mongoose, { Schema, type Types } from 'mongoose'
 
-export type JobType = 'metadata_sync' | 'submission_extraction' | 'submission_extraction_form' | 'form_response_mapping' | 'run_validation' | 'refresh_review_completion' | 'gpa_status_label_sync' | 'run_routing' | 'score_compilation' | 'hspt_upload_preview' | 'hspt_upload_commit' | 'catchment_lookup' | 'dpscd_gpa_import' | 'optin_gpa_preview' | 'optin_gpa_commit' | 'essay_begin_scoring' | 'essay_update_scoring' | 'essay_finish_scoring' | 'registration_sync'
+export type JobType = 'metadata_sync' | 'submission_extraction' | 'submission_extraction_form' | 'form_response_mapping' | 'run_validation' | 'refresh_review_completion' | 'gpa_status_label_sync' | 'run_routing' | 'score_compilation' | 'hspt_upload_preview' | 'hspt_upload_commit' | 'catchment_lookup' | 'dpscd_gpa_import' | 'optin_gpa_preview' | 'optin_gpa_commit' | 'essay_begin_scoring' | 'essay_update_scoring' | 'essay_finish_scoring' | 'registration_sync' | 'exam_schedule_finalize'
 
 export const ESSAY_JOB_TYPES: JobType[] = ['essay_begin_scoring', 'essay_update_scoring', 'essay_finish_scoring']
 export type JobStatus = 'pending' | 'waiting' | 'running' | 'completed' | 'failed'
@@ -49,6 +49,12 @@ export interface Job {
     batchSize?: number
     dryRun?: boolean
     force?: boolean
+    sessionLabelId?: string
+    sessionName?: string
+    templateId?: string
+    assignments?: Record<string, string>
+    groupCounts?: Record<string, number>
+    diagnostics?: string[]
   }
   result?: { entries?: number, forms?: JobFormResult[] } & Record<string, unknown>
   error?: string

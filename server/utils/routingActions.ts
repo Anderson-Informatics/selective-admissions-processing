@@ -173,6 +173,9 @@ function latestCompletedReview(context: RoutingContext, stageName: string) {
 }
 
 function resolveMergeToken(token: string, context: RoutingContext): unknown {
+  if (token.startsWith('examSession.')) {
+    return context.examSession?.[token.slice('examSession.'.length)]
+  }
   const dotIndex = token.lastIndexOf('.')
   if (dotIndex > 0) {
     const stageName = token.slice(0, dotIndex)

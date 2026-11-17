@@ -6,10 +6,10 @@ describe('application navigation', () => {
     expect(navigationGroups.map(group => group.label)).toEqual(['Overview', 'Operations', 'Assessment', 'Configuration', 'Administration'])
     const destinations = navigationGroups.flatMap(group => group.items.map(item => item.to))
     expect(destinations).toEqual([
-      '/', '/submissions', '/validation', '/jobs', '/jobs/scheduler', '/essays', '/hspt', '/gpa', '/scoring',
+      '/', '/submissions', '/validation', '/jobs', '/jobs/scheduler', '/essays', '/hspt', '/gpa', '/scoring', '/exam-scheduling',
       '/cycles', '/applications', '/mappings', '/templates', '/response-libraries', '/routing', '/admin/users'
     ])
-    expect(new Set(destinations).size).toBe(16)
+    expect(new Set(destinations).size).toBe(17)
     expect(navigationGroups.find(group => group.label === 'Administration')?.siteAdminOnly).toBe(true)
   })
 

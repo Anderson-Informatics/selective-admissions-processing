@@ -1,6 +1,9 @@
 import { ApplicationModel } from '../models/Application'
+import { CycleModel } from '../models/Cycle'
+import { MetadataModel } from '../models/Metadata'
 import { ReviewModel, type Review } from '../models/Review'
 import { SubmissionModel } from '../models/Submission'
+import { normalizeExamSchedulingConfig, resolveSpecialLabelIds } from './examScheduling'
 import type { ProgressFn } from './validation'
 
 // ---------------------------------------------------------------------------
@@ -88,16 +91,13 @@ function latestCompleted(reviews: Review[]): Review | undefined {
     .sort((a, b) => (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0))[0]
 }
 
-function resolveIepAndAccommodations(reviews: Review[]): { IEP: string, Accommodations?: string } {
+function resolveIepAndAccommodations(labels: { hasIep504: boolean, hasMll: boolean }, reviews: Review[]): { IEP: string, Accommodations?: string } {
   const iepReview = latestCompleted(reviews.filter(review => /iep\s*review|504\s*review/i.test(review.stageName || '')))
-  const iepAccommodations = sanitizeAccommodations(iepReview?.mappedData?.Accommodations)
-  if (iepAccommodations) return { IEP: 'Yes', Accommodations: iepAccommodations }
-
   const mllReview = latestCompleted(reviews.filter(review => /mll\s*review/i.test(review.stageName || '')))
-  const mllAccommodations = sanitizeAccommodations(mllReview?.mappedData?.MLLAccommodations ?? mllReview?.mappedData?.Accommodations)
-  if (mllAccommodations) return { IEP: 'MLL', Accommodations: mllAccommodations }
-
-  return { IEP: 'No' }
+  const accommodations = sanitizeAccommodations(iepReview?.mappedData?.Accommodations)
+    || sanitizeAccommodations(mllReview?.mappedData?.MLLAccommodations ?? mllReview?.mappedData?.Accommodations)
+  const IEP = labels.hasIep504 ? 'Yes' : labels.hasMll ? 'MLL' : 'No'
+  return accommodations ? { IEP, Accommodations: accommodations } : { IEP }
 }
 
 function diffUpdate(local: LocalStudent, remote: RemoteStudent): Record<string, string> | undefined {
@@ -148,9 +148,17 @@ export async function runRegistrationSync(options: {
 
   const applications = await ApplicationModel.find({ cycleId, type: 'exam' }).select('_id').lean()
   const applicationIds = applications.map(application => String(application._id))
-  const submissions = await SubmissionModel.find({ cycleId, applicationId: { $in: applicationIds } })
-    .select('submissionId submissionIdInt applicationId status mappedFields')
-    .lean()
+  const [submissions, cycle, labels] = await Promise.all([
+    SubmissionModel.find({ cycleId, applicationId: { $in: applicationIds } })
+      .select('submissionId submissionIdInt applicationId status mappedFields labelIds')
+      .lean(),
+    CycleModel.findById(cycleId).select('examScheduling').lean(),
+    MetadataModel.find({ type: 'label' }).select('externalId name').lean()
+  ])
+  const { iep504Ids, mllId } = resolveSpecialLabelIds(
+    normalizeExamSchedulingConfig(cycle?.examScheduling as Record<string, unknown> | undefined),
+    labels
+  )
   const isWithdrawn = (status: string | undefined) => status?.toLowerCase() === 'withdrawn'
   const active = submissions.filter(submission => !isWithdrawn(submission.status))
   const withdrawn = submissions.filter(submission => isWithdrawn(submission.status))
@@ -168,7 +176,11 @@ export async function runRegistrationSync(options: {
   const localStudents: LocalStudent[] = []
   for (const submission of active) {
     const mapped = submission.mappedFields || {}
-    const { IEP, Accommodations } = resolveIepAndAccommodations(reviewsBySubmission.get(submission.submissionId) || [])
+    const submissionLabelIds = new Set((submission as { labelIds?: string[] }).labelIds || [])
+    const { IEP, Accommodations } = resolveIepAndAccommodations(
+      { hasIep504: [...iep504Ids].some(id => submissionLabelIds.has(id)), hasMll: Boolean(mllId && submissionLabelIds.has(mllId)) },
+      reviewsBySubmission.get(submission.submissionId) || []
+    )
     const student: LocalStudent = {
       submissionIdUnique: submission.submissionId,
       SubmissionID: submission.submissionIdInt != null ? String(submission.submissionIdInt) : '',

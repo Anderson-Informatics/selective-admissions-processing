@@ -269,28 +269,35 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
     remove.forEach(id => entry.remove.add(id))
     labelChangeBySubmission.set(submissionId, entry)
   }
+  // Diff desired label changes against the locally mirrored labelIds (refreshed
+  // from Submittable above) so no-op adds/removes never reach the API.
   const labelsToApply = new Map<string, string[]>()
-  for (const item of moved) {
-    for (const labelId of item.actions.labelsToAdd) {
+  const labelRemovals: Array<{ submissionId: string, labelId: string }> = []
+  for (const item of evaluated) {
+    const submissionId = item.submission.submissionId
+    const isMoved = movedIds.has(submissionId)
+    if (!isMoved && item.actions.move?.toStageId) continue
+    const existing = new Set(item.submission.labelIds || [])
+    const adds = (isMoved ? item.actions.labelsToAdd : item.actions.statusLabelIds)
+      .filter(labelId => !existing.has(labelId))
+    for (const labelId of adds) {
       const list = labelsToApply.get(labelId) || []
-      list.push(item.submission.submissionId)
+      list.push(submissionId)
       labelsToApply.set(labelId, list)
     }
-  }
-  // statusLabels sync applies to all evaluated submissions, not only moved ones.
-  for (const item of evaluated) {
-    if (item.actions.move?.toStageId) continue
-    for (const labelId of item.actions.statusLabelIds) {
-      const list = labelsToApply.get(labelId) || []
-      list.push(item.submission.submissionId)
-      labelsToApply.set(labelId, list)
+    for (const labelId of item.actions.labelsToRemove) {
+      if (existing.has(labelId)) labelRemovals.push({ submissionId, labelId })
     }
   }
   for (const [labelId, submissionIds] of labelsToApply) {
     try {
-      await addSubmissionLabelBulk(submissionIds, labelId, options.submittable)
-      result.actionsApplied.labelsAdded += submissionIds.length
-      for (const submissionId of submissionIds) recordLabelChange(submissionId, [labelId], [])
+      const unapplied = await addSubmissionLabelBulk(submissionIds, labelId, options.submittable) || []
+      const applied = submissionIds.filter(id => !unapplied.includes(id))
+      result.actionsApplied.labelsAdded += applied.length
+      for (const submissionId of applied) recordLabelChange(submissionId, [labelId], [])
+      for (const submissionId of unapplied) {
+        result.failures.push({ submissionId, step: 'label_add', error: `Submittable did not confirm label ${labelId}` })
+      }
     } catch (error) {
       for (const submissionId of submissionIds) {
         result.failures.push({ submissionId, step: 'label_add', error: errorMessage(error) })
@@ -298,17 +305,7 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
     }
   }
 
-  const labelRemovals: Array<{ submissionId: string, labelId: string }> = []
-  for (const item of moved) {
-    for (const labelId of item.actions.labelsToRemove) labelRemovals.push({ submissionId: item.submission.submissionId, labelId })
-  }
-  for (const item of evaluated) {
-    if (item.actions.move?.toStageId) continue
-    for (const labelId of item.actions.labelsToRemove) {
-      labelRemovals.push({ submissionId: item.submission.submissionId, labelId })
-    }
-  }
-  for (const removal of labelRemovals) {
+  await mapWithConcurrency(labelRemovals, 5, async (removal) => {
     try {
       await removeSubmissionLabel(removal.submissionId, removal.labelId, options.submittable)
       result.actionsApplied.labelsRemoved += 1
@@ -316,7 +313,7 @@ export async function executeRoutingRun(options: RoutingExecutionOptions): Promi
     } catch (error) {
       result.failures.push({ submissionId: removal.submissionId, step: 'label_remove', error: errorMessage(error) })
     }
-  }
+  })
 
   const assignmentGroups = new Map<string, { assign: string[], unassign: string[], submissionIds: string[] }>()
   for (const item of moved) {

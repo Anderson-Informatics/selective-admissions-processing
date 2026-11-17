@@ -161,6 +161,13 @@ export const pageHelp = {
     gettingStarted: 'Use the full reset link, then set a new password that meets the requirements shown on the page.',
     important: ['Reset links expire and can only be used once.', 'If the link no longer works, request a new reset from the sign-in page.']
   },
+  examScheduling: {
+    title: 'Exam Scheduling',
+    purpose: 'Group applicants by their HSPT test-date label, assign arrival-time and entrance groups, label them in Submittable, and send a scheduling message.',
+    tasks: ['Review how many applicants carry each HSPT test-date label.', 'Set minimum and maximum group sizes and choose the message template and special-case labels.', 'Pick a test date and preview the schedule to see each group’s assigned count.', 'Send a test message for any group to the configured test submission to check merge fields.', 'Finalize the schedule to apply labels and send messages as a background job.'],
+    gettingStarted: 'Select the cycle, confirm the group settings, then choose a test date and run Preview schedule. Send test messages before finalizing.',
+    important: ['Applicants with an IEP or 504 label go to the Performing Arts 8:30 a.m. group unless their review says no accommodations are required; an incomplete IEP/504 review sends them to the 00-Red group instead.', 'MLL-labeled applicants go to the Main Entrance 8:30 a.m. group.', 'Submissions already carrying an Exam letter and color label keep their existing group. Overflow beyond all maximums goes to Exam H at 11:20 a.m.', 'Finalizing writes labels in Submittable and sends real messages to applicants. Follow the job on the Jobs page.']
+  },
   users: {
     title: 'User Management',
     purpose: 'Manage staff access to the EHS Admissions workspace.',

@@ -270,8 +270,10 @@ export async function removeSubmissionLabel(submissionId: string, labelId: strin
   await submittableRequest<unknown>(`/submissions/${encodeURIComponent(submissionId)}/labels/${encodeURIComponent(labelId)}`, { method: 'DELETE' }, clientConfig)
 }
 
-export async function addSubmissionLabelBulk(submissionIds: string[], labelId: string, clientConfig?: SubmittableClientConfig): Promise<void> {
+/** Returns the submitted IDs that Submittable did not echo back as labeled (may already have the label). */
+export async function addSubmissionLabelBulk(submissionIds: string[], labelId: string, clientConfig?: SubmittableClientConfig): Promise<string[]> {
   const uniqueIds = [...new Set(submissionIds)]
+  const unapplied: string[] = []
   for (let index = 0; index < uniqueIds.length; index += 500) {
     const batch = uniqueIds.slice(index, index + 500)
     const result = await submittableRequest<{ submissionIds?: string[] | null }>(
@@ -280,8 +282,9 @@ export async function addSubmissionLabelBulk(submissionIds: string[], labelId: s
       clientConfig
     )
     const applied = new Set(result?.submissionIds || [])
-    if (batch.some(id => !applied.has(id))) throw new Error(`Bulk label application was incomplete for ${labelId}`)
+    unapplied.push(...batch.filter(id => !applied.has(id)))
   }
+  return unapplied
 }
 
 export async function moveSubmissionsToStage(reviewStageId: string, submissionIds: string[], clientConfig?: SubmittableClientConfig): Promise<void> {

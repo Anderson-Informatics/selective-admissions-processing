@@ -26,7 +26,8 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Essays', to: '/essays', icon: 'i-lucide-file-pen-line' },
       { label: 'HSPT', to: '/hspt', icon: 'i-lucide-graduation-cap' },
       { label: 'GPA', to: '/gpa', icon: 'i-lucide-chart-column' },
-      { label: 'Scoring', to: '/scoring', icon: 'i-lucide-calculator' }
+      { label: 'Scoring', to: '/scoring', icon: 'i-lucide-calculator' },
+      { label: 'Exam Scheduling', to: '/exam-scheduling', icon: 'i-lucide-calendar-check' }
     ]
   },
   {

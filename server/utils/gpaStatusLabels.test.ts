@@ -23,7 +23,7 @@ function mockData(applications: MockApplication[], submissions: MockSubmission[]
 describe('syncGpaStatusLabels', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(addSubmissionLabelBulk).mockResolvedValue(undefined)
+    vi.mocked(addSubmissionLabelBulk).mockResolvedValue([])
     vi.mocked(removeSubmissionLabel).mockResolvedValue(undefined)
     vi.mocked(SubmissionModel.bulkWrite).mockResolvedValue({} as never)
   })

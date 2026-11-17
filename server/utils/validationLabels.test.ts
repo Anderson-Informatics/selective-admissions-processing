@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.mocked(fetchSubmission).mockImplementation(async id => ({ submissionId: id, labels: [...submissions.find(s => s.submissionId === id)!.labelIds] }))
   vi.mocked(addSubmissionLabelBulk).mockImplementation(async (ids, id) => {
     for (const sub of submissions.filter(s => ids.includes(s.submissionId))) sub.labelIds.push(id)
+    return []
   })
   vi.mocked(removeSubmissionLabel).mockImplementation(async (id, label) => {
     const sub = submissions.find(s => s.submissionId === id)!

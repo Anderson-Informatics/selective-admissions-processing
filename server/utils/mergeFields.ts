@@ -20,7 +20,12 @@ export interface MergeFieldSource {
 const BUILTIN_FIELDS: MergeFieldOption[] = [
   { value: 'links.submission', label: 'Link to Submission' },
   { value: 'links.submissionForms', label: 'Link to Submission Forms Page' },
-  { value: 'deadline', label: 'Deadline' }
+  { value: 'deadline', label: 'Deadline' },
+  { value: 'examSession.date', label: 'Exam Session — Test Date' },
+  { value: 'examSession.label', label: 'Exam Session — Group Label (supports | lib: libraries)' },
+  { value: 'examSession.arrivalTime', label: 'Exam Session — Arrival Time' },
+  { value: 'examSession.entrance', label: 'Exam Session — Entrance' },
+  { value: 'examSession.note', label: 'Exam Session — Group Note' }
 ]
 
 interface MappingInput { formId: string, fieldId: string, label: string, canonicalName?: string }
