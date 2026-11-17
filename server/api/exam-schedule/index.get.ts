@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
   ])
   const config = normalizeExamSchedulingConfig(cycle.examScheduling as Record<string, unknown> | undefined)
   const sessions = detectSessions(submissions, labels, config.sessionLabelPattern)
+    .filter(session => session.count > 0)
   return {
     cycleId: String(cycle._id),
     config,

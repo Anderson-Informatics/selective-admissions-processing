@@ -17,8 +17,8 @@ const labels: LabelInfo[] = [
   { externalId: 'iep', name: 'IEP' },
   { externalId: '504', name: '504 Plan' },
   { externalId: 'mll', name: 'MLL' },
-  { externalId: 'exam-a', name: 'Exam A' },
-  { externalId: 'exam-d', name: 'Exam D' },
+  { externalId: 'exam-a', name: 'Exam - A' },
+  { externalId: 'exam-d', name: 'Exam - D' },
   { externalId: 'green', name: '00-Green' },
   { externalId: 'blue', name: '00-Blue' }
 ]
@@ -132,6 +132,18 @@ describe('assignGroups', () => {
     }
   })
 
+  it('balances above the minimum so different mins stay offset', () => {
+    const config = baseConfig()
+    for (const key of Object.keys(config.groups)) config.groups[key] = { min: 0, max: 0 }
+    config.groups['A-green'] = { min: 2, max: 10 }
+    config.groups['A-blue'] = { min: 4, max: 10 }
+    const submissions = Array.from({ length: 10 }, (_, i) => sub(`s${i}`))
+    const result = run(submissions, config)
+    expect(result.groups['A-green']!.length + result.groups['A-blue']!.length).toBe(10)
+    // min-fill leaves 2/4; balancing above the min keeps the +2 offset → 4/6
+    expect(result.groups['A-blue']!.length - result.groups['A-green']!.length).toBe(2)
+  })
+
   it('overflows to Exam H when all groups are at max', () => {
     const config = baseConfig()
     for (const key of Object.keys(config.groups)) config.groups[key] = { min: 0, max: 1 }
@@ -166,13 +178,13 @@ describe('examSessionTokens / examSessionForSubmission', () => {
 
   it('emits group tokens', () => {
     expect(examSessionTokens('B-green', 'HSPT Jan 10', config)).toMatchObject({
-      label: 'Exam B', arrivalTime: '9:20 a.m.', entrance: 'Main Entrance', date: 'HSPT Jan 10'
+      label: 'Exam - B', arrivalTime: '9:20 a.m.', entrance: 'Main Entrance', date: 'HSPT Jan 10'
     })
     expect(examSessionTokens('RED', 'HSPT Jan 10', config).note).toBe('Please bring a copy of your IEP.')
   })
 
   it('resolves a persisted assignment for a submission', () => {
-    expect(examSessionForSubmission('s1', config)?.label).toBe('Exam B')
+    expect(examSessionForSubmission('s1', config)?.label).toBe('Exam - B')
     expect(examSessionForSubmission('s2', config)?.label).toBe('00-Red')
     expect(examSessionForSubmission('nope', config)).toBeUndefined()
   })

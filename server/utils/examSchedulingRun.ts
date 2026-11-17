@@ -73,4 +73,3 @@ export function resolveGroupLabelIds(context: ExamScheduleContext): { labelIdsBy
   }
   return { labelIdsByGroup, missing: [...new Set(missing)] }
 }
-

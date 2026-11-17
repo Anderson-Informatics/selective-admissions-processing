@@ -77,9 +77,12 @@ export function normalizeExamSchedulingConfig(raw?: Record<string, unknown> | nu
   const rawGroups = (input.groups && typeof input.groups === 'object' ? input.groups : {}) as Record<string, Record<string, unknown>>
   for (const def of EXAM_GROUP_DEFS) {
     const raw = rawGroups[def.key] || {}
+    const defaults = def.schedulable
+      ? (def.examLetter === 'A' ? { min: 50, max: 70 } : { min: 60, max: 80 })
+      : { min: 0, max: 0 }
     groups[def.key] = {
-      min: Number.isFinite(Number(raw.min)) ? Math.max(0, Number(raw.min)) : 0,
-      max: Number.isFinite(Number(raw.max)) ? Math.max(0, Number(raw.max)) : (def.schedulable ? 20 : 0),
+      min: Number.isFinite(Number(raw.min)) ? Math.max(0, Number(raw.min)) : defaults.min,
+      max: Number.isFinite(Number(raw.max)) ? Math.max(0, Number(raw.max)) : defaults.max,
       ...(typeof raw.note === 'string' && raw.note ? { note: raw.note } : {})
     }
   }
@@ -90,8 +93,8 @@ export function normalizeExamSchedulingConfig(raw?: Record<string, unknown> | nu
   }
   return {
     sessionLabelPattern: typeof input.sessionLabelPattern === 'string' && input.sessionLabelPattern ? input.sessionLabelPattern : '^HSPT\\s+[A-Z][a-z]{2}\\s+\\d{1,2}$',
-    examLabelPattern: typeof input.examLabelPattern === 'string' && input.examLabelPattern ? input.examLabelPattern : '^Exam\\s*([A-Z])$',
-    examLabelTemplate: typeof input.examLabelTemplate === 'string' && input.examLabelTemplate ? input.examLabelTemplate : 'Exam {letter}',
+    examLabelPattern: typeof input.examLabelPattern === 'string' && input.examLabelPattern ? input.examLabelPattern : '^Exam\\s*-\\s*([A-Z])$',
+    examLabelTemplate: typeof input.examLabelTemplate === 'string' && input.examLabelTemplate ? input.examLabelTemplate : 'Exam - {letter}',
     iep504LabelIds: Array.isArray(input.iep504LabelIds) ? input.iep504LabelIds.filter((id): id is string => typeof id === 'string' && Boolean(id)) : [],
     ...(typeof input.mllLabelId === 'string' && input.mllLabelId ? { mllLabelId: input.mllLabelId } : {}),
     iepReviewStagePattern: typeof input.iepReviewStagePattern === 'string' && input.iepReviewStagePattern ? input.iepReviewStagePattern : 'iep|504',
@@ -213,7 +216,7 @@ function detectPreAssignment(
   try {
     examRegex = new RegExp(config.examLabelPattern, 'i')
   } catch {
-    examRegex = /^Exam\s*([A-Z])$/i
+    examRegex = /^Exam\s*-\s*([A-Z])$/i
   }
   let letter: string | undefined
   for (const name of labelNames) {
@@ -299,10 +302,15 @@ export function assignGroups(input: {
     }
   }
 
+  // Balance the overflow above each group's min: groups stay offset by their
+  // min difference (mins 50/60 → balanced results like 54/64).
   while (cursor < shuffled.length) {
     const candidate = schedulable
       .filter(def => groups[def.key]!.length < (config.groups[def.key]?.max ?? 0))
-      .sort((a, b) => groups[a.key]!.length - groups[b.key]!.length)[0]
+      .sort((a, b) =>
+        (groups[a.key]!.length - (config.groups[a.key]?.min ?? 0))
+        - (groups[b.key]!.length - (config.groups[b.key]?.min ?? 0))
+        || groups[a.key]!.length - groups[b.key]!.length)[0]
     if (!candidate) break
     assign(shuffled[cursor++]!.submissionId, candidate.key)
   }
