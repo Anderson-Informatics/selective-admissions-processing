@@ -204,6 +204,13 @@ describe('renderMergeFields', () => {
     expect(renderMergeFields('Before {{examSession.location}} after', ctx, { mode: 'html' }).text)
       .toBe('Before <p><strong>Main</strong></p> after')
   })
+
+  it('renders examSession.testDuration with markdown-lite in html mode', () => {
+    const ctx = context({ examSession: { testDuration: 'about **3 hours** & a <break>\nsnack' } })
+    expect(renderMergeFields('{{examSession.testDuration}}', ctx).text).toBe('about **3 hours** & a <break>\nsnack')
+    expect(renderMergeFields('<p>Plan for {{examSession.testDuration}}.</p>', ctx, { mode: 'html' }).text)
+      .toBe('<p>Plan for about <strong>3 hours</strong> &amp; a &lt;break&gt;<br>snack.</p>')
+  })
 })
 
 describe('renderMergeFields list formats', () => {

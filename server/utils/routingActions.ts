@@ -227,6 +227,15 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
+/** Escapes authored text, then converts a markdown-lite subset: **bold**, *italic*, _italic_, newlines. */
+export function renderInlineMarkdown(value: string): string {
+  return escapeHtml(value)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\b_([^_\n]+)_\b/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>')
+}
+
 const LIBRARY_MODIFIER = /^lib(?:rary)?\s*:\s*(.+)$/i
 const LINK_TOKEN = /^links\.(submission|submissionforms)$/i
 const MAX_LIBRARY_DEPTH = 3
@@ -329,9 +338,18 @@ export function renderMergeFields(
         return entryText === undefined ? null : renderNested(entryText)
       })
       .filter((item): item is string => item !== null)
-    // `examSession.location` carries authored markup in `locationHtml`; html mode emits it raw.
-    const htmlText = name === 'examSession.location' ? context.examSession?.locationHtml : undefined
-    return { kind: 'field' as const, value, format: format as MergeFormat | undefined, items, mappedItems, hasLibrary: libraryEntries !== undefined, htmlText }
+    // `examSession.location` carries authored markup in `locationHtml`; `testDuration` supports
+    // markdown-lite. Html mode emits `htmlText` raw; `htmlBlock` marks block-level markup that
+    // replaces a wrapping `<p>{{token}}</p>` entirely.
+    let htmlText: string | undefined
+    let htmlBlock = false
+    if (name === 'examSession.location') {
+      htmlText = context.examSession?.locationHtml
+      htmlBlock = true
+    } else if (name === 'examSession.testDuration' && value !== undefined) {
+      htmlText = renderInlineMarkdown(stringifyValue(value))
+    }
+    return { kind: 'field' as const, value, format: format as MergeFormat | undefined, items, mappedItems, hasLibrary: libraryEntries !== undefined, htmlText, htmlBlock }
   }
 
   // List blocks are swapped for placeholders so rendered values are never re-scanned for tokens.
@@ -340,7 +358,7 @@ export function renderMergeFields(
   if (html) {
     output = output.replace(LIST_BLOCK, (match, rawToken: string) => {
       const token = resolve(rawToken)
-      if (token.kind === 'field' && token.htmlText !== undefined) {
+      if (token.kind === 'field' && token.htmlBlock && token.htmlText !== undefined) {
         blocks.push(token.htmlText)
         return `\uE000${blocks.length - 1}\uE000`
       }

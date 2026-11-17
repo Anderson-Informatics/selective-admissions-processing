@@ -312,7 +312,10 @@ const previewColumns: TableColumn<PreviewRow>[] = [
         </UFormField>
 
         <div class="mt-4 grid gap-4 sm:grid-cols-3">
-          <UFormField label="Test duration — General pool ({{examSession.testDuration}})">
+          <UFormField
+            label="Test duration — General pool ({{examSession.testDuration}})"
+            help="Supports **bold**, *italic*, and line breaks in email bodies."
+          >
             <UInput
               v-model="config.testDurations.general"
               class="w-full"
