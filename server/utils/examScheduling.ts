@@ -52,6 +52,8 @@ export interface ExamScheduleRecord {
   assignments: Record<string, string>
 }
 
+export type ExamDurationCategory = 'iep504' | 'mll' | 'general'
+
 export interface ExamSchedulingConfig {
   sessionLabelPattern: string
   /** Regex with a single capture group for the exam letter, used to detect pre-assigned submissions. */
@@ -67,6 +69,15 @@ export interface ExamSchedulingConfig {
   colorLabels: Record<'green' | 'blue' | 'white' | 'red', string>
   groups: Record<string, ExamGroupBounds>
   schedules: Record<string, ExamScheduleRecord>
+  /** Merge-facing test-duration boilerplate per group category. */
+  testDurations: Record<ExamDurationCategory, string>
+}
+
+/** Duration boilerplate bucket for a group: IEP/504 groups, MLL, or the general pool. */
+export function groupDurationCategory(groupKey: string): ExamDurationCategory {
+  if (groupKey === 'RED' || groupKey === 'IEP504') return 'iep504'
+  if (groupKey === 'MLL') return 'mll'
+  return 'general'
 }
 
 export const DEFAULT_TEST_SUBMISSION_ID = 'f855c80a-798b-4c4e-bdc7-8e04cae87f12'
@@ -111,7 +122,15 @@ export function normalizeExamSchedulingConfig(raw?: Record<string, unknown> | nu
     testSubmissionId: typeof input.testSubmissionId === 'string' && input.testSubmissionId ? input.testSubmissionId : DEFAULT_TEST_SUBMISSION_ID,
     colorLabels,
     groups,
-    schedules: (input.schedules && typeof input.schedules === 'object' ? input.schedules : {}) as Record<string, ExamScheduleRecord>
+    schedules: (input.schedules && typeof input.schedules === 'object' ? input.schedules : {}) as Record<string, ExamScheduleRecord>,
+    testDurations: (() => {
+      const raw = (input.testDurations && typeof input.testDurations === 'object' ? input.testDurations : {}) as Record<string, unknown>
+      const durations = {} as Record<ExamDurationCategory, string>
+      for (const key of ['iep504', 'mll', 'general'] as const) {
+        durations[key] = typeof raw[key] === 'string' ? raw[key] : ''
+      }
+      return durations
+    })()
   }
 }
 
@@ -425,6 +444,7 @@ export interface ExamSessionTokens {
   /** Plain-text location block; html mode renders `locationHtml` instead. */
   location: string
   locationHtml: string
+  testDuration: string
 }
 
 /** Merge-token payload for a group within a session. */
@@ -446,7 +466,8 @@ export function examSessionTokens(
     date: formatSessionDateLong(sessionName, now),
     note: (groupKey && config.groups[groupKey]?.note) || '',
     location: details?.text || '',
-    locationHtml: details?.html || ''
+    locationHtml: details?.html || '',
+    testDuration: def ? (config.testDurations[groupDurationCategory(def.key)] || '') : ''
   }
 }
 

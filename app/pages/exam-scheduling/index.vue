@@ -12,6 +12,7 @@ interface ExamConfig {
   messageTemplateId?: string
   testSubmissionId?: string
   groups: Record<string, { min: number, max: number, note?: string }>
+  testDurations: Record<'iep504' | 'mll' | 'general', string>
 }
 interface ExamScheduleData { cycleId: string, config: ExamConfig, sessions: Session[], groups: GroupDef[] }
 interface PreviewRow {
@@ -309,6 +310,30 @@ const previewColumns: TableColumn<PreviewRow>[] = [
             placeholder="e.g. Please bring a copy of your child's IEP or 504 plan if you would like them to receive testing accommodations."
           />
         </UFormField>
+
+        <div class="mt-4 grid gap-4 sm:grid-cols-3">
+          <UFormField label="Test duration — General pool ({{examSession.testDuration}})">
+            <UInput
+              v-model="config.testDurations.general"
+              class="w-full"
+              placeholder="e.g. The exam lasts about 3 hours."
+            />
+          </UFormField>
+          <UFormField label="Test duration — IEP/504">
+            <UInput
+              v-model="config.testDurations.iep504"
+              class="w-full"
+              placeholder="e.g. The exam lasts about 4.5 hours with accommodations."
+            />
+          </UFormField>
+          <UFormField label="Test duration — MLL">
+            <UInput
+              v-model="config.testDurations.mll"
+              class="w-full"
+              placeholder="e.g. The exam lasts about 4 hours."
+            />
+          </UFormField>
+        </div>
       </template>
     </UAccordion>
 

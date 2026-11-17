@@ -197,6 +197,7 @@ describe('resolveSessionDate', () => {
 
 describe('examSessionTokens / examSessionForSubmission', () => {
   const config = normalizeExamSchedulingConfig({
+    testDurations: { iep504: 'about 4.5 hours', mll: 'about 4 hours', general: 'about 3 hours' },
     groups: { RED: { min: 0, max: 0, note: 'Please bring a copy of your IEP.' } },
     schedules: {
       'hspt-jan': { sessionLabelId: 'hspt-jan', sessionName: 'HSPT Jan 10', generatedAt: 'x', assignments: { s1: 'B-green', s2: 'RED' } }
@@ -215,10 +216,23 @@ describe('examSessionTokens / examSessionForSubmission', () => {
     const main = examSessionTokens('B-green', 'HSPT Jan 10', config)
     expect(main.location).toContain('You will enter the building at the Main Entrance')
     expect(main.locationHtml).toContain('<strong>Main Entrance</strong>')
+    const quote = main.locationHtml.match(/<blockquote><p[^>]*>(.*?)<\/p><\/blockquote>/)![1]
+    expect(quote).toBe('You will enter the building at the <strong>Main Entrance</strong>, which is in the center of the building, where you can see the flagpoles.')
+    const entry = main.locationHtml.match(/<\/blockquote>(.*)$/)![1]
+    expect(entry).toMatch(/<strong>Building Entry<\/strong> — Students should enter through the Main Entrance\./)
     const pa = examSessionTokens('B-blue', 'HSPT Jan 10', config)
     expect(pa.location).toContain('Performing Arts Entrance')
     expect(pa.locationHtml).toContain('<strong>Performing Arts Entrance</strong>')
     expect(examSessionTokens('unknown', 'HSPT Jan 10', config).location).toBe('')
+  })
+
+  it('emits the configured test duration per group category', () => {
+    expect(examSessionTokens('B-green', 'HSPT Jan 10', config).testDuration).toBe('about 3 hours')
+    expect(examSessionTokens('H', 'HSPT Jan 10', config).testDuration).toBe('about 3 hours')
+    expect(examSessionTokens('IEP504', 'HSPT Jan 10', config).testDuration).toBe('about 4.5 hours')
+    expect(examSessionTokens('RED', 'HSPT Jan 10', config).testDuration).toBe('about 4.5 hours')
+    expect(examSessionTokens('MLL', 'HSPT Jan 10', config).testDuration).toBe('about 4 hours')
+    expect(examSessionTokens('unknown', 'HSPT Jan 10', config).testDuration).toBe('')
   })
 
   it('resolves a persisted assignment for a submission', () => {

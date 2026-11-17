@@ -53,6 +53,7 @@ describe('buildMergeFieldSources', () => {
           { value: 'examSession.arrivalTime', label: 'Exam Session — Arrival Time', token: '{{examSession.arrivalTime}}' },
           { value: 'examSession.entrance', label: 'Exam Session — Entrance', token: '{{examSession.entrance}}' },
           { value: 'examSession.location', label: 'Exam Session — Location Details', token: '{{examSession.location}}' },
+          { value: 'examSession.testDuration', label: 'Exam Session — Test Duration', token: '{{examSession.testDuration}}' },
           { value: 'examSession.note', label: 'Exam Session — Group Note', token: '{{examSession.note}}' }
         ]
       }
