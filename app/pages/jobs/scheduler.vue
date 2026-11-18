@@ -72,6 +72,20 @@ async function showRun(id: string) {
     detailOpen.value = true
   } catch (cause) { toast.add({ title: message(cause), color: 'error' }) }
 }
+const runTarget = ref<Schedule | null>(null)
+const triggering = ref(false)
+async function runNow() {
+  if (!runTarget.value) return
+  triggering.value = true
+  try {
+    await $fetch(`/api/job-schedules/${runTarget.value._id}/run`, { method: 'POST' })
+    toast.add({ title: 'Chain queued', color: 'success' })
+    runTarget.value = null
+    await Promise.all([refresh(), refreshHistory()])
+  } catch (cause) { toast.add({ title: message(cause), color: 'error' }) } finally {
+    triggering.value = false
+  }
+}
 async function release(hold: Hold) {
   try {
     await $fetch('/api/job-schedules/release-hold', { method: 'POST', body: { cycleId: hold.cycleId, hold: hold.hold, acknowledged: true } })
@@ -173,12 +187,21 @@ onUnmounted(() => clearInterval(timer))
             Next: {{ date(schedule.nextAt) }}
           </p>
         </div>
-        <UButton
-          label="Edit chain"
-          color="neutral"
-          variant="outline"
-          @click="edit(schedule)"
-        />
+        <div class="flex gap-2">
+          <UButton
+            label="Run now"
+            icon="i-lucide-play"
+            color="neutral"
+            variant="outline"
+            @click="runTarget = schedule"
+          />
+          <UButton
+            label="Edit chain"
+            color="neutral"
+            variant="outline"
+            @click="edit(schedule)"
+          />
+        </div>
       </div>
       <ol class="list-decimal pl-6 text-sm">
         <li
@@ -365,6 +388,52 @@ onUnmounted(() => clearInterval(timer))
           color="neutral"
           variant="ghost"
           @click="editorOpen = false"
+        />
+      </template>
+    </UModal>
+    <UModal
+      :open="!!runTarget"
+      title="Run chain now"
+      @update:open="runTarget = null"
+    >
+      <template #body>
+        <div
+          v-if="runTarget"
+          class="space-y-3"
+        >
+          <p>Queue "{{ runTarget.name }}" against the active cycle now? Queued and running chains for the cycle still finish in order first.</p>
+          <ol class="list-decimal pl-6 text-sm">
+            <li
+              v-for="step in runTarget.steps"
+              :key="step"
+            >
+              {{ label(step) }}
+            </li>
+          </ol>
+          <p
+            v-if="!runTarget.dryRun"
+            class="text-sm text-warning"
+          >
+            Live mode: routing, registration, or essay steps may modify Submittable submissions or send configured messages.
+          </p>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            Dry run: routing and registration steps make no external writes.
+          </p>
+        </div>
+      </template>
+      <template #footer>
+        <UButton
+          label="Run now"
+          :loading="triggering"
+          @click="runNow"
+        /><UButton
+          label="Cancel"
+          color="neutral"
+          variant="ghost"
+          @click="runTarget = null"
         />
       </template>
     </UModal>

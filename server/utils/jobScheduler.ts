@@ -13,7 +13,7 @@ export function hasPartialResult(result: unknown): boolean {
 }
 const terminal = (job: Job) => ['completed', 'failed'].includes(job.status) && job.workerSettled !== false
 
-async function reconcileCycle(cycleId: string, now: Date) {
+export async function reconcileCycle(cycleId: string, now: Date) {
   await ScheduleCycleModel.updateOne({ cycleId }, { $setOnInsert: { cycleId } }, { upsert: true })
   let cycle = await ScheduleCycleModel.findOne({ cycleId }).lean()
   if (!cycle || cycle.hold) return

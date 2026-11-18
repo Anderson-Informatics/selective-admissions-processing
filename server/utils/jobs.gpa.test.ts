@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JobModel } from '../models/Job'
 import { importDpscdGpaRecords } from './gpa'
 import { syncGpaStatusLabels } from './gpaStatusLabels'
+import { syncGpaBonusLabel } from './gpaBonusLabelSync'
 import { clearWithdrawnStatusLabels } from './withdrawnStatusLabels'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
 import { runJob } from './jobs'
 
 vi.mock('./gpa', () => ({ importDpscdGpaRecords: vi.fn(), commitOptInGpaUpload: vi.fn(), previewOptInGpaUpload: vi.fn() }))
 vi.mock('./gpaStatusLabels', () => ({ syncGpaStatusLabels: vi.fn() }))
+vi.mock('./gpaBonusLabelSync', () => ({ syncGpaBonusLabel: vi.fn() }))
 vi.mock('./withdrawnStatusLabels', () => ({ clearWithdrawnStatusLabels: vi.fn() }))
 vi.mock('./reviewCompletionRefresh', () => ({ refreshReviewCompletion: vi.fn() }))
 
@@ -19,6 +21,7 @@ beforeEach(() => {
   vi.mocked(importDpscdGpaRecords).mockResolvedValue({ processed: 1, matched: 1, inserted: 0, updated: 0, unmatched: 0, skippedWithdrawn: 0, warnings: [], errors: [] })
   vi.mocked(refreshReviewCompletion).mockResolvedValue({ processed: 1, updated: 1, dryRun: false, diagnostics: [] } as never)
   vi.mocked(syncGpaStatusLabels).mockResolvedValue({ dryRun: false, applications: 1, applicationsSkipped: 0, applicationsFailed: 0, submissions: 1, labelsAdded: 1, labelsRemoved: 0, unchanged: 0, skipped: 0, failures: [] })
+  vi.mocked(syncGpaBonusLabel).mockResolvedValue({ dryRun: false, labelResolved: true, submissions: 1, eligible: 1, labelsAdded: 1, labelsRemoved: 0, unchanged: 0, failures: [] })
   vi.mocked(clearWithdrawnStatusLabels).mockResolvedValue({ dryRun: false, submissions: 0, managedLabels: 0, labelsRemoved: 0, unchanged: 0, failures: [] })
 })
 
@@ -35,6 +38,7 @@ describe('GPA status label jobs', () => {
   it.each([true, false])('cleans withdrawn labels and syncs GPA labels only after a real refresh (dryRun=%s)', async (dryRun) => {
     await runJob({ _id: 'j2', type: 'refresh_review_completion', cycleId: 'c1', createdBy: 'tester', payload: { dryRun } } as never)
     expect(clearWithdrawnStatusLabels).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 'c1', dryRun }))
+    expect(syncGpaBonusLabel).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 'c1', dryRun }))
     if (dryRun) expect(syncGpaStatusLabels).not.toHaveBeenCalled()
     else expect(syncGpaStatusLabels).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 'c1' }))
   })

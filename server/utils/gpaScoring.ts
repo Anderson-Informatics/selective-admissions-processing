@@ -1,4 +1,5 @@
 import { MetadataModel } from '../models/Metadata'
+import type { RoutingGpaRecord, RoutingReview } from './routingEvaluator'
 
 // ---------------------------------------------------------------------------
 // GPA score computation
@@ -141,6 +142,66 @@ export function deriveGpaMultiplier(input: GpaMultiplierInput, map: MultiplierMa
 
   const quartersMap = { ...DEFAULT_QUARTERS_MAP, ...(map.quarters || {}) }
   return quartersMultiplier(quarters, quartersMap)
+}
+
+// ---------------------------------------------------------------------------
+// GPA bonus eligibility
+//
+// Deterministic replacement for the routed "GPA Bonus Eligible" label. A
+// submission qualifies when ANY of:
+//   1. The latest completed review in a bonus-review stage answered
+//      RequirementsSatisfied = "Yes" (proper documentation, no follow-up).
+//      Follow-up stages such as "Incomplete GPA" are intentionally excluded.
+//   2. The DPSCD record meets completion criteria: valid GPA, >= 6 quarters.
+//   3. The Opt-In record meets completion criteria: valid GPA and an explicit
+//      enrolledMinTerms = "yes".
+// Eligibility is evaluated independently of which source wins GPA resolution,
+// so a complete external record earns the bonus even when a GPA Recording
+// review supplies the final GPA.
+// ---------------------------------------------------------------------------
+
+export interface GpaBonusEligibilityInput {
+  reviews: RoutingReview[]
+  gpa?: RoutingGpaRecord | null
+  /**
+   * Case-insensitive exact stage names whose completed reviews may grant the
+   * bonus via RequirementsSatisfied. Defaults match "GPA Completion" exactly
+   * and any stage name containing "External GPA".
+   */
+  stageNames?: string[]
+}
+
+function isBonusReviewStage(stageName: string | undefined, stageNames?: string[]): boolean {
+  const name = (stageName || '').trim().toLowerCase()
+  if (!name) return false
+  if (stageNames?.length) return stageNames.some(entry => entry.trim().toLowerCase() === name)
+  return name === 'gpa completion' || name.includes('external gpa')
+}
+
+function isCompletedBonusReview(review: RoutingReview): boolean {
+  const status = review.status?.trim().toLowerCase()
+  return Boolean(review.completedAt) || status === 'complete' || status === 'completed'
+}
+
+function validBonusGpa(value: unknown): boolean {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return false
+  const num = Number(value)
+  return Number.isFinite(num) && num >= 0 && num <= 4.3
+}
+
+export function deriveGpaBonusEligible(input: GpaBonusEligibilityInput): boolean {
+  const completion = input.reviews
+    .filter(review => isBonusReviewStage(review.stageName, input.stageNames) && isCompletedBonusReview(review))
+    .sort((a, b) => new Date(b.completedAt || b.createdAt || 0).getTime() - new Date(a.completedAt || a.createdAt || 0).getTime())[0]
+  if (String(completion?.mappedData?.RequirementsSatisfied ?? '').trim().toLowerCase() === 'yes') return true
+
+  const dpscd = input.gpa?.dpscd
+  if (dpscd && validBonusGpa(dpscd.cumulativeGpa) && typeof dpscd.quartersAvailable === 'number' && dpscd.quartersAvailable >= 6) {
+    return true
+  }
+
+  const optIn = input.gpa?.optIn
+  return Boolean(optIn && validBonusGpa(optIn.cumulativeGpa) && optIn.enrolledMinTerms?.trim().toLowerCase() === 'yes')
 }
 
 // ---------------------------------------------------------------------------

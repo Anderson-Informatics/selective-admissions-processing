@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDate, formatOptInEnrollment, gpaStatusColor, reviewIssues, sourceLabel, type GpaReviewItem } from '~/utils/gpaReview'
+import { formatDate, formatDateOnly, formatOptInEnrollment, gpaStatusColor, reviewIssues, shortSchoolName, sourceLabel, type GpaReviewItem } from '~/utils/gpaReview'
 
 const props = defineProps<{
   record: GpaReviewItem
@@ -8,6 +8,7 @@ const props = defineProps<{
 interface DetailField {
   label: string
   value: string | number
+  title?: string
 }
 
 interface SourceSection {
@@ -60,10 +61,10 @@ const sections = computed<SourceSection[]>(() => {
       fields: [
         { label: 'Student number', value: dpscd?.studentNumber ?? '—' },
         { label: 'Name in import', value: dpscd?.studentName || '—' },
-        { label: 'DOB', value: formatDate(dpscd?.dob) },
-        { label: 'Current school', value: dpscd ? `${dpscd.schoolName || '—'}${dpscd.schoolNumber != null ? ` (${dpscd.schoolNumber})` : ''}` : '—' },
+        { label: 'DOB', value: formatDateOnly(dpscd?.dob) },
+        { label: 'Current school', value: dpscd ? `${shortSchoolName(dpscd.schoolName)}${dpscd.schoolNumber != null ? ` (${dpscd.schoolNumber})` : ''}` : '—', title: dpscd?.schoolName },
         { label: 'Grade level', value: dpscd?.gradeLevel ?? '—' },
-        { label: 'Enrollment dates', value: `${formatDate(dpscd?.minimumEntryDate)} – ${formatDate(dpscd?.latestExitDate)}` },
+        { label: 'Enrollment dates', value: `${formatDateOnly(dpscd?.minimumEntryDate)} – ${formatDateOnly(dpscd?.latestExitDate)}` },
         { label: 'GPA', value: dpscd?.cumulativeGpa ?? '—' },
         { label: 'Quarters', value: dpscd?.quartersAvailable ?? '—' },
         { label: 'Round', value: dpscd?.selectedRound || '—' },
@@ -78,7 +79,7 @@ const sections = computed<SourceSection[]>(() => {
       isResolvedSource: record.resolvedSource === 'optIn',
       fields: [
         { label: 'Name in file', value: optIn?.studentName || '—' },
-        { label: 'School', value: optIn?.schoolName || '—' },
+        { label: 'School', value: shortSchoolName(optIn?.schoolName), title: optIn?.schoolName },
         { label: 'GPA', value: optIn?.cumulativeGpa ?? '—' },
         { label: 'Minimum enrollment met', value: formatOptInEnrollment(record) },
         { label: 'Source file', value: optIn?.sourceFile || '—' },
@@ -199,7 +200,10 @@ const scoreFormula = computed(() => {
               <dt class="text-muted">
                 {{ field.label }}
               </dt>
-              <dd class="min-w-0">
+              <dd
+                class="min-w-0"
+                :title="field.title"
+              >
                 {{ field.value }}
               </dd>
             </template>

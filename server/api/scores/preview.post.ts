@@ -1,7 +1,6 @@
 import { ApplicationModel } from '../../models/Application'
 import { SubmissionModel } from '../../models/Submission'
 import { compileApplicationScores, computePercentiles, normalizeScoringConfig } from '../../utils/scoreCompilation'
-import { resolveGpaBonusLabelId } from '../../utils/gpaScoring'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
@@ -18,13 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = normalizeScoringConfig(application.scoring)
-  const gpaBonusLabelId = await resolveGpaBonusLabelId()
-  const output = await compileApplicationScores({
-    cycleId,
-    applicationId,
-    config,
-    gpaBonusLabelId
-  })
+  const output = await compileApplicationScores({ cycleId, applicationId, config })
   const percentiles = computePercentiles(output.records)
 
   const submissions = await SubmissionModel.find({ cycleId, applicationId })

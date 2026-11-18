@@ -48,13 +48,13 @@ describe('normalizeScoringConfig', () => {
 describe('compileApplicationScores', () => {
   it('compiles a fully-ready 9th-grade record with both totals', async () => {
     mockData({
-      submissions: [{ submissionId: 'sub-1', labelIds: ['gpa-bonus-label'], catchment: { marygrove: 'Primary' }, mappedFields: { DPSCD: 'Yes' } }],
+      submissions: [{ submissionId: 'sub-1', catchment: { marygrove: 'Primary' }, mappedFields: { DPSCD: 'Yes' } }],
       hspt: [{ linkedSubmissionId: 'sub-1', status: 'linked', sourceId: 'src-1', reading: 10, math: 12, language: 9, science: 6, overall: 37 }],
-      gpa: [{ submissionId: 'sub-1', resolvedCumulativeGpa: 3.95, resolvedSource: 'recording', dpscd: { quartersAvailable: 8 } }],
+      gpa: [{ submissionId: 'sub-1', resolvedCumulativeGpa: 3.95, resolvedSource: 'recording', dpscd: { cumulativeGpa: 3.8, quartersAvailable: 8 } }],
       essayStages: [{ stageId: 'essay-stage', name: 'Essay Scoring' }],
       reviews: [{ submissionId: 'sub-1', stageId: 'essay-stage', stageName: 'Essay Scoring', status: 'completed', score: 18, completedAt: new Date() }]
     })
-    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: fullConfig, gpaBonusLabelId: 'gpa-bonus-label' })
+    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: fullConfig })
     const record = output.records[0]!.record
     expect(record.hsptTaken && record.gpaRecorded && record.essayScored).toBe(true)
     expect(record.gpa?.score).toBe(35) // 30 * 1 + 5 bonus
@@ -67,7 +67,7 @@ describe('compileApplicationScores', () => {
 
   it('gates totals to 0 when required inputs are missing', async () => {
     mockData({ submissions: [{ submissionId: 'sub-1', labelIds: [], catchment: { marygrove: 'None' } }], essayStages: [{ stageId: 'essay-stage', name: 'Essay' }] })
-    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: fullConfig, gpaBonusLabelId: undefined })
+    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: fullConfig })
     const record = output.records[0]!.record
     expect(record.totalAppScore).toBe(0)
     expect(record.totalMarygroveScore).toBe(0)
@@ -99,7 +99,7 @@ describe('compileApplicationScores', () => {
     mockData(data)
     const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: minimalConfig })
     expect(output.records[0]!.record).toMatchObject({ gpaRecorded: false, gpa: { raw: null, source: null, score: null } })
-    expect(output.records[1]!.record).toMatchObject({ gpaRecorded: true, gpa: { raw: 3.95, source: 'dpscd', multiplier: 1, score: 30 } })
+    expect(output.records[1]!.record).toMatchObject({ gpaRecorded: true, gpa: { raw: 3.95, source: 'dpscd', multiplier: 1, score: 35 } })
     mockData({ ...data, reviews: [{ submissionId: 'early', stageId: 'partial', stageName: 'Partial GPA', status: 'completed', mappedData: { PartialGPA: 3.95, Semesters: 'One semester (or 2-3 quarters)' } }] })
     const reviewed = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: minimalConfig })
     expect(reviewed.records[0]!.record).toMatchObject({ gpaRecorded: true, gpa: { raw: 3.95, source: 'partial', multiplier: 0.4, score: 12 } })
@@ -116,7 +116,7 @@ describe('compileApplicationScores', () => {
         { submissionId: 'sub-1', stageId: 'pgpa-stage', stageName: 'Partial GPA', status: 'completed', mappedData: { PartialGPA: 3.95, Semesters: 'One semester (or 2-3 quarters)' }, completedAt: new Date() }
       ]
     })
-    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: fullConfig, gpaBonusLabelId: undefined })
+    const output = await compileApplicationScores({ cycleId: 'c1', applicationId: 'a1', config: fullConfig })
     const record = output.records[0]!.record
     expect(record.gpa?.multiplier).toBe(0.4)
     expect(record.gpa?.score).toBe(12) // 30 * 0.4

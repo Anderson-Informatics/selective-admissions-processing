@@ -9,8 +9,8 @@ import { SubmissionModel } from '../models/Submission'
 import {
   DEFAULT_GPA_TABLE,
   computeGpaScore,
+  deriveGpaBonusEligible,
   deriveGpaMultiplier,
-  resolveGpaBonusLabelId,
   type GpaTableBand,
   type MultiplierMap
 } from './gpaScoring'
@@ -23,7 +23,7 @@ import type { CycleRoundInput } from './cycleRounds'
 // Score compilation
 //
 // Per-application scoring recipe configured on Application.scoring. Merges
-// HSPT, resolved GPA (score = banded table x multiplier + label bonus),
+// HSPT, resolved GPA (score = banded table x multiplier + eligibility bonus),
 // essay mean, DPSCD bonus, and Marygrove catchment bonus into ScoreRecord
 // docs with two totals: totalAppScore (no Marygrove bonus) and
 // totalMarygroveScore (includes it). Percentile ranks are computed across
@@ -59,6 +59,8 @@ export interface ScoringConfig {
   multiplierMap: MultiplierMap
   internalForm?: InternalFormConfig
   gpaStatusLabels?: Record<string, string>
+  /** Stage names whose completed RequirementsSatisfied=Yes reviews grant the GPA bonus. */
+  gpaBonusReviewStages?: string[]
 }
 
 const ALL_COMPONENTS: ScoreComponent[] = ['gpa', 'exam', 'essay', 'dpscdBonus', 'marygroveBonus']
@@ -90,6 +92,9 @@ export function normalizeScoringConfig(raw: unknown): ScoringConfig {
         .filter(([status, labelId]) => status.trim() !== '' && typeof labelId === 'string' && labelId.trim() !== '')
         .map(([status, labelId]) => [status, labelId as string])
     ),
+    ...(Array.isArray(config.gpaBonusReviewStages)
+      ? { gpaBonusReviewStages: config.gpaBonusReviewStages.filter((name): name is string => typeof name === 'string' && name.trim() !== '') }
+      : {}),
     ...(internalForm
       ? { internalForm: {
           formId: typeof internalForm.formId === 'string' ? internalForm.formId : undefined,
@@ -161,7 +166,6 @@ interface CompileInputs {
   applicationId: string
   config: ScoringConfig
   jobId?: string
-  gpaBonusLabelId?: string
   now?: Date
 }
 
@@ -215,7 +219,6 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     rounds = applications[0]?.rounds || []
   }
   const essayStageIds = new Set(essayStages.map(stage => stage.stageId))
-  const bonusLabelId = input.gpaBonusLabelId ?? await resolveGpaBonusLabelId()
 
   const records: CompiledScore[] = []
   const gpaOperations: AnyBulkWriteOperation<GpaRecord>[] = []
@@ -258,7 +261,7 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
           quartersAvailable: gpaRecord?.dpscd?.quartersAvailable
         }, config.multiplierMap)
       : 0
-    const gpaBonusEligible = has('gpa') && Boolean(bonusLabelId) && (submission.labelIds || []).includes(bonusLabelId!)
+    const gpaBonusEligible = has('gpa') && deriveGpaBonusEligible({ reviews: submissionReviews, gpa: gpaRecord, stageNames: config.gpaBonusReviewStages })
     const gpaBonus = gpaBonusEligible ? config.gpaBonusPoints : 0
     const gpaScore = has('gpa') ? (gpaRecorded ? computeGpaScore(toNumber(resolvedGpa), multiplier, gpaBonus, config.gpaTable) : null) : 0
 
@@ -404,7 +407,6 @@ export async function runScoreCompilation(options: RunScoreCompilationOptions) {
     return { status: 'completed', result: { applications: [], message: 'No applications have scoring enabled' } }
   }
 
-  const bonusLabelId = await resolveGpaBonusLabelId()
   const summaries: CompilationSummary[] = []
   const details: { applicationId: string, name: string, summary: CompilationSummary }[] = []
 
@@ -415,8 +417,7 @@ export async function runScoreCompilation(options: RunScoreCompilationOptions) {
       cycleId: options.cycleId,
       applicationId,
       config,
-      jobId: options.jobId,
-      gpaBonusLabelId: bonusLabelId
+      jobId: options.jobId
     })
 
     const percentiles = computePercentiles(output.records)

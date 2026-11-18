@@ -13,6 +13,7 @@ import { reconcileValidationLabelsForCycle } from './validationLabels'
 import { runCatchmentForCycle } from './catchment'
 import { commitOptInGpaUpload, importDpscdGpaRecords, previewOptInGpaUpload } from './gpa'
 import { syncGpaStatusLabels } from './gpaStatusLabels'
+import { syncGpaBonusLabel } from './gpaBonusLabelSync'
 import { clearWithdrawnStatusLabels } from './withdrawnStatusLabels'
 import { fetchForm, fetchForms, fetchLabels, fetchProjects, fetchTeam, type SubmittableClientConfig } from './submittable'
 import { refreshReviewCompletion } from './reviewCompletionRefresh'
@@ -284,7 +285,14 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
           setProgress,
           submittable
         })
-    return { result: { ...result, withdrawnLabelCleanup, labelSync } }
+    const bonusLabelSync = await syncGpaBonusLabel({
+      cycleId: job.cycleId,
+      applicationId: job.payload?.applicationId,
+      dryRun: job.payload?.dryRun === true,
+      setProgress,
+      submittable
+    })
+    return { result: { ...result, withdrawnLabelCleanup, labelSync, bonusLabelSync } }
   },
 
   gpa_status_label_sync: async (job, { setProgress, submittable }) => {

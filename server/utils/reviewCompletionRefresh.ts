@@ -9,7 +9,7 @@ import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import { normalizeRoutingConfig } from './routingConfig'
 import { computeReviewCompletion, resolveGpa, type RoutingContext, type RoutingReview, type RoutingStage } from './routingEvaluator'
-import { computeGpaScore, deriveGpaMultiplier, resolveGpaBonusLabelId } from './gpaScoring'
+import { computeGpaScore, deriveGpaBonusEligible, deriveGpaMultiplier } from './gpaScoring'
 import { normalizeScoringConfig } from './scoreCompilation'
 import { clearGpaRecordsForSubmissions } from './withdrawnGpa'
 import { isWithdrawnSubmission } from './submissionStatus'
@@ -111,7 +111,6 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
   const applicationDocs = await ApplicationModel.find({ _id: { $in: applicationIds } }).select('rounds scoring').lean()
   const roundsByApplication = new Map(applicationDocs.map(application => [String(application._id), application.rounds || []]))
   const scoringByApplication = new Map(applicationDocs.map(application => [String(application._id), normalizeScoringConfig(application.scoring)]))
-  const gpaBonusLabelId = await resolveGpaBonusLabelId()
   const stageDocs = await ReviewStageModel.find({ cycleId: options.cycleId, applicationId: { $in: applicationIds } }).lean()
   const stagesByApplication = new Map<string, Array<Record<string, any>>>()
   for (const stage of stageDocs) {
@@ -181,7 +180,11 @@ export async function refreshReviewCompletion(options: RefreshOptions): Promise<
             semesters: partialReview?.mappedData?.Semesters,
             quartersAvailable: gpaRecord?.dpscd?.quartersAvailable
           }, scoring.multiplierMap)
-          const gpaBonusEligible = Boolean(gpaBonusLabelId) && (submission.labelIds || []).includes(gpaBonusLabelId!)
+          const gpaBonusEligible = deriveGpaBonusEligible({
+            reviews: submissionReviews as RoutingReview[],
+            gpa: gpaRecord,
+            stageNames: scoring.gpaBonusReviewStages
+          })
           const gpaBonus = gpaBonusEligible ? scoring.gpaBonusPoints : 0
           const gpaScore = completion.resolvedGpa.cumulativeGpa == null ? null : computeGpaScore(completion.resolvedGpa.cumulativeGpa, gpaMultiplier, gpaBonus, scoring.gpaTable)
           gpaOperations.push({
