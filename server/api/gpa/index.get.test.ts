@@ -1,7 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), collation: vi.fn(), findOne: vi.fn(), findApplications: vi.fn() }))
-vi.mock('~~/server/models/Application', () => ({ ApplicationModel: { find: mocks.findApplications } }))
+const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), collation: vi.fn(), findOne: vi.fn() }))
 vi.mock('~~/server/models/Submission', () => ({ SubmissionModel: { aggregate: mocks.aggregate } }))
 vi.mock('~~/server/models/GpaRecord', () => ({ GpaRecordModel: { collection: { name: 'gparecords' } } }))
 vi.mock('~~/server/models/Review', () => ({ ReviewModel: { collection: { name: 'reviews' } } }))
@@ -24,47 +23,88 @@ beforeEach(() => {
   vi.stubGlobal('getQuery', () => query)
   vi.stubGlobal('createError', (error: unknown) => error)
   mocks.findOne.mockReturnValue({ select: () => ({ lean: async () => ({ externalId: 'opt-in' }) }) })
-  mocks.findApplications.mockReturnValue({ select: () => ({ lean: async () => [] }) })
-  mocks.aggregate.mockImplementation((pipeline: Array<Record<string, unknown>>) => pipeline.some(stage => stage.$group) ? Promise.resolve([]) : { collation: mocks.collation })
+  mocks.aggregate.mockReturnValue({ collation: mocks.collation })
   mocks.collation.mockResolvedValue([{ records: [{ _id: 'sub-1' }], count: [{ total: 75 }] }])
 })
 
 interface PipelineStage {
   $lookup?: { as?: string }
   $match?: { $and?: unknown[] }
-  $facet?: { records: Record<string, unknown>[] }
+  $set?: Record<string, unknown>
+  $facet?: { records: PipelineStage[], count: PipelineStage[] }
   [key: string]: unknown
 }
 
 function pipeline() {
-  return mocks.aggregate.mock.calls
-    .map(call => call[0] as PipelineStage[])
-    .filter(stages => !stages.some(stage => stage.$group))
-    .at(-1)!
+  return mocks.aggregate.mock.calls.at(-1)![0] as PipelineStage[]
 }
 
-function duplicatePipeline() {
-  return mocks.aggregate.mock.calls
-    .map(call => call[0] as PipelineStage[])
-    .find(stages => stages.some(stage => stage.$group))!
+function records() {
+  return pipeline().at(-1)!.$facet!.records
 }
 
 describe('GET /api/gpa', () => {
-  it('starts with every submission and looks up GPA plus review sources before filtering', async () => {
+  it('joins only GPA before filtering and enriches reviews after pagination', async () => {
     query = { ...query, gpaStatus: 'OOD Partial', source: 'optIn', page: '2', limit: '50', sortBy: 'resolvedCumulativeGpa', sortOrder: 'desc' }
-    expect(await handler({})).toEqual({ records: [{ _id: 'sub-1' }], total: 75, page: 2, limit: 50, duplicateStudentNumbers: [] })
+    expect(await handler({})).toEqual({ records: [{ _id: 'sub-1' }], total: 75, page: 2, limit: 50 })
     const stages = pipeline()
     expect(stages[0]).toEqual({ $match: { cycleId: 'cycle-1', status: { $not: /^withdrawn$/i } } })
-    expect(stages.filter(stage => stage.$lookup).map(stage => stage.$lookup?.as)).toEqual(['_gpa', '_recordingReviews', '_partialReviews'])
+    expect(stages.filter(stage => stage.$lookup).map(stage => stage.$lookup?.as)).toEqual(['_gpa'])
     expect(stages.find(stage => stage.$match?.$and)).toMatchObject({ $match: { $and: [
       {}, { gpaStatus: 'Opt-In Partial' }, { 'gpa.resolvedSource': 'optIn' }
     ] } })
-    expect(stages.at(-1)?.$facet?.records).toContainEqual({ $sort: { resolvedCumulativeGpa: -1, _id: 1 } })
-    expect(stages.at(-1)?.$facet?.records).toContainEqual({ $skip: 50 })
+    expect(records().slice(0, 3)).toEqual([
+      { $sort: { resolvedCumulativeGpa: -1, _id: 1 } }, { $skip: 50 }, { $limit: 50 }
+    ])
+    expect(records().filter(stage => stage.$lookup).map(stage => stage.$lookup?.as)).toEqual(['_recordingReviews', '_partialReviews'])
+    expect(stages.at(-1)?.$facet?.count).toEqual([{ $count: 'total' }])
+    expect(mocks.aggregate).toHaveBeenCalledTimes(1)
+    expect(mocks.collation).toHaveBeenCalledWith({ locale: 'en', strength: 2 })
+  })
+
+  it('looks up partial reviews before sorting by enrollment, but only in the records branch', async () => {
+    query.sortBy = 'enrollmentConsidered'
+    await handler({})
+    expect(pipeline().filter(stage => stage.$lookup).map(stage => stage.$lookup?.as)).toEqual(['_gpa'])
+    const branch = records()
+    const sortIndex = branch.findIndex(stage => stage.$sort)
+    const limitIndex = branch.findIndex(stage => stage.$limit)
+    expect(branch.findIndex(stage => stage.$lookup?.as === '_partialReviews')).toBeLessThan(sortIndex)
+    expect(branch.findIndex(stage => stage.$set?.enrollmentConsidered)).toBeLessThan(sortIndex)
+    expect(branch.findIndex(stage => stage.$lookup?.as === '_recordingReviews')).toBeGreaterThan(limitIndex)
+    expect(branch.filter(stage => stage.$lookup?.as === '_partialReviews')).toHaveLength(1)
+    expect(pipeline().at(-1)?.$facet?.count).toEqual([{ $count: 'total' }])
+  })
+
+  it.each([
+    'submissionIdInt', 'student', 'gpaStatus', 'resolvedCumulativeGpa',
+    'resolvedSource', 'currentStageName', 'status', 'updatedAtTimestamp', 'gpa.updatedAt'
+  ])('preserves %s sorting before page enrichment', async (sortBy) => {
+    query = { ...query, sortBy, sortOrder: 'desc', page: '3', limit: '50' }
+    await handler({})
+    expect(records().slice(0, 3)).toEqual([
+      { $sort: { [sortBy]: -1, _id: 1 } }, { $skip: 100 }, { $limit: 50 }
+    ])
+    const lookups = records().filter(stage => stage.$lookup)
+    expect(lookups).toHaveLength(2)
+    for (const stage of lookups) {
+      expect(stage).toMatchObject({ $lookup: { pipeline: [
+        { $match: { $expr: { $and: [
+          { $eq: ['$submissionId', '$$submissionId'] }, { $eq: ['$cycleId', '$$cycleId'] }
+        ] } } },
+        { $match: { $and: [
+          { $or: [{ status: { $regex: /^complete(d)?$/i } }, { completedAt: { $exists: true, $ne: null } }] },
+          expect.any(Object)
+        ] } },
+        { $project: { stageName: 1, status: 1, mappedData: 1, completedAt: 1, createdAt: 1 } },
+        { $sort: { completedAt: -1, createdAt: -1 } },
+        { $limit: 1 }
+      ] } })
+    }
   })
 
   it('searches names and exact integer identifiers, escaping regex input', async () => {
-    query = { ...query, search: '12345' }
+    query.search = '12345'
     await handler({})
     expect(pipeline().find(stage => stage.$match?.$and)).toMatchObject({ $match: { $and: [{ $or: [
       { student: { $regex: '12345', $options: 'i' } },
@@ -73,8 +113,7 @@ describe('GET /api/gpa', () => {
       { submissionIdInt: 12345 },
       { 'gpa.dpscd.studentNumber': 12345 }
     ] }, {}, {}] } })
-
-    query = { ...query, search: 'Ann.*' }
+    query.search = 'Ann.*'
     await handler({})
     expect(pipeline().find(stage => stage.$match?.$and)).toMatchObject({ $match: { $and: [{ $or: [
       { student: { $regex: 'Ann\\.\\*', $options: 'i' } },
@@ -83,44 +122,33 @@ describe('GET /api/gpa', () => {
     ] }, {}, {}] } })
   })
 
-  it('supports no resolved source, defaults to student sorting, and bounds pagination', async () => {
+  it('preserves missing and legacy status normalization before filtering', async () => {
+    query.gpaStatus = 'Incomplete'
+    await handler({})
+    expect(pipeline().find(stage => stage.$set?.gpaStatus)?.$set?.gpaStatus).toEqual({
+      $cond: [{ $eq: ['$gpaStatus', 'OOD Partial'] }, 'Opt-In Partial', { $ifNull: ['$gpaStatus', 'Incomplete'] }]
+    })
+  })
+
+  it('supports no resolved source and bounds pagination', async () => {
     query = { ...query, source: 'none', page: '-1', limit: '99999' }
     mocks.collation.mockResolvedValue([{ records: [], count: [] }])
-    expect(await handler({})).toEqual({ records: [], total: 0, page: 1, limit: 500, duplicateStudentNumbers: [] })
-    const stages = pipeline()
-    expect(stages.find(stage => stage.$match?.$and)).toMatchObject({ $match: { $and: [{}, {}, { $or: [
+    expect(await handler({})).toEqual({ records: [], total: 0, page: 1, limit: 500 })
+    expect(pipeline().find(stage => stage.$match?.$and)).toMatchObject({ $match: { $and: [{}, {}, { $or: [
       { 'gpa.resolvedSource': null }, { gpa: null }, { 'gpa.resolvedSource': { $exists: false } }
     ] }] } })
-    expect(stages.at(-1)?.$facet?.records[0]).toEqual({ $sort: { student: 1, _id: 1 } })
+    expect(records()[0]).toEqual({ $sort: { student: 1, _id: 1 } })
   })
 
-  it('reports duplicate mapped student numbers independently of GPA filters', async () => {
-    query = { ...query, gpaStatus: 'Complete', source: 'dpscd', search: '999', page: '2' }
-    mocks.aggregate.mockImplementation((pipeline: Array<Record<string, unknown>>) => pipeline.some(stage => stage.$group)
-      ? Promise.resolve([
-          { studentNumber: '12345', duplicateCount: 2, submissionId: 'guid-1', submissionIdInt: 111, applicationId: 'app-1', student: 'Student One', status: 'Submitted', currentStageName: 'Review', gpaStatus: 'OOD Partial', resolvedCumulativeGpa: 3.5, resolvedSource: 'dpscd', dpscdStudentName: 'PowerSchool One', dpscdStudentNumber: 12345 },
-          { studentNumber: '12345', duplicateCount: 2, submissionId: 'guid-2', submissionIdInt: 222, applicationId: 'app-1', student: 'Student Two', status: 'Submitted', currentStageName: 'Review', gpaStatus: 'Complete', resolvedCumulativeGpa: 3.5, resolvedSource: 'dpscd', dpscdStudentName: 'PowerSchool One', dpscdStudentNumber: 12345 }
-        ])
-      : { collation: mocks.collation })
-    mocks.findApplications.mockReturnValue({ select: () => ({ lean: async () => [{ _id: 'app-1', name: 'Application A' }] }) })
-
-    const response = await handler({}) as { duplicateStudentNumbers: Array<Record<string, unknown>> }
-
-    expect(response.duplicateStudentNumbers).toHaveLength(2)
-    expect(response.duplicateStudentNumbers[0]).toMatchObject({ studentNumber: '12345', duplicateCount: 2, applicationName: 'Application A', gpaStatus: 'Opt-In Partial' })
-    const stages = duplicatePipeline()
-    expect(stages[0]).toEqual({ $match: { cycleId: 'cycle-1' } })
-    expect(stages.some(stage => stage.$group)).toBe(true)
-    expect(stages).toContainEqual({ $match: { duplicateCount: { $gt: 1 } } })
-    expect(stages.some(stage => stage.$match?.$and)).toBe(false)
-  })
-
-  it('requires a cycle and rejects arbitrary sort fields', async () => {
-    query = { ...query, sortBy: '$untrusted' }
+  it('requires authentication and a cycle and rejects arbitrary sort fields', async () => {
+    query.sortBy = '$untrusted'
     await handler({})
-    expect(pipeline().at(-1)?.$facet?.records[0]).toEqual({ $sort: { student: 1, _id: 1 } })
+    expect(records()[0]).toEqual({ $sort: { student: 1, _id: 1 } })
     query = {}
     await expect(handler({})).rejects.toMatchObject({ statusCode: 400 })
-    expect(mocks.aggregate).toHaveBeenCalledTimes(2)
+    expect(mocks.aggregate).toHaveBeenCalledTimes(1)
+    vi.mocked(requireAuth).mockRejectedValueOnce(new Error('Unauthorized'))
+    await expect(handler({})).rejects.toThrow('Unauthorized')
+    expect(mocks.aggregate).toHaveBeenCalledTimes(1)
   })
 })

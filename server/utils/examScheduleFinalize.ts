@@ -7,7 +7,7 @@ import { SubmissionModel } from '../models/Submission'
 import type { Job, JobProgress } from '../models/Job'
 import { recordDisclosure } from './disclosureAudit'
 import { examSessionTokens } from './examScheduling'
-import { loadExamScheduleContext, resolveGroupLabelIds } from './examSchedulingRun'
+import { computeSessionAssignment, loadExamScheduleContext, resolveGroupLabelIds } from './examSchedulingRun'
 import { renderMergeFields } from './routingActions'
 import { buildRoutingContext, loadListOptionLabels, loadResponseLibraries } from './routingRun'
 import { normalizeRoutingConfig } from './routingConfig'
@@ -35,6 +35,10 @@ export async function runExamScheduleFinalize(options: {
 
   const context = await loadExamScheduleContext(cycleId)
   if (!context) throw new Error(`Cycle ${cycleId} not found`)
+  const readiness = await computeSessionAssignment(context, sessionLabelId, Object.keys(assignments))
+  if (readiness.unassignedIds.length) {
+    throw new Error(`Required IEP/504 Completion review forms are missing for ${readiness.unassignedIds.length} submission(s); rerun the schedule preview`)
+  }
   const { config } = context
   const sessionName = payload.sessionName || `session ${sessionLabelId}`
 

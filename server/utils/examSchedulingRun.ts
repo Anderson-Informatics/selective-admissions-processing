@@ -1,6 +1,7 @@
 import { CycleModel } from '../models/Cycle'
 import { MetadataModel } from '../models/Metadata'
 import { ReviewModel } from '../models/Review'
+import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import {
   assignGroups,
@@ -26,7 +27,7 @@ export async function loadExamScheduleContext(cycleId: string): Promise<ExamSche
   if (!cycle) return null
   const config = normalizeExamSchedulingConfig(cycle.examScheduling as Record<string, unknown> | undefined)
   const [submissions, labels] = await Promise.all([
-    SubmissionModel.find({ cycleId }).select('submissionId status labelIds reviewCompletion').lean(),
+    SubmissionModel.find({ cycleId }).select('submissionId applicationId submissionIdInt mappedFields.FullName mappedFields.FirstName mappedFields.LastName status labelIds reviewCompletion').lean(),
     MetadataModel.find({ type: 'label' }).select('externalId name').lean()
   ])
   return { cycle, config, labels, submissions: submissions as SchedulableSubmission[] }
@@ -34,14 +35,23 @@ export async function loadExamScheduleContext(cycleId: string): Promise<ExamSche
 
 export async function computeSessionAssignment(
   context: ExamScheduleContext,
-  sessionLabelId: string
+  sessionLabelId: string,
+  additionalMemberIds: string[] = []
 ): Promise<ExamAssignmentResult> {
-  const memberIds = context.submissions
+  const included = new Set(additionalMemberIds)
+  const submissions = context.submissions.map(submission => included.has(submission.submissionId)
+    ? { ...submission, labelIds: [...new Set([...(submission.labelIds || []), sessionLabelId])] }
+    : submission)
+  const memberIds = submissions
     .filter(submission => (submission.labelIds || []).includes(sessionLabelId))
     .map(submission => submission.submissionId)
-  const reviews = await ReviewModel.find({ cycleId: String(context.cycle._id), submissionId: { $in: memberIds } })
-    .select('submissionId stageName status completedAt mappedData')
-    .lean()
+  const cycleId = String(context.cycle._id)
+  const [reviews, stages] = await Promise.all([
+    ReviewModel.find({ cycleId, submissionId: { $in: memberIds } })
+      .select('submissionId applicationId stageId stageName status completedAt createdAt mappedData')
+      .lean(),
+    ReviewStageModel.find({ cycleId }).select('applicationId stageId name').lean()
+  ])
   const reviewsBySubmission = new Map<string, ExamReviewInput[]>()
   for (const review of reviews) {
     const list = reviewsBySubmission.get(review.submissionId) || []
@@ -49,7 +59,8 @@ export async function computeSessionAssignment(
     reviewsBySubmission.set(review.submissionId, list)
   }
   return assignGroups({
-    submissions: context.submissions,
+    submissions,
+    stages,
     labels: context.labels,
     reviewsBySubmission,
     sessionLabelId,

@@ -27,8 +27,28 @@ interface PreviewRow {
   count: number
   underMin: boolean
   overMax: boolean
+  submissionIds: string[]
 }
-interface PreviewResult { session: Session, rows: PreviewRow[], diagnostics: string[], missingLabels: string[] }
+interface MemberDetail {
+  submissionId: string
+  submissionIdInt?: number
+  fullName: string
+  specialLabels: string[]
+  accommodations: Array<{ source: string, value: string }>
+  reviewNeeded: boolean
+  missingRequiredReviews: string[]
+}
+interface PreviewResult {
+  session: Session
+  rows: PreviewRow[]
+  diagnostics: string[]
+  missingLabels: string[]
+  members: Record<string, MemberDetail>
+  blockers: MemberDetail[]
+  reviewWarnings: MemberDetail[]
+  assignedCount: number
+  unassignedCount: number
+}
 const sessionDisplay = (session?: Session) => session ? `${session.date} (${session.name})` : ''
 
 const toast = useToast()
@@ -53,11 +73,6 @@ const { data } = await useAsyncData<ExamScheduleData | null>(
 )
 
 const config = ref<ExamConfig | null>(null)
-watch(data, (value) => {
-  config.value = value ? JSON.parse(JSON.stringify(value.config)) : null
-  preview.value = null
-}, { immediate: true })
-
 const schedulableGroups = computed(() => (data.value?.groups || []).filter(group => group.schedulable))
 const sessionItems = computed<SelectItem[]>(() => (data.value?.sessions || []).map(session => ({ label: `${session.date} — ${session.name} (${session.count})`, value: session.labelId })))
 const selectedSessionId = ref<string | undefined>()
@@ -71,6 +86,11 @@ async function saveConfig() {
       method: 'PUT',
       body: { cycleId: data.value.cycleId, config: config.value }
     })
+    previewRequestId++
+    previewing.value = false
+    preview.value = null
+    selectedGroupKey.value = null
+    confirmFinalize.value = false
     toast.add({ title: 'Exam scheduling settings saved', color: 'success' })
   } catch (error: unknown) {
     const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Save failed'
@@ -84,19 +104,39 @@ const preview = ref<PreviewResult | null>(null)
 const previewing = ref(false)
 async function runPreview() {
   if (!data.value || !selectedSessionId.value) return
+  const requestId = ++previewRequestId
+  const cycleId = data.value.cycleId
+  const sessionLabelId = selectedSessionId.value
+  preview.value = null
+  selectedGroupKey.value = null
+  confirmFinalize.value = false
   previewing.value = true
   try {
-    preview.value = await $fetch<PreviewResult>('/api/exam-schedule/preview', {
+    const result = await $fetch<PreviewResult>('/api/exam-schedule/preview', {
       method: 'POST',
-      body: { cycleId: data.value.cycleId, sessionLabelId: selectedSessionId.value }
+      body: { cycleId, sessionLabelId }
     })
+    if (requestId === previewRequestId && selectedCycleId.value === cycleId && selectedSessionId.value === sessionLabelId) preview.value = result
   } catch (error: unknown) {
     const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage || 'Preview failed'
     toast.add({ title: message, color: 'error' })
   } finally {
-    previewing.value = false
+    if (requestId === previewRequestId) previewing.value = false
   }
 }
+
+let previewRequestId = 0
+const selectedGroupKey = ref<string | null>(null)
+const selectedGroup = computed(() => preview.value?.rows.find(row => row.key === selectedGroupKey.value))
+const groupMembers = computed(() => (selectedGroup.value?.submissionIds || []).map(id => preview.value!.members[id]!).filter(Boolean))
+const canFinalize = computed(() => Boolean(preview.value && !previewing.value && !preview.value.blockers.length && !preview.value.missingLabels.length))
+watch([selectedCycleId, selectedSessionId], () => {
+  previewRequestId++
+  previewing.value = false
+  preview.value = null
+  selectedGroupKey.value = null
+  confirmFinalize.value = false
+})
 
 const testingGroup = ref<string | null>(null)
 async function testMessage(groupKey: string) {
@@ -123,8 +163,16 @@ async function testMessage(groupKey: string) {
 
 const confirmFinalize = ref(false)
 const finalizing = ref(false)
+watch(data, (value) => {
+  config.value = value ? JSON.parse(JSON.stringify(value.config)) : null
+  previewRequestId++
+  previewing.value = false
+  preview.value = null
+  selectedGroupKey.value = null
+  confirmFinalize.value = false
+}, { immediate: true })
 async function finalize() {
-  if (!data.value || !selectedSessionId.value) return
+  if (!data.value || !selectedSessionId.value || !canFinalize.value) return
   finalizing.value = true
   try {
     const result = await $fetch<{ jobId: string, assigned: number }>('/api/exam-schedule/finalize', {
@@ -145,14 +193,21 @@ async function finalize() {
   }
 }
 
-const previewColumns: TableColumn<PreviewRow>[] = [
+const memberColumns: TableColumn<MemberDetail>[] = [
+  { accessorKey: 'fullName', header: 'Student' },
+  { accessorKey: 'submissionIdInt', header: 'Submission #' },
+  { accessorKey: 'specialLabels', header: 'IEP / 504 / MLL' },
+  { accessorKey: 'accommodations', header: 'Accommodations' },
+  { accessorKey: 'reviewNeeded', header: 'Review status' }
+]
+const previewColumns = computed<TableColumn<PreviewRow>[]>(() => ([
   { accessorKey: 'name', header: 'Group' },
   { accessorKey: 'entrance', header: 'Entrance' },
   { accessorKey: 'arrivalTime', header: 'Arrival' },
   { accessorKey: 'labelNames', header: 'Labels' },
   { accessorKey: 'count', header: 'Assigned' },
   { id: 'actions', header: '' }
-]
+] as TableColumn<PreviewRow>[]).filter(column => !selectedGroupKey.value || !['entrance', 'labelNames', 'actions'].includes('accessorKey' in column ? String(column.accessorKey) : column.id || '')))
 </script>
 
 <template>
@@ -366,7 +421,7 @@ const previewColumns: TableColumn<PreviewRow>[] = [
             label="Finalize Schedule and Send Messages"
             icon="i-lucide-send"
             color="primary"
-            :disabled="!preview"
+            :disabled="!canFinalize || finalizing"
             @click="confirmFinalize = true"
           />
         </div>
@@ -389,33 +444,145 @@ const previewColumns: TableColumn<PreviewRow>[] = [
           title="Scheduling notes"
           :description="preview.diagnostics.join('; ')"
         />
-        <UTable
-          :data="preview.rows"
-          :columns="previewColumns"
+        <p class="mb-4 text-sm text-muted">
+          {{ preview.assignedCount }} assigned · {{ preview.unassignedCount }} unassigned · {{ preview.assignedCount + preview.unassignedCount }} included
+        </p>
+        <div
+          v-for="section in [
+            { title: 'Unassigned — Completion review required before finalizing', members: preview.blockers, blocking: true },
+            { title: 'IEP/504 Review needed before testing — does not block finalization', members: preview.reviewWarnings, blocking: false }
+          ]"
+          :key="section.title"
+          class="mb-4"
         >
-          <template #labelNames-cell="{ row }">
-            {{ row.original.labelNames.join(' + ') || '—' }}
-          </template>
-          <template #count-cell="{ row }">
-            <UBadge
-              :color="row.original.overMax || row.original.underMin ? 'error' : 'neutral'"
-              variant="subtle"
+          <UAlert
+            v-if="section.members.length"
+            :color="section.blocking ? 'error' : 'warning'"
+            variant="subtle"
+            :title="`${section.title} (${section.members.length})`"
+          >
+            <template #description>
+              <ul class="max-h-64 space-y-1 overflow-y-auto">
+                <li
+                  v-for="member in section.members"
+                  :key="member.submissionId"
+                >
+                  <a
+                    :href="`https://dpscd.submittable.com/submissions/${member.submissionId}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="font-medium text-primary hover:underline"
+                  >{{ member.fullName || 'Unnamed student' }} — {{ member.submissionIdInt ?? member.submissionId }}</a>
+                  <span v-if="!section.blocking"> · {{ member.missingRequiredReviews.join(', ') }}</span>
+                </li>
+              </ul>
+            </template>
+          </UAlert>
+        </div>
+        <div class="flex flex-col gap-4 lg:flex-row">
+          <div :class="selectedGroup ? 'min-w-0 lg:w-1/3' : 'min-w-0 w-full'">
+            <UTable
+              :data="preview.rows"
+              :columns="previewColumns"
+              @select="(_event, row) => selectedGroupKey = row.original.key"
             >
-              {{ row.original.count }}<template v-if="row.original.max != null">
-                / {{ row.original.min }}–{{ row.original.max }}
+              <template #name-cell="{ row }">
+                <button
+                  type="button"
+                  class="text-left font-medium text-primary hover:underline"
+                  :aria-expanded="selectedGroupKey === row.original.key"
+                  @click.stop="selectedGroupKey = row.original.key"
+                >
+                  {{ row.original.name }}
+                </button>
               </template>
-            </UBadge>
-          </template>
-          <template #actions-cell="{ row }">
-            <UButton
-              label="Test message"
-              size="xs"
-              variant="outline"
-              :loading="testingGroup === row.original.key"
-              @click="testMessage(row.original.key)"
-            />
-          </template>
-        </UTable>
+              <template #labelNames-cell="{ row }">
+                {{ row.original.labelNames.join(' + ') || '—' }}
+              </template>
+              <template #count-cell="{ row }">
+                <UBadge
+                  :color="row.original.overMax || row.original.underMin ? 'error' : 'neutral'"
+                  variant="subtle"
+                >
+                  {{ row.original.count }}<template v-if="row.original.max != null">
+                    / {{ row.original.min }}–{{ row.original.max }}
+                  </template>
+                </UBadge>
+              </template>
+              <template #actions-cell="{ row }">
+                <UButton
+                  label="Test message"
+                  size="xs"
+                  variant="outline"
+                  :loading="testingGroup === row.original.key"
+                  @click.stop="testMessage(row.original.key)"
+                />
+              </template>
+            </UTable>
+          </div>
+          <Transition
+            enter-active-class="motion-safe:transition motion-safe:duration-200"
+            enter-from-class="translate-x-4 opacity-0 motion-reduce:translate-x-0"
+            enter-to-class="translate-x-0 opacity-100"
+          >
+            <section
+              v-if="selectedGroup"
+              class="min-w-0 flex-1 rounded-lg border border-default p-3"
+              aria-label="Group members"
+            >
+              <div class="mb-3 flex items-center justify-between gap-2">
+                <h3 class="font-semibold">
+                  {{ selectedGroup.name }} ({{ groupMembers.length }})
+                </h3>
+                <UButton
+                  icon="i-lucide-x"
+                  aria-label="Close group members"
+                  variant="ghost"
+                  color="neutral"
+                  @click="selectedGroupKey = null"
+                />
+              </div>
+              <UTable
+                :data="groupMembers"
+                :columns="memberColumns"
+                empty="No students assigned to this group."
+              >
+                <template #fullName-cell="{ row }">
+                  <a
+                    :href="`https://dpscd.submittable.com/submissions/${row.original.submissionId}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="font-medium text-primary hover:underline"
+                  >{{ row.original.fullName || 'Unnamed student' }}</a>
+                </template>
+                <template #specialLabels-cell="{ row }">
+                  {{ row.original.specialLabels.join(', ') || '—' }}
+                </template>
+                <template #accommodations-cell="{ row }">
+                  <div
+                    v-for="item in row.original.accommodations"
+                    :key="item.source"
+                    class="whitespace-normal"
+                  >
+                    {{ item.source }}: {{ item.value }}
+                  </div>
+                  <span v-if="!row.original.accommodations.length">—</span>
+                </template>
+                <template #reviewNeeded-cell="{ row }">
+                  <UBadge
+                    v-if="row.original.reviewNeeded"
+                    color="warning"
+                    variant="subtle"
+                    class="whitespace-normal"
+                  >
+                    Review needed before testing
+                  </UBadge>
+                  <span v-else>—</span>
+                </template>
+              </UTable>
+            </section>
+          </Transition>
+        </div>
       </div>
       <p
         v-else
@@ -447,6 +614,7 @@ const previewColumns: TableColumn<PreviewRow>[] = [
             label="Finalize and send"
             color="primary"
             :loading="finalizing"
+            :disabled="!canFinalize"
             @click="finalize"
           />
         </div>

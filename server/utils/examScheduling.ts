@@ -148,15 +148,27 @@ export function groupLabelNames(def: ExamGroupDef, config: ExamSchedulingConfig)
 
 export interface SchedulableSubmission {
   submissionId: string
+  applicationId?: string
+  submissionIdInt?: number
+  mappedFields?: Record<string, unknown>
   status?: string
   labelIds?: string[]
-  reviewCompletion?: Array<{ name?: string, required?: boolean, complete?: boolean }>
+  reviewCompletion?: Array<{ stageId?: string, name?: string, required?: boolean, complete?: boolean }>
+}
+
+export interface ExamReviewStage {
+  applicationId: string
+  stageId: string
+  name: string
 }
 
 export interface ExamReviewInput {
+  applicationId?: string
+  stageId?: string
   stageName?: string
   status?: string
   completedAt?: Date | string
+  createdAt?: Date | string
   mappedData?: Record<string, unknown>
 }
 
@@ -196,11 +208,80 @@ export function detectSessions(
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function latestCompletedReview(reviews: ExamReviewInput[], stagePattern: RegExp): ExamReviewInput | undefined {
+const completionStagePattern = /^iep\s*\/\s*504\s+completion(?:\s+review)?$/i
+const actualReviewPattern = /^(?:iep|504|iep\s*\/\s*504)\s+review$/i
+const mllReviewPattern = /^mll\s+review$/i
+
+function latestCompletedReview(reviews: ExamReviewInput[]): ExamReviewInput | undefined {
   return reviews
-    .filter(review => stagePattern.test(review.stageName || ''))
     .filter(review => Boolean(review.completedAt) || ['complete', 'completed'].includes((review.status || '').trim().toLowerCase()))
-    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime())[0]
+    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime()
+      || new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0]
+}
+
+export interface ExamMemberDetail {
+  submissionId: string
+  submissionIdInt?: number
+  fullName: string
+  specialLabels: string[]
+  accommodations: Array<{ source: string, value: string }>
+  completionBlocked: boolean
+  reviewNeeded: boolean
+  missingRequiredReviews: string[]
+}
+
+export function assessExamMember(
+  submission: SchedulableSubmission,
+  reviews: ExamReviewInput[],
+  config: ExamSchedulingConfig,
+  stages: ExamReviewStage[] = [],
+  labels: LabelInfo[] = []
+): ExamMemberDetail & { specialGroup: 'RED' | 'IEP504' | 'MLL' | null } {
+  const ids = new Set(submission.labelIds || [])
+  const hasIep504 = config.iep504LabelIds.some(id => ids.has(id))
+  const applicationStages = stages.filter(stage => stage.applicationId === submission.applicationId)
+  const stageName = (entry: { stageId?: string, name?: string, stageName?: string }) =>
+    applicationStages.find(stage => stage.stageId === entry.stageId)?.name || entry.name || entry.stageName || ''
+  const matches = (review: ExamReviewInput, pattern: RegExp, stageId?: string) => {
+    if (review.applicationId && submission.applicationId && review.applicationId !== submission.applicationId) return false
+    if (stageId && review.stageId) return stageId === review.stageId
+    if (review.stageId && applicationStages.length && !applicationStages.some(stage => stage.stageId === review.stageId)) return false
+    return pattern.test(stageName(review).trim())
+  }
+  const ledger = submission.reviewCompletion || []
+  const requiredCompletion = ledger.filter(entry => entry.required && completionStagePattern.test(stageName(entry).trim()))
+  const completion = latestCompletedReview(reviews.filter(review => matches(review, completionStagePattern)))
+  const actual = latestCompletedReview(reviews.filter(review => matches(review, actualReviewPattern)))
+  const mll = latestCompletedReview(reviews.filter(review => matches(review, mllReviewPattern)))
+  const completionBlocked = hasIep504 && requiredCompletion.some(entry =>
+    !latestCompletedReview(reviews.filter(review => matches(review, completionStagePattern, entry.stageId))))
+  const missingRequiredReviews = hasIep504
+    ? ledger.filter(entry => entry.required && actualReviewPattern.test(stageName(entry).trim())
+      && !latestCompletedReview(reviews.filter(review => matches(review, actualReviewPattern, entry.stageId))))
+        .map(entry => stageName(entry))
+    : []
+  const accommodations = [
+    { source: actual ? stageName(actual) : '', value: String(actual?.mappedData?.Accommodations ?? '').trim() },
+    { source: mll ? stageName(mll) : '', value: String(mll?.mappedData?.MLLAccommodations ?? mll?.mappedData?.Accommodations ?? '').trim() }
+  ].filter(item => item.value)
+  let specialGroup: 'RED' | 'IEP504' | 'MLL' | null = null
+  if (hasIep504) {
+    if (!actual && String(completion?.mappedData?.CompleteIEP504 ?? '').trim().toLowerCase() === 'no') specialGroup = 'RED'
+    else if (!actual || String(actual.mappedData?.Accommodations ?? '').trim().toLowerCase() !== config.noAccommodationsValue.trim().toLowerCase()) specialGroup = 'IEP504'
+  } else if (config.mllLabelId && ids.has(config.mllLabelId)) specialGroup = 'MLL'
+  const specialIds = new Set([...config.iep504LabelIds, ...(config.mllLabelId ? [config.mllLabelId] : [])])
+  const mapped = submission.mappedFields || {}
+  return {
+    submissionId: submission.submissionId,
+    submissionIdInt: submission.submissionIdInt,
+    fullName: String(mapped.FullName ?? `${mapped.FirstName ?? ''} ${mapped.LastName ?? ''}`).trim(),
+    specialLabels: [...ids].filter(id => specialIds.has(id)).map(id => labels.find(label => label.externalId === id)?.name || id),
+    accommodations,
+    completionBlocked,
+    reviewNeeded: hasIep504 && !actual,
+    missingRequiredReviews,
+    specialGroup
+  }
 }
 
 /** Picks the special-group key for a session member, or null when they belong to the general pool. */
@@ -209,25 +290,8 @@ export function classifySpecialGroup(
   reviews: ExamReviewInput[],
   config: ExamSchedulingConfig
 ): 'RED' | 'IEP504' | 'MLL' | null {
-  const ids = new Set(submission.labelIds || [])
-  const hasIep504 = config.iep504LabelIds.some(id => ids.has(id))
-  const stagePattern = new RegExp(config.iepReviewStagePattern, 'i')
-
-  if (hasIep504) {
-    const ledger = submission.reviewCompletion || []
-    const incomplete = ledger.some(entry => entry.required && !entry.complete && stagePattern.test(entry.name || ''))
-    const hasIepStage = ledger.some(entry => stagePattern.test(entry.name || ''))
-    // No ledger entry at all for an IEP/504 stage means the review trail is unknown — treat as incomplete.
-    if (incomplete || !hasIepStage) return 'RED'
-
-    const review = latestCompletedReview(reviews, stagePattern)
-    const accommodations = String(review?.mappedData?.Accommodations ?? '').trim()
-    if (accommodations.toLowerCase() === config.noAccommodationsValue.trim().toLowerCase()) return null
-    return 'IEP504'
-  }
-
-  if (config.mllLabelId && ids.has(config.mllLabelId)) return 'MLL'
-  return null
+  const assessment = assessExamMember(submission, reviews, config)
+  return assessment.completionBlocked ? null : assessment.specialGroup
 }
 
 interface DetectedPreAssignment {
@@ -272,6 +336,8 @@ export interface ExamAssignmentResult {
   /** submissionId → group key */
   assignments: Record<string, string>
   diagnostics: string[]
+  unassignedIds: string[]
+  members: Record<string, ExamMemberDetail>
 }
 
 export function assignGroups(input: {
@@ -281,6 +347,7 @@ export function assignGroups(input: {
   sessionLabelId: string
   config: ExamSchedulingConfig
   random?: () => number
+  stages?: ExamReviewStage[]
 }): ExamAssignmentResult {
   const { config, sessionLabelId } = input
   const random = input.random || Math.random
@@ -301,8 +368,20 @@ export function assignGroups(input: {
     assignments[submissionId] = groupKey
   }
 
+  const memberDetails: Record<string, ExamMemberDetail> = {}
+  const unassignedIds: string[] = []
   for (const submission of members) {
-    const special = classifySpecialGroup(submission, input.reviewsBySubmission.get(submission.submissionId) || [], config)
+    const { specialGroup: special, ...detail } = assessExamMember(submission, input.reviewsBySubmission.get(submission.submissionId) || [], config, input.stages, input.labels)
+    memberDetails[submission.submissionId] = detail
+    // No ledger entry at all for an IEP/504 stage means the review trail is unknown — treat as incomplete.
+    if (config.iep504LabelIds.some(id => submission.labelIds?.includes(id))
+      && !(submission.reviewCompletion || []).some(entry => completionStagePattern.test((input.stages?.find(stage => stage.applicationId === submission.applicationId && stage.stageId === entry.stageId)?.name || entry.name || '').trim()))) {
+      diagnostics.push(`${submission.submissionId}: no Completion stage ledger entry; required-stage readiness is unknown. Refresh review completion to verify.`)
+    }
+    if (detail.completionBlocked) {
+      unassignedIds.push(submission.submissionId)
+      continue
+    }
     if (special) {
       assign(submission.submissionId, special)
       continue
@@ -357,7 +436,7 @@ export function assignGroups(input: {
     if (count > bounds.max) diagnostics.push(`${def.name}: ${count} assigned, above max ${bounds.max}`)
   }
 
-  return { groups, assignments, diagnostics }
+  return { groups, assignments, diagnostics, unassignedIds, members: memberDetails }
 }
 
 /** IEP/504 + MLL label IDs from config, falling back to name matching when unconfigured. */

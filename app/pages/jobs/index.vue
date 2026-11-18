@@ -381,7 +381,7 @@ watch(() => route.query.jobId, async (id) => {
       <template #progress-cell="{ row }">
         <div
           v-if="row.original.progress"
-          class="w-56"
+          class="w-32 lg:w-40 xl:w-48 max-w-full"
         >
           <UProgress
             :model-value="row.original.progress.percent ?? 0"
@@ -400,7 +400,7 @@ watch(() => route.query.jobId, async (id) => {
       </template>
 
       <template #result-cell="{ row }">
-        <span class="text-sm text-muted">{{ formatResult(row.original) }}</span>
+        <span class="block max-w-xs text-xs leading-relaxed text-muted whitespace-normal [overflow-wrap:anywhere]">{{ formatResult(row.original) }}</span>
       </template>
 
       <template #timing-cell="{ row }">

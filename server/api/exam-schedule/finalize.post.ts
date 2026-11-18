@@ -18,6 +18,13 @@ export default defineEventHandler(async (event) => {
   if (!session) throw createError({ statusCode: 404, statusMessage: 'Session label not found' })
 
   const result = await computeSessionAssignment(context, body.sessionLabelId)
+  if (result.unassignedIds.length) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Complete the required IEP/504 Completion review forms before finalizing',
+      data: { blockers: result.unassignedIds.map(id => result.members[id]) }
+    })
+  }
   const usedGroupKeys = Object.keys(result.groups).filter(key => result.groups[key]!.length > 0)
   const { missing } = resolveGroupLabelIds(context, usedGroupKeys)
   if (missing.length) {

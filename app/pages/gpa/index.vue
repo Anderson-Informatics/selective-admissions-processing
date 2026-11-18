@@ -190,15 +190,14 @@ watch([selectedCycleId, selectedStatus, selectedSource, search, sorting], () => 
 const requestFetch = useRequestFetch()
 const { data, status, refresh } = useAsyncData<{
   records: GpaReviewItem[]
-  duplicateStudentNumbers: DuplicateStudentNumberItem[]
   total: number
   page: number
   limit: number
 }>(
   'gpa-records',
-  () => {
+  (_nuxtApp, { signal }) => {
     if (!selectedCycleId.value) {
-      return Promise.resolve({ records: [], duplicateStudentNumbers: [], total: 0, page: 1, limit })
+      return Promise.resolve({ records: [], total: 0, page: 1, limit })
     }
     const params = new URLSearchParams()
     params.set('cycleId', selectedCycleId.value)
@@ -209,18 +208,46 @@ const { data, status, refresh } = useAsyncData<{
     params.set('sortOrder', sorting.value[0]?.desc === false ? 'asc' : 'desc')
     if (selectedStatus.value !== 'all') params.set('gpaStatus', selectedStatus.value)
     if (selectedSource.value !== 'all') params.set('source', selectedSource.value)
-    return requestFetch(`/api/gpa?${params.toString()}`)
+    return requestFetch(`/api/gpa?${params.toString()}`, { signal })
   },
-  { default: () => ({ records: [], duplicateStudentNumbers: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedStatus, selectedSource, search, sorting, page] }
+  { default: () => ({ records: [], total: 0, page: 1, limit }), watch: [selectedCycleId, selectedStatus, selectedSource, search, sorting, page] }
 )
 
 const totalPages = computed(() => Math.ceil((data.value?.total || 0) / limit))
 
-const { data: jobs } = await useFetch<{ _id: string, type: string, status: string, result?: Record<string, number>, createdAt: string }[]>(
-  '/api/jobs',
-  { query: computed(() => ({ cycleId: selectedCycleId.value })) }
+interface ImportSummary {
+  status: string
+  result?: { matched?: number, unmatched?: number, updated?: number }
+  createdAt: string
+}
+
+const { data: importSummary, refresh: refreshImportSummary } = useAsyncData(
+  'gpa-latest-import',
+  async (_nuxtApp, { signal }) => {
+    const cycleId = selectedCycleId.value
+    const job = cycleId ? await requestFetch<ImportSummary | null>('/api/gpa/latest-import', { query: { cycleId }, signal }) : null
+    return { cycleId, job }
+  },
+  { server: false, lazy: true, watch: [selectedCycleId] }
 )
-const latestDpscdImport = computed(() => (jobs.value || []).find(job => job.type === 'dpscd_gpa_import'))
+const latestDpscdImport = computed(() => importSummary.value?.cycleId === selectedCycleId.value ? importSummary.value.job : null)
+const showDuplicateStudentNumbers = computed(() => selectedSource.value === 'dpscd')
+const { data: duplicateReport, status: duplicateStatus, error: duplicateError, refresh: refreshDuplicates } = useAsyncData(
+  'gpa-duplicates',
+  async (_nuxtApp, { signal }) => {
+    const cycleId = selectedCycleId.value
+    const records = cycleId && showDuplicateStudentNumbers.value
+      ? await requestFetch<DuplicateStudentNumberItem[]>('/api/gpa/duplicates', { query: { cycleId }, signal })
+      : []
+    return { cycleId, records }
+  },
+  { server: false, lazy: true, watch: [selectedCycleId, showDuplicateStudentNumbers] }
+)
+const duplicateStudentNumbers = computed(() => duplicateReport.value?.cycleId === selectedCycleId.value ? duplicateReport.value.records : [])
+
+async function refreshGpaData() {
+  await Promise.all([refresh(), refreshDuplicates(), refreshImportSummary()])
+}
 
 // --- Upload modal -----------------------------------------------------------
 
@@ -275,7 +302,7 @@ async function pollUpload() {
       uploadResult.value = response.upload.result || null
       uploadProgress.value = 100
       uploadStage.value = 'complete'
-      await refresh()
+      await refreshGpaData()
       return
     }
     if (response.upload.status === 'failed' || response.job?.status === 'failed') {
@@ -335,7 +362,7 @@ async function cancelUpload() {
 async function finishUpload() {
   clearUploadPoll()
   uploadModalOpen.value = false
-  await refresh()
+  await refreshGpaData()
 }
 
 onBeforeUnmount(() => {
@@ -408,9 +435,8 @@ const duplicateColumns: TableColumn<DuplicateStudentNumberItem>[] = [
   { accessorKey: 'resolvedSource', header: 'Final Source' },
   { accessorKey: 'dpscdStudentName', header: 'DPSCD Name' }
 ]
-const duplicateStudentNumberCount = computed(() => new Set((data.value?.duplicateStudentNumbers || []).map(row => row.studentNumber)).size)
-const duplicateSubmissionCount = computed(() => data.value?.duplicateStudentNumbers.length || 0)
-const showDuplicateStudentNumbers = computed(() => selectedSource.value === 'dpscd')
+const duplicateStudentNumberCount = computed(() => new Set(duplicateStudentNumbers.value.map(row => row.studentNumber)).size)
+const duplicateSubmissionCount = computed(() => duplicateStudentNumbers.value.length)
 
 const sourceLabels: Record<string, string> = {
   recording: 'GPA Recording',
@@ -719,7 +745,7 @@ function formatDate(value?: string) {
             Duplicate student numbers
           </h2>
           <p class="text-sm text-muted">
-            Submissions in the selected cycle sharing the same mapped StudentNumber. This report covers all matching submissions when viewing DPSCD / PowerSchool GPA.
+            Student numbers shared by at least two non-withdrawn submissions in the selected cycle. Withdrawn submissions are excluded from the rows and counts. This report is independent of the table's status, search, and pagination filters.
           </p>
         </div>
         <UBadge
@@ -729,12 +755,28 @@ function formatDate(value?: string) {
           variant="subtle"
         />
       </div>
+      <UAlert
+        v-if="duplicateError"
+        color="error"
+        title="Unable to load the duplicate student number report"
+        class="mb-3"
+      >
+        <template #actions>
+          <UButton
+            label="Retry"
+            color="error"
+            variant="outline"
+            @click="refreshDuplicates()"
+          />
+        </template>
+      </UAlert>
       <UTable
-        :data="data?.duplicateStudentNumbers || []"
+        v-else
+        :data="duplicateStudentNumbers"
         :columns="duplicateColumns"
         :get-row-id="(row: DuplicateStudentNumberItem) => row.submissionId"
-        :loading="status === 'pending'"
-        empty="No duplicate student numbers found."
+        :loading="duplicateStatus === 'pending'"
+        :empty="duplicateStatus === 'pending' ? 'Loading duplicate student numbers...' : 'No duplicate student numbers found.'"
       >
         <template #studentNumber-cell="{ row }">
           <span class="font-medium">{{ row.original.studentNumber }}</span>

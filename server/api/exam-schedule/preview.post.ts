@@ -44,6 +44,11 @@ export default defineEventHandler(async (event) => {
     rows,
     assignments: result.assignments,
     diagnostics: result.diagnostics,
-    missingLabels: missing
+    missingLabels: missing,
+    members: result.members,
+    blockers: result.unassignedIds.map(id => result.members[id]!),
+    reviewWarnings: Object.values(result.members).filter(member => member.missingRequiredReviews.length > 0),
+    assignedCount: Object.keys(result.assignments).length,
+    unassignedCount: result.unassignedIds.length
   }
 })

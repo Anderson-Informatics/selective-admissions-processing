@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assignGroups,
+  assessExamMember,
   classifySpecialGroup,
   detectSessions,
   examSessionForSubmission,
@@ -69,16 +70,16 @@ describe('detectSessions', () => {
 describe('classifySpecialGroup', () => {
   const config = baseConfig()
 
-  it('returns RED when a required IEP review ledger entry is incomplete', () => {
+  it('returns white when an actual review is missing without an explicit Completion No', () => {
     const submission = sub('x', {
       labelIds: ['hspt-jan', 'iep'],
       reviewCompletion: [{ name: 'IEP Review', required: true, complete: false }]
     })
-    expect(classifySpecialGroup(submission, [], config)).toBe('RED')
+    expect(classifySpecialGroup(submission, [], config)).toBe('IEP504')
   })
 
-  it('returns RED when an IEP-labeled submission has no IEP ledger entry at all', () => {
-    expect(classifySpecialGroup(sub('x', { labelIds: ['hspt-jan', '504'] }), [], config)).toBe('RED')
+  it('returns white when an IEP-labeled submission has no required Completion stage', () => {
+    expect(classifySpecialGroup(sub('x', { labelIds: ['hspt-jan', '504'] }), [], config)).toBe('IEP504')
   })
 
   it('returns null (general pool) when accommodations say none required', () => {
@@ -165,9 +166,89 @@ describe('assignGroups', () => {
   it('routes special groups before pooling', () => {
     const red = sub('red', { labelIds: ['hspt-jan', 'iep'], reviewCompletion: [{ name: 'IEP Review', required: true, complete: false }] })
     const mll = sub('mll', { labelIds: ['hspt-jan', 'mll'] })
-    const result = run([red, mll])
+    const result = run([red, mll], baseConfig(), new Map([
+      ['red', [{ stageName: 'IEP/ 504 Completion', status: 'completed', mappedData: { CompleteIEP504: 'No' } }]]
+    ]))
     expect(result.groups.RED).toEqual(['red'])
     expect(result.groups.MLL).toEqual(['mll'])
+  })
+})
+
+describe('Completion form prerequisite', () => {
+  const config = baseConfig()
+  const student = sub('blocked', {
+    applicationId: 'app',
+    labelIds: ['hspt-jan', 'iep', 'mll', 'exam-a', 'green'],
+    reviewCompletion: [
+      { stageId: 'completion', name: 'IEP/ 504 Completion', required: true, complete: true },
+      { stageId: 'actual', name: 'IEP Review', required: true, complete: true }
+    ]
+  })
+  const actual = { applicationId: 'app', stageId: 'actual', stageName: 'IEP Review', status: ' Completed ', mappedData: { Accommodations: 'Extended time' } }
+  const completion = { applicationId: 'app', stageId: 'completion', stageName: 'IEP/504 Completion Review', status: 'complete', mappedData: { CompleteIEP504: 'No' } }
+
+  it('excludes blockers before preassignment, MLL and actual-review classification', () => {
+    const result = assignGroups({ submissions: [student, sub('general')], labels, reviewsBySubmission: new Map([['blocked', [actual]]]), sessionLabelId: 'hspt-jan', config })
+    expect(result.unassignedIds).toEqual(['blocked'])
+    expect(result.assignments.blocked).toBeUndefined()
+    expect(Object.values(result.groups).flat()).toEqual(['general'])
+    expect(Object.keys(result.assignments).length + result.unassignedIds.length).toBe(2)
+  })
+
+  it('accepts a completed No form despite an incomplete ledger and warns about the actual review', () => {
+    const detail = assessExamMember({ ...student, reviewCompletion: student.reviewCompletion!.map(entry => ({ ...entry, complete: false })) }, [completion], config)
+    expect(detail.completionBlocked).toBe(false)
+    expect(detail.specialGroup).toBe('RED')
+    expect(detail.missingRequiredReviews).toEqual(['IEP Review'])
+    expect(detail.accommodations).toEqual([])
+  })
+
+  it.each(['Yes', '', undefined])('uses white for a completed Completion form answering %s without an actual review', (answer) => {
+    const detail = assessExamMember(student, [{ ...completion, mappedData: { CompleteIEP504: answer } }], config)
+    expect(detail.completionBlocked).toBe(false)
+    expect(detail.specialGroup).toBe('IEP504')
+    expect(detail.reviewNeeded).toBe(true)
+  })
+
+  it('lets an actual review override No only after the prerequisite is satisfied', () => {
+    expect(assessExamMember(student, [completion, actual], config).specialGroup).toBe('IEP504')
+    const none = { ...actual, mappedData: { Accommodations: config.noAccommodationsValue } }
+    expect(assessExamMember(student, [completion, none], config).specialGroup).toBeNull()
+    expect(assessExamMember(student, [none], config).completionBlocked).toBe(true)
+  })
+
+  it('does not accept draft forms, another application, or another stage with the same name', () => {
+    for (const invalid of [
+      { ...completion, status: 'draft' },
+      { ...completion, applicationId: 'other' },
+      { ...completion, stageId: 'other' }
+    ]) expect(assessExamMember(student, [invalid], config).completionBlocked).toBe(true)
+  })
+
+  it('uses per-application stage metadata instead of stale review names', () => {
+    const stages = [{ applicationId: 'app', stageId: 'completion', name: 'IEP/ 504 Completion' }]
+    expect(assessExamMember(student, [{ ...completion, stageName: 'stale', status: 'draft', completedAt: new Date() }], config, stages).completionBlocked).toBe(false)
+  })
+
+  it('exempts non-required and unlabeled students', () => {
+    expect(assessExamMember({ ...student, labelIds: ['hspt-jan'] }, [], config).completionBlocked).toBe(false)
+    expect(assessExamMember({ ...student, reviewCompletion: [] }, [], config).completionBlocked).toBe(false)
+  })
+
+  it('ignores other dates and withdrawn blockers', () => {
+    const result = assignGroups({ submissions: [{ ...student, status: 'Withdrawn' }, { ...student, submissionId: 'other', labelIds: ['iep', 'hspt-feb'] }], labels, reviewsBySubmission: new Map(), sessionLabelId: 'hspt-jan', config })
+    expect(result.unassignedIds).toEqual([])
+    expect(result.members).toEqual({})
+  })
+
+  it('selects the latest completed Completion form and exposes both accommodation sources', () => {
+    const reviews = [
+      { ...completion, completedAt: '2026-01-01' },
+      { ...completion, completedAt: '2026-02-01', mappedData: { CompleteIEP504: 'Yes' } }
+    ]
+    expect(assessExamMember(student, reviews, config).specialGroup).toBe('IEP504')
+    const detail = assessExamMember(student, [...reviews, actual, { stageName: 'MLL Review', status: 'complete', mappedData: { MLLAccommodations: 'Dictionary' } }], config)
+    expect(detail.accommodations.map(item => item.value)).toEqual(['Extended time', 'Dictionary'])
   })
 })
 

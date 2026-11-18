@@ -1,4 +1,3 @@
-import { ApplicationModel } from '~~/server/models/Application'
 import { GpaRecordModel } from '~~/server/models/GpaRecord'
 import { MetadataModel } from '~~/server/models/Metadata'
 import { ReviewModel } from '~~/server/models/Review'
@@ -74,6 +73,28 @@ export default defineEventHandler(async (event) => {
     : {}
   const field = sortFields.has(sortBy) ? sortBy : 'student'
   const direction = sortOrder === 'desc' ? -1 : 1
+  const partialReviewStages = [
+    { $lookup: completedReviewLookup('_partialReviews', { $or: [
+      { stageName: { $regex: /partial\s*gpa|gpa\s*partial/i } },
+      { 'mappedData.PartialGPA': { $exists: true } }
+    ] }) },
+    { $set: { partialReview: { $arrayElemAt: ['$_partialReviews', 0] } } }
+  ]
+  const enrollmentStage = { $set: {
+    enrollmentConsidered: {
+      $switch: {
+        branches: [
+          { case: { $eq: ['$resolvedSource', 'recording'] }, then: 'Recorded' },
+          { case: { $eq: ['$resolvedSource', 'partial'] }, then: { $ifNull: ['$partialReview.mappedData.Semesters', '—'] } },
+          { case: { $eq: ['$resolvedSource', 'dpscd'] }, then: { $ifNull: ['$gpa.dpscd.quartersAvailable', null] } },
+          { case: { $eq: ['$resolvedSource', 'optIn'] }, then: { $ifNull: ['$gpa.optIn.termsEnrolled', null] } },
+          { case: { $eq: ['$gpaStatus', 'DPSCD Partial'] }, then: { $ifNull: ['$gpa.dpscd.quartersAvailable', null] } },
+          { case: { $eq: ['$gpaStatus', 'Opt-In Partial'] }, then: { $ifNull: ['$gpa.optIn.termsEnrolled', null] } }
+        ],
+        default: null
+      }
+    }
+  } }
 
   const [result] = await SubmissionModel.aggregate([
     { $match: { cycleId, status: { $not: /^withdrawn$/i } } },
@@ -90,11 +111,6 @@ export default defineEventHandler(async (event) => {
       as: '_gpa'
     } },
     { $set: { gpa: { $arrayElemAt: ['$_gpa', 0] } } },
-    { $lookup: completedReviewLookup('_recordingReviews', { stageName: { $regex: /^\s*gpa\s*recording\s*$/i } }) },
-    { $lookup: completedReviewLookup('_partialReviews', { $or: [
-      { stageName: { $regex: /partial\s*gpa|gpa\s*partial/i } },
-      { 'mappedData.PartialGPA': { $exists: true } }
-    ] }) },
     { $set: {
       submissionName: {
         $let: {
@@ -105,9 +121,6 @@ export default defineEventHandler(async (event) => {
           in: { $cond: [{ $ne: ['$$fullName', ''] }, '$$fullName', '$$fallbackName'] }
         }
       },
-      recordingReview: { $arrayElemAt: ['$_recordingReviews', 0] },
-      partialReview: { $arrayElemAt: ['$_partialReviews', 0] },
-      hasOptInLabel: optInLabel ? { $in: [optInLabel.externalId, { $ifNull: ['$labelIds', []] }] } : false,
       gpaStatus: {
         $cond: [
           { $eq: ['$gpaStatus', 'OOD Partial'] },
@@ -125,27 +138,21 @@ export default defineEventHandler(async (event) => {
           '$submissionName',
           { $ifNull: ['$gpa.optIn.studentName', ''] }
         ]
-      },
-      enrollmentConsidered: {
-        $switch: {
-          branches: [
-            { case: { $eq: ['$resolvedSource', 'recording'] }, then: 'Recorded' },
-            { case: { $eq: ['$resolvedSource', 'partial'] }, then: { $ifNull: ['$partialReview.mappedData.Semesters', '—'] } },
-            { case: { $eq: ['$resolvedSource', 'dpscd'] }, then: { $ifNull: ['$gpa.dpscd.quartersAvailable', null] } },
-            { case: { $eq: ['$resolvedSource', 'optIn'] }, then: { $ifNull: ['$gpa.optIn.termsEnrolled', null] } },
-            { case: { $eq: ['$gpaStatus', 'DPSCD Partial'] }, then: { $ifNull: ['$gpa.dpscd.quartersAvailable', null] } },
-            { case: { $eq: ['$gpaStatus', 'Opt-In Partial'] }, then: { $ifNull: ['$gpa.optIn.termsEnrolled', null] } }
-          ],
-          default: null
-        }
       }
     } },
     { $match: { $and: [searchFilter, statusFilter, sourceFilter] } },
     { $facet: {
       records: [
+        ...(field === 'enrollmentConsidered' ? [...partialReviewStages, enrollmentStage] : []),
         { $sort: { [field]: direction, _id: 1 } },
         { $skip: (pageNum - 1) * limitNum },
         { $limit: limitNum },
+        { $lookup: completedReviewLookup('_recordingReviews', { stageName: { $regex: /^\s*gpa\s*recording\s*$/i } }) },
+        ...(field === 'enrollmentConsidered' ? [] : [...partialReviewStages, enrollmentStage]),
+        { $set: {
+          recordingReview: { $arrayElemAt: ['$_recordingReviews', 0] },
+          hasOptInLabel: optInLabel ? { $in: [optInLabel.externalId, { $ifNull: ['$labelIds', []] }] } : false
+        } },
         { $project: {
           entryIds: 0,
           routingHistory: 0,
@@ -159,76 +166,5 @@ export default defineEventHandler(async (event) => {
     } }
   ]).collation({ locale: 'en', strength: 2 })
 
-  const duplicateRows = await SubmissionModel.aggregate([
-    { $match: { cycleId } },
-    { $set: {
-      duplicateStudentNumber: {
-        $trim: {
-          input: {
-            $convert: {
-              input: { $ifNull: ['$mappedFields.StudentNumber', ''] },
-              to: 'string',
-              onError: '',
-              onNull: ''
-            }
-          }
-        }
-      },
-      student: {
-        $let: {
-          vars: {
-            fullName: { $trim: { input: { $ifNull: ['$mappedFields.FullName', ''] } } },
-            fallbackName: { $trim: { input: { $concat: [{ $ifNull: ['$mappedFields.FirstName', ''] }, ' ', { $ifNull: ['$mappedFields.LastName', ''] }] } } }
-          },
-          in: { $cond: [{ $ne: ['$$fullName', ''] }, '$$fullName', '$$fallbackName'] }
-        }
-      }
-    } },
-    { $match: { duplicateStudentNumber: { $ne: '' } } },
-    { $lookup: {
-      from: GpaRecordModel.collection.name,
-      let: { submissionId: '$submissionId', cycleId: '$cycleId' },
-      pipeline: [
-        { $match: { $expr: { $and: [
-          { $eq: ['$submissionId', '$$submissionId'] },
-          { $eq: ['$cycleId', '$$cycleId'] }
-        ] } } },
-        { $limit: 1 }
-      ],
-      as: '_gpa'
-    } },
-    { $set: { gpa: { $arrayElemAt: ['$_gpa', 0] } } },
-    { $group: {
-      _id: '$duplicateStudentNumber',
-      duplicateCount: { $sum: 1 },
-      submissions: { $push: {
-        submissionId: '$submissionId',
-        submissionIdInt: '$submissionIdInt',
-        applicationId: '$applicationId',
-        projectId: '$projectId',
-        student: '$student',
-        status: '$status',
-        currentStageName: '$currentStageName',
-        gpaStatus: '$gpaStatus',
-        resolvedCumulativeGpa: '$gpa.resolvedCumulativeGpa',
-        resolvedSource: '$gpa.resolvedSource',
-        dpscdStudentName: '$gpa.dpscd.studentName',
-        dpscdStudentNumber: '$gpa.dpscd.studentNumber'
-      } }
-    } },
-    { $match: { duplicateCount: { $gt: 1 } } },
-    { $unwind: '$submissions' },
-    { $replaceRoot: { newRoot: { $mergeObjects: ['$submissions', { studentNumber: '$_id', duplicateCount: '$duplicateCount' }] } } },
-    { $sort: { studentNumber: 1, submissionIdInt: 1, submissionId: 1 } }
-  ]) as Array<Record<string, unknown>>
-
-  const applications = await ApplicationModel.find({ cycleId }).select('name').lean()
-  const applicationNames = new Map(applications.map(application => [String(application._id), application.name]))
-  const duplicateStudentNumbers = duplicateRows.map(row => ({
-    ...row,
-    applicationName: applicationNames.get(String(row.applicationId || '')) || '',
-    gpaStatus: canonicalGpaStatus(row.gpaStatus || 'Incomplete')
-  }))
-
-  return { records: result?.records || [], total: result?.count[0]?.total || 0, page: pageNum, limit: limitNum, duplicateStudentNumbers }
+  return { records: result?.records || [], total: result?.count[0]?.total || 0, page: pageNum, limit: limitNum }
 })
