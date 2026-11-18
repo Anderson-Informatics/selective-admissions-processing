@@ -27,27 +27,25 @@ const { data: cycles } = await useFetch<CycleOption[]>('/api/cycles', { default:
 const { data: responseLibraries } = await useFetch<ResponseLibraryOption[]>('/api/response-libraries', { default: () => [] })
 const libraryItems = computed(() => (responseLibraries.value || []).map(library => ({ label: library.name, value: library.key })))
 
-const mergeCycleId = ref<string | undefined>()
-const { data: mergeFieldData } = await useFetch<{ cycleId: string | null, sources: MergeFieldSource[] }>('/api/templates/merge-fields', {
+const mergeCycleId = ref<string | undefined>(cycles.value?.find(cycle => cycle.active)?._id)
+const { data: mergeFieldData, error: mergeFieldError, refresh: refreshMergeFields } = await useFetch<{ cycleId: string | null, sources: MergeFieldSource[] }>('/api/templates/merge-fields', {
   query: computed(() => (mergeCycleId.value ? { cycleId: mergeCycleId.value } : {})),
   default: () => ({ cycleId: null, sources: [] })
 })
-watch(() => mergeFieldData.value.cycleId, (id) => {
-  if (id && !mergeCycleId.value) mergeCycleId.value = id
-}, { immediate: true })
+const mergeSources = computed(() => mergeFieldData.value?.sources ?? [])
 
 const cycleItems = computed(() => (cycles.value || []).map(cycle => ({ label: `${cycle.name}${cycle.active ? ' (active)' : ''}`, value: cycle._id })))
-const sourceItems = computed(() => mergeFieldData.value.sources.map(source => ({ label: source.label, value: source.key })))
+const sourceItems = computed(() => mergeSources.value.map(source => ({ label: source.label, value: source.key })))
 const mergeSourceKey = ref('submission')
 const mergeFieldValue = ref<string | undefined>()
-const selectedSource = computed(() => mergeFieldData.value.sources.find(source => source.key === mergeSourceKey.value))
+const selectedSource = computed(() => mergeSources.value.find(source => source.key === mergeSourceKey.value))
 const fieldItems = computed(() => (selectedSource.value?.fields || []).map(field => ({
   label: field.label,
   value: field.token,
   description: field.questionText && field.questionText !== field.label ? field.questionText : undefined,
   multi: LIST_FIELD_TYPES.has(field.fieldType || '')
 })))
-watch(() => mergeFieldData.value.sources, (sources) => {
+watch(() => mergeSources.value, (sources) => {
   if (!sources.some(source => source.key === mergeSourceKey.value)) mergeSourceKey.value = 'submission'
 })
 watch(mergeSourceKey, () => {
@@ -77,7 +75,7 @@ const deadlineUnitItems = [
   { label: 'business days', value: 'business-days' }
 ]
 const deadlineSnapItems = [
-  { label: 'No snap', value: '' },
+  { label: 'No snap', value: 'none' },
   { label: 'Snap to Monday', value: 'monday' },
   { label: 'Snap to Tuesday', value: 'tuesday' },
   { label: 'Snap to Wednesday', value: 'wednesday' },
@@ -89,7 +87,7 @@ const deadlineSnapItems = [
 const deadlineToken = computed(() => {
   const count = Math.max(0, Number(deadlineCount.value) || 0)
   const spec = deadlineUnit.value === 'business-days' ? `${count} business days` : `${count} ${deadlineUnit.value}`
-  const snap = deadlineSnap.value ? ` | snap ${deadlineSnap.value}` : ''
+  const snap = deadlineSnap.value && deadlineSnap.value !== 'none' ? ` | snap ${deadlineSnap.value}` : ''
   return `{{deadline | ${spec}${snap}}}`
 })
 
@@ -324,6 +322,21 @@ async function sendTest() {
 
 <template>
   <UContainer class="py-8">
+    <UAlert
+      v-if="mergeFieldError"
+      color="error"
+      title="Unable to load merge fields"
+      class="mb-4"
+    >
+      <template #actions>
+        <UButton
+          label="Retry"
+          color="error"
+          variant="subtle"
+          @click="refreshMergeFields()"
+        />
+      </template>
+    </UAlert>
     <PageHeader
       title="Message Templates"
       help="templates"

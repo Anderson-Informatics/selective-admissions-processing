@@ -12,20 +12,18 @@ const toast = useToast()
 const { data: libraries, refresh } = await useFetch<ResponseLibrary[]>('/api/response-libraries', { default: () => [] })
 const { data: cycles } = await useFetch<CycleOption[]>('/api/cycles', { default: () => [] })
 
-const importCycleId = ref<string | undefined>()
-const { data: mergeFieldData } = await useFetch<{ cycleId: string | null, sources: MergeFieldSource[] }>('/api/templates/merge-fields', {
+const importCycleId = ref<string | undefined>(cycles.value?.find(cycle => cycle.active)?._id)
+const { data: mergeFieldData, error: mergeFieldError, refresh: refreshMergeFields } = await useFetch<{ cycleId: string | null, sources: MergeFieldSource[] }>('/api/templates/merge-fields', {
   query: computed(() => (importCycleId.value ? { cycleId: importCycleId.value } : {})),
   default: () => ({ cycleId: null, sources: [] })
 })
-watch(() => mergeFieldData.value.cycleId, (id) => {
-  if (id && !importCycleId.value) importCycleId.value = id
-}, { immediate: true })
+const mergeSources = computed(() => mergeFieldData.value?.sources ?? [])
 
 const cycleItems = computed(() => (cycles.value || []).map(cycle => ({ label: `${cycle.name}${cycle.active ? ' (active)' : ''}`, value: cycle._id })))
-const sourceItems = computed(() => mergeFieldData.value.sources.filter(source => source.key !== 'builtin').map(source => ({ label: source.label, value: source.key })))
+const sourceItems = computed(() => mergeSources.value.filter(source => source.key !== 'builtin').map(source => ({ label: source.label, value: source.key })))
 const importSourceKey = ref('submission')
 const importFieldValue = ref<string | undefined>()
-const importSource = computed(() => mergeFieldData.value.sources.find(source => source.key === importSourceKey.value))
+const importSource = computed(() => mergeSources.value.find(source => source.key === importSourceKey.value))
 const importFieldItems = computed(() => (importSource.value?.fields || [])
   .filter(field => field.options?.length)
   .map(field => ({ label: field.label, value: field.token, options: field.options || [] })))
@@ -130,6 +128,21 @@ async function remove() {
 
 <template>
   <UContainer class="py-8">
+    <UAlert
+      v-if="mergeFieldError"
+      color="error"
+      title="Unable to load merge fields"
+      class="mb-4"
+    >
+      <template #actions>
+        <UButton
+          label="Retry"
+          color="error"
+          variant="subtle"
+          @click="refreshMergeFields()"
+        />
+      </template>
+    </UAlert>
     <PageHeader
       title="Response Libraries"
       help="responseLibraries"

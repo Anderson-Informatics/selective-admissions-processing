@@ -360,8 +360,7 @@ const recordColumns: TableColumn<GpaReviewItem>[] = [
   sortableColumn('resolvedCumulativeGpa', 'Final GPA'),
   sortableColumn('resolvedSource', 'Final GPA Source'),
   sortableColumn('enrollmentConsidered', 'Enrollment Considered'),
-  sortableColumn('currentStageName', 'Current Stage'),
-  { id: 'requiredAction', header: 'Required GPA Action', enableSorting: false }
+  sortableColumn('currentStageName', 'Stage / Action')
 ]
 const duplicateColumns: TableColumn<DuplicateStudentNumberItem>[] = [
   { accessorKey: 'studentNumber', header: 'Student Number' },
@@ -544,8 +543,15 @@ function formatDate(value?: string) {
       <template #enrollmentConsidered-cell="{ row }">
         {{ formatEnrollment(row.original) }}
       </template>
-      <template #requiredAction-cell="{ row }">
-        {{ requiredGpaAction(row.original) }}
+      <template #currentStageName-cell="{ row }">
+        <div class="max-w-64 whitespace-normal break-words">
+          <div class="font-medium">
+            {{ row.original.currentStageName || '—' }}
+          </div>
+          <div class="text-sm text-muted">
+            {{ requiredGpaAction(row.original) }}
+          </div>
+        </div>
       </template>
       <template #expanded="{ row }">
         <GpaReviewDetail :record="row.original" />

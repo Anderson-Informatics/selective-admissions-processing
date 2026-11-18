@@ -63,6 +63,8 @@ const { data: applications } = useAsyncData<Application[]>(
 )
 
 const ALL_APPLICATIONS = '__all__'
+const ALL_STAGES = '__all__'
+const ALL_LABELS = '__all__'
 
 const applicationItems = computed<SelectItem[]>(() => [
   { label: 'All applications', value: ALL_APPLICATIONS },
@@ -70,19 +72,50 @@ const applicationItems = computed<SelectItem[]>(() => [
     .map(a => ({ label: a.name, value: a._id }))
 ])
 
+const { data: labels } = await useFetch<SelectItem[]>('/api/routing/labels', { default: () => [] })
+
 const selectedApplicationId = ref(ALL_APPLICATIONS)
+const selectedStageId = ref(ALL_STAGES)
+const selectedLabelId = ref(ALL_LABELS)
 const search = ref('')
 const page = ref(1)
 const limit = 25
 const expanded = ref<Record<string, boolean>>({})
 
+const { data: stageItems } = useAsyncData<SelectItem[]>(
+  'submissions-stages',
+  () => {
+    if (selectedApplicationId.value === ALL_APPLICATIONS) return Promise.resolve([])
+    return requestFetch<SelectItem[]>(`/api/applications/${selectedApplicationId.value}/stages`)
+  },
+  { default: () => [], watch: [selectedApplicationId] }
+)
+
+const stageSelectItems = computed<SelectItem[]>(() => [
+  { label: 'All stages', value: ALL_STAGES },
+  ...(stageItems.value || [])
+])
+
+const labelSelectItems = computed<SelectItem[]>(() => [
+  { label: 'All labels', value: ALL_LABELS },
+  ...(labels.value || [])
+])
+
 watch(selectedCycleId, () => {
   selectedApplicationId.value = ALL_APPLICATIONS
+  selectedStageId.value = ALL_STAGES
+  selectedLabelId.value = ALL_LABELS
   page.value = 1
   expanded.value = {}
 })
 
 watch(selectedApplicationId, () => {
+  selectedStageId.value = ALL_STAGES
+  page.value = 1
+  refresh()
+})
+
+watch([selectedStageId, selectedLabelId], () => {
   page.value = 1
   refresh()
 })
@@ -103,6 +136,8 @@ const { data, status, refresh } = useAsyncData<{
     params.set('page', String(page.value))
     params.set('limit', String(limit))
     if (selectedApplicationId.value !== ALL_APPLICATIONS) params.set('applicationId', selectedApplicationId.value)
+    if (selectedStageId.value !== ALL_STAGES) params.set('stageId', selectedStageId.value)
+    if (selectedLabelId.value !== ALL_LABELS) params.set('labelId', selectedLabelId.value)
     const q = search.value.trim()
     if (q) params.set('q', q)
     return requestFetch(`/api/submissions?${params.toString()}`)
@@ -191,7 +226,7 @@ const columns = [
       class="mb-6"
     />
 
-    <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start">
+    <div class="flex flex-col sm:flex-row sm:flex-wrap gap-4 mb-6 items-start">
       <UFormField
         label="Admission cycle"
         class="w-full sm:w-72"
@@ -211,6 +246,29 @@ const columns = [
           v-model="selectedApplicationId"
           :items="applicationItems"
           placeholder="Filter by application"
+        />
+      </UFormField>
+
+      <UFormField
+        label="Stage"
+        class="w-full sm:w-64"
+      >
+        <USelect
+          v-model="selectedStageId"
+          :items="stageSelectItems"
+          :disabled="selectedApplicationId === ALL_APPLICATIONS"
+          placeholder="Filter by stage"
+        />
+      </UFormField>
+
+      <UFormField
+        label="Label"
+        class="w-full sm:w-64"
+      >
+        <USelect
+          v-model="selectedLabelId"
+          :items="labelSelectItems"
+          placeholder="Filter by label"
         />
       </UFormField>
 

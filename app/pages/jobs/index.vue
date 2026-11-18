@@ -49,7 +49,7 @@ interface Job {
 const toast = useToast()
 const { data: cycles } = await useFetch<Cycle[]>('/api/cycles')
 const selectedCycleId = ref('')
-const selectedApplicationId = ref('')
+const selectedApplicationId = ref('entire-cycle')
 const refreshDryRun = ref(false)
 const refreshBatchSize = ref(250)
 const cycleItems = computed<SelectItem[]>(() =>
@@ -64,12 +64,12 @@ watchEffect(() => {
 const applicationsUrl = computed(() => selectedCycleId.value ? `/api/applications?cycleId=${selectedCycleId.value}` : '/api/applications?cycleId=none')
 const { data: applications } = useFetch<Application[]>(applicationsUrl)
 const applicationItems = computed<SelectItem[]>(() => [
-  { label: 'Entire cycle', value: '' },
+  { label: 'Entire cycle', value: 'entire-cycle' },
   ...(applications.value || []).map(application => ({ label: application.name, value: application._id }))
 ])
 
 watch(selectedCycleId, () => {
-  selectedApplicationId.value = ''
+  selectedApplicationId.value = 'entire-cycle'
 })
 
 const jobsUrl = computed(() => `/api/jobs?cycleId=${selectedCycleId.value}`)
@@ -315,7 +315,7 @@ watch(() => route.query.jobId, async (id) => {
           :loading="starting"
           :disabled="!selectedCycleId"
           @click="runJob('refresh_review_completion', {
-            applicationId: selectedApplicationId || undefined,
+            applicationId: selectedApplicationId === 'entire-cycle' ? undefined : selectedApplicationId,
             batchSize: refreshBatchSize,
             dryRun: refreshDryRun
           })"
@@ -327,7 +327,7 @@ watch(() => route.query.jobId, async (id) => {
           :loading="starting"
           :disabled="!selectedCycleId"
           @click="runJob('gpa_status_label_sync', {
-            applicationId: selectedApplicationId || undefined,
+            applicationId: selectedApplicationId === 'entire-cycle' ? undefined : selectedApplicationId,
             dryRun: refreshDryRun
           })"
         />

@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   await connectDb()
   await requireAuth(event)
 
-  const { cycleId, applicationId, q, page = '1', limit = '25' } = getQuery(event) as Record<string, string>
+  const { cycleId, applicationId, stageId, labelId, q, page = '1', limit = '25' } = getQuery(event) as Record<string, string>
 
   if (!cycleId) {
     throw createError({ statusCode: 400, statusMessage: 'cycleId is required' })
@@ -14,6 +14,12 @@ export default defineEventHandler(async (event) => {
   const filter: Record<string, unknown> = { cycleId }
   if (applicationId) {
     filter.applicationId = applicationId
+  }
+  if (stageId) {
+    filter.currentStageId = stageId
+  }
+  if (labelId) {
+    filter.labelIds = labelId
   }
   if (q?.trim()) {
     filter.$or = [
