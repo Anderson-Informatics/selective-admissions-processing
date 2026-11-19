@@ -8,6 +8,13 @@ export function normalizeOptInSchool(value: unknown): string {
   return String(value ?? '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim() || 'Unknown School'
 }
 
+function formatDob(value: unknown): Date | string {
+  if (value == null || value === '') return ''
+  const date = value instanceof Date ? value : new Date(String(value))
+  if (Number.isNaN(date.getTime())) return ''
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
+
 export async function buildOptInSchoolExport(submissions: OptInExportSubmission[]) {
   const schools = new Map<string, OptInExportSubmission[]>()
   for (const submission of submissions) {
@@ -32,7 +39,8 @@ export async function buildOptInSchoolExport(submissions: OptInExportSubmission[
       const fields = student.mappedFields
       const first = String(fields.FirstName ?? '')
       const last = String(fields.LastName ?? '')
-      const row = sheet.addRow([student.submissionIdInt, `${first} ${last}`.trim(), first, last, String(fields.DOB ?? ''), '', '', ''])
+      const row = sheet.addRow([student.submissionIdInt, `${first} ${last}`.trim(), first, last, formatDob(fields.DOB), '', '', ''])
+      row.getCell(5).numFmt = 'mm/dd/yyyy'
       row.getCell(6).dataValidation = {
         type: 'list', allowBlank: true, formulae: ['"Yes,No"'],
         showErrorMessage: true, errorStyle: 'stop', errorTitle: 'Choose Yes or No',

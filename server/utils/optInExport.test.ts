@@ -27,10 +27,13 @@ describe('Opt-In school exports', () => {
     expect(parsed.rows).toHaveLength(2)
     expect(parsed.rows[0]).toMatchObject({ submissionIdInt: 101, firstName: 'Jamie', lastName: 'Rivera', enrolledMinTerms: '' })
     expect(parsed.rows[0]?.cumulativeGpa).toBeUndefined()
-    expect(parsed.rows[0]?.dob?.toISOString()).toBe('2012-04-03T00:00:00.000Z')
+    expect(parsed.rows[0]?.dob).toEqual(new Date(2012, 3, 3))
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(content as never)
     const sheet = workbook.worksheets[0]!
+    expect(sheet.getCell('E4').value).toEqual(new Date('2012-04-03T00:00:00.000Z'))
+    expect(sheet.getCell('E4').numFmt).toBe('mm/dd/yyyy')
+    expect(sheet.getCell('E5').value).toBe('')
     for (const row of [4, 5]) {
       expect(sheet.getCell(`F${row}`).dataValidation).toMatchObject({
         type: 'list', formulae: ['"Yes,No"'], allowBlank: true, showErrorMessage: true, errorStyle: 'stop'
