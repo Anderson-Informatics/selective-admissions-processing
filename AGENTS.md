@@ -49,6 +49,8 @@ Copy `.env.example` to `.env` and fill in values. Runtime config keys must be pr
 - Exam scheduling readiness: IEP/504-labeled students with a required Completion stage but no completed Completion review form remain unassigned and block finalization in the API and worker. Ledger `complete` is not form completion. For eligible students, Red requires a completed Completion form answering `CompleteIEP504 = No` and no completed actual IEP/504 Review; otherwise missing actual reviews go white with a non-blocking before-testing flag. ReviewStage identities are application-specific. Worker preflight checks the full session plus queued members, not just assigned students.
 - Vitest cannot resolve the `~~` alias: every `~~/…` import in tested modules must be mocked, or use relative imports in files under test.
 
+- Opt-In school exports (`GET /api/gpa/optin/export?cycleId=…`) are cycle-wide, label-based, exclude withdrawn submissions, and must complete disclosure auditing before returning a ZIP. `optInExport.ts` uses ExcelJS for Yes/No list validation (the existing SheetJS importer does not write it) and fflate for ZIP packaging. Keep generated headers compatible with `parseOptInXlsx`; numeric `submissionIdInt` is required for every exported row.
+
 ## Workflow
 - Do not start development on the next feature unless explicit permission is given.
 - Before implementing any code, provide an implementation plan for review and wait for approval.

@@ -154,6 +154,27 @@ const { data, status, refresh } = useAsyncData<{
 )
 
 const totalPages = computed(() => Math.ceil((data.value?.total || 0) / limit))
+const exportingSchools = ref(false)
+const exportToast = useToast()
+
+async function exportSchoolFiles() {
+  exportingSchools.value = true
+  try {
+    const content = await $fetch<Blob>('/api/gpa/optin/export', {
+      query: { cycleId: selectedCycleId.value }, responseType: 'blob'
+    })
+    const url = URL.createObjectURL(content)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'opt-in-school-files.zip'
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch {
+    exportToast.add({ title: 'School export failed', description: 'Check that OPT IN metadata and numeric submission IDs are available for this cycle, then try again.', color: 'error' })
+  } finally {
+    exportingSchools.value = false
+  }
+}
 
 interface ImportSummary {
   status: string
@@ -430,7 +451,16 @@ function formatDate(value?: string) {
         />
       </UFormField>
 
-      <div class="flex items-end">
+      <div class="flex flex-wrap items-end gap-2">
+        <UButton
+          icon="i-lucide-download"
+          variant="outline"
+          :disabled="!selectedCycleId"
+          :loading="exportingSchools"
+          @click="exportSchoolFiles"
+        >
+          Export Opt-In school files
+        </UButton>
         <UButton
           icon="i-lucide-upload"
           :disabled="!selectedCycleId"
