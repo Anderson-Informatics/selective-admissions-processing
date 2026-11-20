@@ -508,6 +508,20 @@ export async function fetchSubmissionEntries(
   return items as SubmissionEntrySummary[]
 }
 
+export async function fetchEntryEditingMetadata(
+  entryId: string,
+  clientConfig?: SubmittableClientConfig
+): Promise<{ entryId: string, formId?: string, submissionId?: string, status?: string }> {
+  const data = await submittableRequest<unknown>(`/entries/${encodeURIComponent(entryId)}`, {}, clientConfig)
+  const entry = (data as { entry?: Record<string, unknown> })?.entry ?? data as Record<string, unknown>
+  return {
+    entryId: String(entry.entryId ?? ''),
+    formId: entry.formId as string | undefined,
+    submissionId: entry.submissionId as string | undefined,
+    status: entry.status as string | undefined
+  }
+}
+
 export async function fetchEntry(
   entryId: string,
   clientConfig?: SubmittableClientConfig

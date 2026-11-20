@@ -6,6 +6,7 @@ import { SubmissionModel, type Submission } from '../models/Submission'
 import { getCycleEntryContext } from './mappingStatus'
 import { convertSubmissionIdsToInts, fetchEntriesForForm, fetchSubmissionsForProject, fetchV3SubmissionInts, type SubmittableClientConfig } from './submittable'
 import { mapWithConcurrency } from './concurrency'
+import { editingDate, editingState } from './submissionEditing'
 
 type ProgressFn = (update: Partial<JobProgress>) => Promise<void>
 
@@ -101,6 +102,7 @@ export async function extractFormSubmissions(
       submissionApplicationMap.set(entry.submissionId, applicationId)
       encounteredProjectIds.add(projectId)
 
+      const openedForEditingAt = editingDate(entry.openedForEditingAt)
       formEntryOps.push({
         updateOne: {
           filter: { entryId: entry.entryId },
@@ -118,11 +120,14 @@ export async function extractFormSubmissions(
               createdBy: entry.createdBy,
               createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
               entryVersionId: entry.entryVersionId,
-              openedForEditingAt: entry.openedForEditingAt ? new Date(entry.openedForEditingAt) : undefined,
+              ...(openedForEditingAt ? { openedForEditingAt } : {}),
+              editingState: editingState(entry.status),
+              editingCheckedAt: new Date(),
               fieldData: entry.fieldData || [],
               mappedData: {},
               isMapped: false
-            }
+            },
+            ...(!openedForEditingAt ? { $unset: { openedForEditingAt: 1 } } : {})
           },
           upsert: true,
           overwriteImmutable: true

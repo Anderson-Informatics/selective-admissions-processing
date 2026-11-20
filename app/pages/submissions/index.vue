@@ -59,9 +59,11 @@ const { data: applications } = useAsyncData<Application[]>(
     if (!selectedCycleId.value) return Promise.resolve([])
     return requestFetch<Application[]>(`/api/applications?cycleId=${selectedCycleId.value}`)
   },
-  { default: () => [] }
+  { default: () => [], watch: [selectedCycleId] }
 )
 
+const activeTab = ref('all')
+const queueSearch = ref('')
 const ALL_APPLICATIONS = '__all__'
 const ALL_STAGES = '__all__'
 const ALL_LABELS = '__all__'
@@ -149,6 +151,7 @@ const { data, status, refresh } = useAsyncData<{
 )
 
 function doSearch() {
+  queueSearch.value = search.value.trim()
   page.value = 1
   refresh()
 }
@@ -226,6 +229,13 @@ const columns = [
       class="mb-6"
     />
 
+    <UTabs
+      v-model="activeTab"
+      :items="[{ label: 'All submissions', value: 'all' }, { label: 'Open for editing', value: 'editing' }]"
+      :content="false"
+      class="mb-6"
+    />
+
     <div class="flex flex-col sm:flex-row sm:flex-wrap gap-4 mb-6 items-start">
       <UFormField
         label="Admission cycle"
@@ -294,94 +304,105 @@ const columns = [
       </UFormField>
     </div>
 
-    <p class="text-sm text-muted mb-2">
-      Showing {{ data?.submissions.length || 0 }} of {{ data?.total || 0 }} submissions
-    </p>
+    <SubmissionEditingQueue
+      v-if="activeTab === 'editing'"
+      :cycle-id="selectedCycleId"
+      :application-id="selectedApplicationId"
+      :stage-id="selectedStageId"
+      :label-id="selectedLabelId"
+      :search="queueSearch"
+    />
 
-    <UTable
-      v-model:expanded="expanded"
-      :data="data?.submissions || []"
-      :columns="columns"
-      :loading="status === 'pending'"
-      :on-select="(_, row) => openSubmission(row)"
-      :get-row-id="(row: Submission) => row.submissionId"
-      empty="No submissions found. Extract data from the Jobs page first."
-      class="border rounded-lg mb-4"
-    >
-      <template #expand-cell="{ row }">
+    <template v-else>
+      <p class="text-sm text-muted mb-2">
+        Showing {{ data?.submissions.length || 0 }} of {{ data?.total || 0 }} submissions
+      </p>
+
+      <UTable
+        v-model:expanded="expanded"
+        :data="data?.submissions || []"
+        :columns="columns"
+        :loading="status === 'pending'"
+        :on-select="(_, row) => openSubmission(row)"
+        :get-row-id="(row: Submission) => row.submissionId"
+        empty="No submissions found. Extract data from the Jobs page first."
+        class="border rounded-lg mb-4"
+      >
+        <template #expand-cell="{ row }">
+          <UButton
+            variant="ghost"
+            color="neutral"
+            size="xs"
+            :icon="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            @click="row.toggleExpanded()"
+          />
+        </template>
+
+        <template #fullName-cell="{ row }">
+          {{ row.original.mappedFields.FullName || '-' }}
+        </template>
+
+        <template #firstName-cell="{ row }">
+          {{ row.original.mappedFields.FirstName || '-' }}
+        </template>
+
+        <template #lastName-cell="{ row }">
+          {{ row.original.mappedFields.LastName || '-' }}
+        </template>
+
+        <template #currentStageName-cell="{ row }">
+          {{ row.original.currentStageName || '-' }}
+        </template>
+
+        <template #status-cell="{ row }">
+          {{ row.original.status }}
+        </template>
+
+        <template #completed-cell="{ row }">
+          {{ row.original.completedAt ? new Date(row.original.completedAt).toLocaleDateString() : '-' }}
+        </template>
+
+        <template #entries-cell="{ row }">
+          {{ row.original.entryIds?.length || 0 }}
+        </template>
+
+        <template #reviews-cell="{ row }">
+          {{ row.original.completedReviewCount || 0 }}
+        </template>
+
+        <template #expanded="{ row }">
+          <SubmissionReviews
+            :cycle-id="selectedCycleId"
+            :submission-id="row.original.submissionId"
+          />
+        </template>
+      </UTable>
+
+      <div
+        v-if="data?.submissions.length"
+        class="flex items-center justify-between"
+      >
         <UButton
-          variant="ghost"
           color="neutral"
-          size="xs"
-          :icon="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          @click="row.toggleExpanded()"
-        />
-      </template>
-
-      <template #fullName-cell="{ row }">
-        {{ row.original.mappedFields.FullName || '-' }}
-      </template>
-
-      <template #firstName-cell="{ row }">
-        {{ row.original.mappedFields.FirstName || '-' }}
-      </template>
-
-      <template #lastName-cell="{ row }">
-        {{ row.original.mappedFields.LastName || '-' }}
-      </template>
-
-      <template #currentStageName-cell="{ row }">
-        {{ row.original.currentStageName || '-' }}
-      </template>
-
-      <template #status-cell="{ row }">
-        {{ row.original.status }}
-      </template>
-
-      <template #completed-cell="{ row }">
-        {{ row.original.completedAt ? new Date(row.original.completedAt).toLocaleDateString() : '-' }}
-      </template>
-
-      <template #entries-cell="{ row }">
-        {{ row.original.entryIds?.length || 0 }}
-      </template>
-
-      <template #reviews-cell="{ row }">
-        {{ row.original.completedReviewCount || 0 }}
-      </template>
-
-      <template #expanded="{ row }">
-        <SubmissionReviews
-          :cycle-id="selectedCycleId"
-          :submission-id="row.original.submissionId"
-        />
-      </template>
-    </UTable>
-
-    <div
-      v-if="data?.submissions.length"
-      class="flex items-center justify-between"
-    >
-      <UButton
-        color="neutral"
-        variant="outline"
-        :disabled="page <= 1"
-        @click="page--"
-      >
-        Previous
-      </UButton>
-      <span class="text-sm text-muted">
-        Page {{ data.page }} of {{ totalPages }}
-      </span>
-      <UButton
-        color="neutral"
-        variant="outline"
-        :disabled="page >= totalPages"
-        @click="page++"
-      >
-        Next
-      </UButton>
-    </div>
+          variant="outline"
+          :disabled="page <= 1"
+          @click="page--"
+        >
+          Previous
+        </UButton>
+        <span class="text-sm text-muted">
+          Page {{ data.page }} of {{ totalPages }}
+        </span>
+        <UButton
+          color="neutral"
+          variant="outline"
+          :disabled="page >= totalPages"
+          @click="page++"
+        >
+          Next
+        </UButton>
+      </div>
+    </template>
 
     <UModal
       v-model:open="modalOpen"

@@ -39,7 +39,7 @@ describe('submission extraction', () => {
     expect(getCycleEntryContext).toHaveBeenCalledWith('cycle-1')
     expect(FormEntryModel.bulkWrite).toHaveBeenCalledWith([expect.objectContaining({ updateOne: expect.objectContaining({
       filter: { entryId: 'entry-1' }, upsert: true,
-      update: { $set: expect.objectContaining({ cycleId: 'cycle-1', applicationId: 'app-1', isMapped: false, mappedData: {} }) }
+      update: { $set: expect.objectContaining({ cycleId: 'cycle-1', applicationId: 'app-1', isMapped: false, mappedData: {}, editingState: 'closed', editingCheckedAt: expect.any(Date) }), $unset: { openedForEditingAt: 1 } }
     }) })])
     expect(SubmissionModel.bulkWrite).toHaveBeenCalledWith([{ updateOne: {
       filter: { submissionId: 'sub-1' }, update: { $set: { currentStageId: 'stage-1', currentStageName: 'Review', status: 'active', labelIds: ['label-1'] } }
@@ -70,6 +70,30 @@ describe('submission extraction', () => {
     const operation = calls[0]![0][0] as { updateOne: { update: { $set: Record<string, unknown> } } }
     expect(operation.updateOne.update.$set).not.toHaveProperty('hsptResultId')
     expect(operation.updateOne.update.$set).not.toHaveProperty('gpaStatus')
+  })
+
+  it.each([
+    ['editable', '2026-11-01T12:00:00Z', 'open'],
+    ['editable', '2026-11-18T12:00:00Z', 'open'],
+    ['complete', undefined, 'closed'],
+    ['complete', '2026-11-01T12:00:00Z', 'closed'],
+    ['unexpected', undefined, 'unknown'],
+    ['editable', 'invalid', 'open']
+  ])('persists %s metadata without inferring state from %s', async (status, openedForEditingAt, state) => {
+    vi.mocked(fetchEntriesForForm).mockImplementation(async (_formId, onPage) => {
+      await onPage?.([{ ...initial, entry: { ...initial.entry, status, openedForEditingAt } }] as never, 1)
+      return []
+    })
+    await extractFormSubmissions('cycle-1', 'form-1')
+    const operation = vi.mocked(FormEntryModel.bulkWrite).mock.calls[0]![0][0] as { updateOne: { update: { $set: Record<string, unknown>, $unset?: Record<string, unknown> } } }
+    expect(operation.updateOne.update.$set).toMatchObject({ editingState: state, editingCheckedAt: expect.any(Date) })
+    if (openedForEditingAt && openedForEditingAt !== 'invalid') {
+      expect(operation.updateOne.update.$set.openedForEditingAt).toEqual(new Date(openedForEditingAt))
+      expect(operation.updateOne.update.$unset).toBeUndefined()
+    } else {
+      expect(operation.updateOne.update.$unset).toEqual({ openedForEditingAt: 1 })
+      expect(operation.updateOne.update.$set).not.toHaveProperty('openedForEditingAt')
+    }
   })
 
   it('propagates extraction write failures before stage refresh', async () => {

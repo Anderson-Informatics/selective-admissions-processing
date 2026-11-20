@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { addSubmissionLabel, addSubmissionLabelBulk, fetchSubmission, fetchSubmissionsForProject, removeSubmissionLabel, submittableRequest } from './submittable'
+import { addSubmissionLabel, addSubmissionLabelBulk, fetchSubmission, fetchSubmissionsForProject, fetchEntryEditingMetadata, removeSubmissionLabel, submittableRequest } from './submittable'
 
 vi.mock('./submittableRateLimit', () => ({
   waitForSubmittableRequestSlot: vi.fn(async () => {})
@@ -46,6 +46,14 @@ describe('submittableRequest rate-limit handling', () => {
     await vi.runAllTimersAsync()
     await assertion
     expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+})
+
+describe('entry editing metadata', () => {
+  it.each(['editable', 'complete'])('reads the verified v4 envelope for %s entries without exposing answers', async (status) => {
+    const entry = { entryId: 'entry', submissionId: 'submission', formId: 'form', status, fieldData: [{ value: 'private answer' }] }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ formType: 'initial', entry }))))
+    await expect(fetchEntryEditingMetadata('entry', { apiKey: 'Basic test-token', baseUrl: 'https://example.test/v4' })).resolves.toEqual({ entryId: 'entry', submissionId: 'submission', formId: 'form', status })
   })
 })
 

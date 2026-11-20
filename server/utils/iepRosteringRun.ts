@@ -23,7 +23,12 @@ export async function loadIepRoster(cycleId: string) {
     throw createError({ statusCode: 409, statusMessage: 'Correct the test-day label pattern in Exam Scheduling before creating rosters.' })
   }
   const applications = (await ApplicationModel.find({ cycleId }).select('name initialFormId').lean())
-    .filter(application => ['9th grade', 'current hs'].includes(application.name.trim().replace(/\s+/g, ' ').toLowerCase()))
+    .filter((application) => {
+      const name = application.name.trim().replace(/\s+/g, ' ').toLowerCase()
+      return ['9th grade', 'current hs'].includes(name)
+        || /^9th grade exam hs application\s*-\s*fall(?: \d{4})?$/.test(name)
+        || /^exam high school application for current high school students(?: \d{4})?$/.test(name)
+    })
   const applicationIds = applications.map(application => String(application._id))
   if (!applicationIds.length) return { sessions: [], rows: [], diagnostics: ['No 9th Grade or Current HS applications found in this cycle.'], generatedAt: new Date().toISOString() }
   const [submissions, mappings, stages] = await Promise.all([

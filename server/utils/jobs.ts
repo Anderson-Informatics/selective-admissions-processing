@@ -35,7 +35,8 @@ export const JOB_TYPES: { value: JobType, label: string }[] = [
   { value: 'essay_update_scoring', label: 'Essay — Update Scoring' },
   { value: 'essay_finish_scoring', label: 'Essay — Finish Scoring' },
   { value: 'registration_sync', label: 'Registration sync' },
-  { value: 'exam_schedule_finalize', label: 'Exam schedule — finalize & send' }
+  { value: 'exam_schedule_finalize', label: 'Exam schedule — finalize & send' },
+  { value: 'editing_reminder_send', label: 'Editing follow-up — send reminders' }
 ]
 
 interface HandlerResult {
@@ -519,6 +520,12 @@ const jobHandlers: Record<JobType, (job: HydratedDocument<Job>, context: JobCont
       apiKey: registrationApiKey,
       baseUrl: registrationBaseUrl
     })
+    return { result }
+  },
+
+  editing_reminder_send: async (job, { setProgress, submittable }) => {
+    const { runEditingReminders } = await import('./editingReminders')
+    const result = await runEditingReminders(job, { setProgress, submittable })
     return { result }
   },
 

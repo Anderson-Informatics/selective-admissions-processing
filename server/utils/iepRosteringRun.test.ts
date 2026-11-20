@@ -51,6 +51,30 @@ describe('loadIepRoster', () => {
     expect(result.diagnostics.join()).not.toContain('Other Application')
   })
 
+  it.each([2027, 2028])('recognizes the full application titles for %i within the selected cycle', async (year) => {
+    mocks.applications.mockReturnValue(chain([
+      { _id: 'app', name: `9th Grade Exam HS Application - Fall ${year}` },
+      { _id: 'hs', name: `Exam High School Application for Current High School Students ${year}` },
+      { _id: 'other', name: `Other Application ${year}` },
+      { _id: 'similar', name: `9th Grade Exam HS Application - Fall ${year} Other` }
+    ]))
+    const result = await loadIepRoster(`cycle-${year}`)
+    expect(mocks.applications).toHaveBeenCalledWith({ cycleId: `cycle-${year}` })
+    expect(mocks.submissions).toHaveBeenCalledWith(expect.objectContaining({ cycleId: `cycle-${year}`, applicationId: { $in: ['app', 'hs'] } }))
+    expect(mocks.stages).toHaveBeenCalledWith({ cycleId: `cycle-${year}`, applicationId: { $in: ['app', 'hs'] } })
+    expect(result.rows).toHaveLength(1)
+    expect(result.diagnostics.join()).not.toContain('Other Application')
+  })
+
+  it('normalizes case and whitespace and allows titles without a year', async () => {
+    mocks.applications.mockReturnValue(chain([
+      { _id: 'app', name: ' 9TH  Grade Exam HS Application - Fall ' },
+      { _id: 'hs', name: ' Exam High School Application FOR Current High School Students ' }
+    ]))
+    await loadIepRoster('cycle')
+    expect(mocks.submissions).toHaveBeenCalledWith(expect.objectContaining({ applicationId: { $in: ['app', 'hs'] } }))
+  })
+
   it('returns an explanatory empty roster when neither application exists', async () => {
     mocks.applications.mockReturnValue(chain([{ _id: 'other', name: 'Other' }]))
     const result = await loadIepRoster('cycle')

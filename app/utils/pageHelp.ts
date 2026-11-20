@@ -19,7 +19,7 @@ export const pageHelp = {
     purpose: 'Find individual applicants and inspect the information this system has collected about their submissions.',
     tasks: ['Filter by admission cycle and application, or search for a submission.', 'Open a submission to review its details, prepared application fields, labels, and review information.', 'Run an address catchment lookup for a submission to check the school-area information available for it.'],
     gettingStarted: 'Select the cycle and, if needed, an application. Search for the applicant and open their submission to see more detail.',
-    important: ['This page shows the information held by this system; it is not a replacement for the original application in Submittable.', 'An address lookup updates catchment information. It does not make an admissions decision.']
+    important: ['This page shows the information held by this system; it is not a replacement for the original application in Submittable.', 'An address lookup updates catchment information. It does not make an admissions decision.', 'Open for editing lists only initial applications confirmed editable by the latest extraction. Refreshing the list does not fetch live source data; run submission extraction followed by form response mapping to update it and restore prepared applicant fields. Closure removes a row but does not verify requested documents.', 'Reminder messages go to the Submittable submitter, not a mapped email override. Preview and explicitly confirm individual or selected-row bulk sends. Counts cover this feature only; sent does not mean delivered or read. Review uncertain delivery or audit failures before sending again.']
   },
   validation: {
     title: 'Data Validation',

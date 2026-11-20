@@ -14,6 +14,8 @@ export interface FormEntry {
   createdAt?: Date
   entryVersionId?: string
   openedForEditingAt?: Date
+  editingState?: 'open' | 'closed' | 'unknown'
+  editingCheckedAt?: Date
   fieldData: unknown[]
   mappedData: Record<string, unknown>
   isMapped: boolean
@@ -35,12 +37,15 @@ const formEntrySchema = new Schema<FormEntry>({
   createdAt: Date,
   entryVersionId: String,
   openedForEditingAt: Date,
+  editingState: { type: String, enum: ['open', 'closed', 'unknown'], index: true },
+  editingCheckedAt: Date,
   fieldData: { type: [Schema.Types.Mixed], default: [] },
   mappedData: { type: Schema.Types.Mixed, default: {} },
   isMapped: { type: Boolean, default: false }
 }, { timestamps: true })
 
 formEntrySchema.index({ cycleId: 1, applicationId: 1, formId: 1 })
+formEntrySchema.index({ cycleId: 1, submissionId: 1, formId: 1, formType: 1 })
 formEntrySchema.index({ cycleId: 1, createdAt: 1, _id: 1 })
 
 export const FormEntryModel: mongoose.Model<FormEntry> = (mongoose.models.FormEntry as mongoose.Model<FormEntry>) || mongoose.model<FormEntry>('FormEntry', formEntrySchema)
