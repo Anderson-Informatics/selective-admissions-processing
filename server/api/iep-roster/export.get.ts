@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     cycleId: z.string().regex(/^[a-f\d]{24}$/i),
     scope: z.enum(['day', 'all']).default('day'),
     sessionLabelId: z.string().trim().min(1).optional(),
-    format: z.enum(['docx', 'xlsx', 'zip']).default('zip')
+    format: z.enum(['docx', 'grouped-docx', 'xlsx', 'zip']).default('zip')
   }).safeParse(getQuery(event))
   if (!parsed.success) throw createError({ statusCode: 400, statusMessage: 'Invalid roster export parameters.' })
   const { cycleId, scope, sessionLabelId, format } = parsed.data

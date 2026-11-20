@@ -45,11 +45,12 @@ describe('IEP roster endpoints', () => {
     expect(mocks.audit).not.toHaveBeenCalled()
   })
 
-  it('exports only selected rows and records disclosure before attachment headers', async () => {
+  it.each(['docx', 'grouped-docx'])('exports only selected rows as %s and records disclosure before attachment headers', async (format) => {
+    query.format = format
     expect(await download({})).toEqual(Buffer.from('file'))
     expect(mocks.load).toHaveBeenCalledWith(cycleId)
-    expect(mocks.build).toHaveBeenCalledWith([rows[0]], 'docx', false)
-    expect(mocks.audit).toHaveBeenCalledWith({ actor: 'staff@example.com', action: 'pii_export', entityType: 'iep_roster', entityId: cycleId, detail: { sessions: ['day'], format: 'docx', scope: 'day', rows: 1, generatedAt: '2026-11-20T10:00:00Z' } })
+    expect(mocks.build).toHaveBeenCalledWith([rows[0]], format, false)
+    expect(mocks.audit).toHaveBeenCalledWith({ actor: 'staff@example.com', action: 'pii_export', entityType: 'iep_roster', entityId: cycleId, detail: { sessions: ['day'], format, scope: 'day', rows: 1, generatedAt: '2026-11-20T10:00:00Z' } })
     expect(setResponseHeader).toHaveBeenCalledWith({}, 'Content-Disposition', 'attachment; filename*=UTF-8\'\'roster.docx')
   })
 
@@ -61,7 +62,8 @@ describe('IEP roster endpoints', () => {
     await expect(download({})).rejects.toMatchObject({ statusCode: 400 })
   })
 
-  it('returns no attachment if auditing fails', async () => {
+  it.each(['docx', 'grouped-docx'])('returns no %s attachment if auditing fails', async (format) => {
+    query.format = format
     mocks.audit.mockRejectedValue(new Error('Audit unavailable'))
     await expect(download({})).rejects.toThrow('Audit unavailable')
     expect(setResponseHeader).not.toHaveBeenCalledWith({}, 'Content-Type', expect.anything())

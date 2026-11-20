@@ -20,13 +20,13 @@ beforeEach(() => {
   mocks.reviews.mockReturnValue(chain([{ submissionId: 'student', applicationId: 'app', stageId: 'iep-review', status: 'complete', mappedData: { CompleteIEP: 'Yes', Accommodations: 'Extended time' } }]))
   mocks.stages.mockReturnValue(chain([{ applicationId: 'app', stageId: 'iep-review', name: 'IEP Review', formId: 'iep-form' }]))
   mocks.mappings.mockReturnValue(chain(['CompleteIEP', 'Accommodations', 'AccommodationsDescribe'].map(canonicalName => ({ formId: 'iep-form', canonicalName }))))
-  mocks.applications.mockReturnValue(chain([{ _id: 'app', name: 'Application', initialFormId: 'initial' }]))
+  mocks.applications.mockReturnValue(chain([{ _id: 'app', name: '9th Grade', initialFormId: 'initial' }]))
 })
 
 describe('loadIepRoster', () => {
   it('queries cycle-scoped eligible records and resolves stage identities from metadata', async () => {
     const result = await loadIepRoster('cycle')
-    expect(mocks.submissions).toHaveBeenCalledWith({ cycleId: 'cycle', labelIds: { $in: ['iep', 'mll'] }, status: { $not: /^withdrawn$/i } })
+    expect(mocks.submissions).toHaveBeenCalledWith({ cycleId: 'cycle', applicationId: { $in: ['app'] }, labelIds: { $in: ['iep', 'mll'] }, status: { $not: /^withdrawn$/i } })
     expect(mocks.reviews).toHaveBeenCalledWith({ cycleId: 'cycle', submissionId: { $in: ['student'] } })
     expect(result.rows[0]).toMatchObject({ completeDocuments: 'Yes', finalGroup: 'Group D' })
     expect(result.generatedAt).toBeTruthy()
@@ -37,7 +37,27 @@ describe('loadIepRoster', () => {
   it('checks mappings per form rather than accepting another form’s same canonical names', async () => {
     mocks.mappings.mockReturnValue(chain(['CompleteIEP', 'Accommodations', 'AccommodationsDescribe'].map(canonicalName => ({ formId: 'other-form', canonicalName }))))
     const result = await loadIepRoster('cycle')
-    expect(result.diagnostics.some(d => d.includes('Application / IEP Review: missing mappings CompleteIEP'))).toBe(true)
+    expect(result.diagnostics.some(d => d.includes('9th Grade / IEP Review: missing mappings CompleteIEP'))).toBe(true)
+  })
+
+  it('scopes submission and stage queries to only the two named applications', async () => {
+    mocks.applications.mockReturnValue(chain([
+      { _id: 'app', name: '9th Grade' }, { _id: 'hs', name: ' Current HS ' },
+      { _id: 'other', name: 'Other Application' }, { _id: 'similar', name: '9th Grade Other' }
+    ]))
+    const result = await loadIepRoster('cycle')
+    expect(mocks.submissions).toHaveBeenCalledWith(expect.objectContaining({ applicationId: { $in: ['app', 'hs'] } }))
+    expect(mocks.stages).toHaveBeenCalledWith({ cycleId: 'cycle', applicationId: { $in: ['app', 'hs'] } })
+    expect(result.diagnostics.join()).not.toContain('Other Application')
+  })
+
+  it('returns an explanatory empty roster when neither application exists', async () => {
+    mocks.applications.mockReturnValue(chain([{ _id: 'other', name: 'Other' }]))
+    const result = await loadIepRoster('cycle')
+    expect(result).toMatchObject({ rows: [], sessions: [] })
+    expect(result.diagnostics.join()).toContain('9th Grade or Current HS')
+    expect(mocks.submissions).not.toHaveBeenCalled()
+    expect(mocks.reviews).not.toHaveBeenCalled()
   })
 
   it('fails clearly for missing cycles, missing labels and invalid day patterns', async () => {

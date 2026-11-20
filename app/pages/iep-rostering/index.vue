@@ -67,7 +67,7 @@ const columns: TableColumn<IepRosterRow>[] = [
 ]
 const downloading = ref('')
 const toast = useToast()
-async function download(format: 'docx' | 'xlsx' | 'zip', allDays = false) {
+async function download(format: 'docx' | 'grouped-docx' | 'xlsx' | 'zip', allDays = false) {
   const cycleId = selectedCycleId.value
   const sessionLabelId = selectedSessionId.value
   if (!cycleId || (!allDays && !sessionLabelId)) return
@@ -121,7 +121,7 @@ async function download(format: 'docx' | 'xlsx' | 'zip', allDays = false) {
     </PageHeader>
     <UAlert
       title="Current synced data · reporting only"
-      description="Rosters include labeled IEP/504/MLL students even with incomplete reviews or no accommodations required. Downloads regenerate from current synced data; no messages are sent and no scheduling or labels are changed."
+      description="Rosters include labeled IEP/504/MLL students from 9th Grade and Current HS applications only, even with incomplete reviews or no accommodations required. Downloads regenerate from current synced data; no messages are sent and no scheduling or labels are changed."
       color="info"
       variant="subtle"
     />
@@ -143,7 +143,7 @@ async function download(format: 'docx' | 'xlsx' | 'zip', allDays = false) {
         @click="loadRoster"
       />
       <UButton
-        label="All days ZIP"
+        label="Download All Days ZIP"
         :disabled="loading || !roster?.sessions.length || !!downloading"
         :loading="downloading === 'all'"
         @click="download('zip', true)"
@@ -198,13 +198,19 @@ async function download(format: 'docx' | 'xlsx' | 'zip', allDays = false) {
           @click="download('docx')"
         />
         <UButton
+          label="Word Grouped Roster"
+          :disabled="!roster.rows.length || !!downloading"
+          :loading="downloading === 'grouped-docx'"
+          @click="download('grouped-docx')"
+        />
+        <UButton
           label="Excel roster"
           :disabled="!roster.rows.length || !!downloading"
           :loading="downloading === 'xlsx'"
           @click="download('xlsx')"
         />
         <UButton
-          label="Day ZIP"
+          label="Download Selected Day ZIP"
           color="neutral"
           variant="outline"
           :disabled="!roster.rows.length || !!downloading"
@@ -245,6 +251,16 @@ async function download(format: 'docx' | 'xlsx' | 'zip', allDays = false) {
         class="max-h-[65vh]"
         sticky
       >
+        <template #fullName-cell="{ row }">
+          <a
+            :href="`https://dpscd.submittable.com/submissions/${encodeURIComponent(row.original.submissionId)}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-primary hover:underline"
+          >
+            {{ row.original.fullName || 'Name unavailable' }}
+          </a>
+        </template>
         <template #warnings-cell="{ row }">
           <ul class="space-y-1 text-sm">
             <li
@@ -264,7 +280,7 @@ async function download(format: 'docx' | 'xlsx' | 'zip', allDays = false) {
         </template>
       </UTable>
       <p class="text-xs text-muted">
-        Generated {{ new Date(roster.generatedAt).toLocaleString() }}. Word cards are alphabetized, six per page, with names and notices only. Sensitive downloads are disclosure-audited.
+        Generated {{ new Date(roster.generatedAt).toLocaleString() }}. Word cards are alphabetized, six per page, with names and notices only. Grouped rosters list students by subgroup with blank Proctor cells for staff to fill in. ZIPs include both Word formats and the Excel roster. Sensitive downloads are disclosure-audited.
       </p>
     </template>
   </UContainer>

@@ -22,13 +22,16 @@ export async function loadIepRoster(cycleId: string) {
   } catch {
     throw createError({ statusCode: 409, statusMessage: 'Correct the test-day label pattern in Exam Scheduling before creating rosters.' })
   }
-  const [submissions, mappings, stages, applications] = await Promise.all([
-    SubmissionModel.find({ cycleId, labelIds: { $in: specialIds }, status: { $not: /^withdrawn$/i } })
+  const applications = (await ApplicationModel.find({ cycleId }).select('name initialFormId').lean())
+    .filter(application => ['9th grade', 'current hs'].includes(application.name.trim().replace(/\s+/g, ' ').toLowerCase()))
+  const applicationIds = applications.map(application => String(application._id))
+  if (!applicationIds.length) return { sessions: [], rows: [], diagnostics: ['No 9th Grade or Current HS applications found in this cycle.'], generatedAt: new Date().toISOString() }
+  const [submissions, mappings, stages] = await Promise.all([
+    SubmissionModel.find({ cycleId, applicationId: { $in: applicationIds }, labelIds: { $in: specialIds }, status: { $not: /^withdrawn$/i } })
       .select('submissionId submissionIdInt applicationId labelIds status reviewCompletion mappedFields.FullName mappedFields.FirstName mappedFields.LastName mappedFields.IEPor504 mappedFields.IEPorNPSPor504 mappedFields.ParentPhone')
       .lean(),
     FieldMappingModel.find({ cycleId, canonicalName: { $ne: '' } }).select('formId canonicalName').lean(),
-    ReviewStageModel.find({ cycleId }).select('applicationId stageId name formId').lean(),
-    ApplicationModel.find({ cycleId }).select('name initialFormId').lean()
+    ReviewStageModel.find({ cycleId, applicationId: { $in: applicationIds } }).select('applicationId stageId name formId').lean()
   ])
   const ids = submissions.map(submission => submission.submissionId)
   const reviews = await ReviewModel.find({ cycleId, submissionId: { $in: ids } })
