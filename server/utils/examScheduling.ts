@@ -219,6 +219,32 @@ function latestCompletedReview(reviews: ExamReviewInput[]): ExamReviewInput | un
       || new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0]
 }
 
+export function resolveExamReviews(
+  submission: SchedulableSubmission,
+  reviews: ExamReviewInput[],
+  stages: ExamReviewStage[] = []
+) {
+  const applicationStages = stages.filter(stage => stage.applicationId === submission.applicationId)
+  const stageName = (entry: { stageId?: string, name?: string, stageName?: string }) =>
+    applicationStages.find(stage => stage.stageId === entry.stageId)?.name || entry.name || entry.stageName || ''
+  const matches = (review: ExamReviewInput, pattern: RegExp, stageId?: string) => {
+    if (review.applicationId && submission.applicationId && review.applicationId !== submission.applicationId) return false
+    if (stageId && review.stageId) return stageId === review.stageId
+    if (review.stageId && applicationStages.length && !applicationStages.some(stage => stage.stageId === review.stageId)) return false
+    return pattern.test(stageName(review).trim())
+  }
+  const select = (pattern: RegExp) => latestCompletedReview(reviews.filter(review => matches(review, pattern)))
+  return {
+    stageName,
+    matches,
+    completion: select(completionStagePattern),
+    actual: select(actualReviewPattern),
+    iep: select(/^iep\s+review$/i),
+    plan504: select(/^504\s+review$/i),
+    mll: select(mllReviewPattern)
+  }
+}
+
 export interface ExamMemberDetail {
   submissionId: string
   submissionIdInt?: number
@@ -239,20 +265,9 @@ export function assessExamMember(
 ): ExamMemberDetail & { specialGroup: 'RED' | 'IEP504' | 'MLL' | null } {
   const ids = new Set(submission.labelIds || [])
   const hasIep504 = config.iep504LabelIds.some(id => ids.has(id))
-  const applicationStages = stages.filter(stage => stage.applicationId === submission.applicationId)
-  const stageName = (entry: { stageId?: string, name?: string, stageName?: string }) =>
-    applicationStages.find(stage => stage.stageId === entry.stageId)?.name || entry.name || entry.stageName || ''
-  const matches = (review: ExamReviewInput, pattern: RegExp, stageId?: string) => {
-    if (review.applicationId && submission.applicationId && review.applicationId !== submission.applicationId) return false
-    if (stageId && review.stageId) return stageId === review.stageId
-    if (review.stageId && applicationStages.length && !applicationStages.some(stage => stage.stageId === review.stageId)) return false
-    return pattern.test(stageName(review).trim())
-  }
+  const { stageName, matches, completion, actual, mll } = resolveExamReviews(submission, reviews, stages)
   const ledger = submission.reviewCompletion || []
   const requiredCompletion = ledger.filter(entry => entry.required && completionStagePattern.test(stageName(entry).trim()))
-  const completion = latestCompletedReview(reviews.filter(review => matches(review, completionStagePattern)))
-  const actual = latestCompletedReview(reviews.filter(review => matches(review, actualReviewPattern)))
-  const mll = latestCompletedReview(reviews.filter(review => matches(review, mllReviewPattern)))
   const completionBlocked = hasIep504 && requiredCompletion.some(entry =>
     !latestCompletedReview(reviews.filter(review => matches(review, completionStagePattern, entry.stageId))))
   const missingRequiredReviews = hasIep504

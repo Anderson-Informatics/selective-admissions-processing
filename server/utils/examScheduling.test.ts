@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assignGroups,
   assessExamMember,
+  resolveExamReviews,
   classifySpecialGroup,
   detectSessions,
   examSessionForSubmission,
@@ -53,6 +54,33 @@ const sub = (id: string, overrides: Partial<SchedulableSubmission> = {}): Schedu
 })
 
 const completeIepLedger = [{ name: 'IEP Review', required: true, complete: true }]
+
+describe('resolveExamReviews', () => {
+  it('selects completed reviews by application and stage identity, ignoring newer drafts', () => {
+    const submission = sub('s', { applicationId: 'app' })
+    const stages = [{ applicationId: 'app', stageId: 'iep', name: 'IEP Review' }]
+    const completed = { applicationId: 'app', stageId: 'iep', status: 'completed', completedAt: '2026-01-01', mappedData: { CompleteIEP: 'Yes' } }
+    const result = resolveExamReviews(submission, [
+      completed,
+      { applicationId: 'app', stageId: 'iep', status: 'draft', createdAt: '2026-02-01' },
+      { applicationId: 'other', stageId: 'iep', status: 'complete', completedAt: '2026-03-01' },
+      { applicationId: 'app', stageId: 'foreign', stageName: 'IEP Review', status: 'complete', completedAt: '2026-04-01' }
+    ], stages)
+    expect(result.actual).toEqual(completed)
+    expect(result.iep).toEqual(completed)
+    expect(result.plan504).toBeUndefined()
+    expect(result.completion).toBeUndefined()
+  })
+
+  it('keeps individual review types and the latest combined actual assessment', () => {
+    const iep = { stageName: 'IEP Review', status: 'complete', completedAt: '2026-01-01' }
+    const plan504 = { stageName: '504 Review', status: 'complete', completedAt: '2026-02-01' }
+    const completion = { stageName: 'IEP/ 504 Completion', status: 'completed' }
+    const mll = { stageName: 'MLL Review', status: 'complete' }
+    const result = resolveExamReviews(sub('s'), [iep, plan504, completion, mll])
+    expect(result).toMatchObject({ iep, plan504, actual: plan504, completion, mll })
+  })
+})
 
 describe('detectSessions', () => {
   it('counts session labels and skips withdrawn submissions', () => {

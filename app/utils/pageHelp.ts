@@ -168,6 +168,13 @@ export const pageHelp = {
     gettingStarted: 'Select the cycle, confirm the group settings, then choose a test date and run Preview schedule. Send test messages before finalizing.',
     important: ['Applicants with an IEP or 504 label go to the Performing Arts 8:30 a.m. group unless their review says no accommodations are required; an incomplete IEP/504 review sends them to the 00-Red group instead.', 'MLL-labeled applicants go to the Main Entrance 8:30 a.m. group.', 'Submissions already carrying an Exam letter and color label keep their existing group. Overflow beyond all maximums goes to Exam H at 11:20 a.m.', 'Finalizing writes labels in Submittable and sends real messages to applicants. Follow the job on the Jobs page.']
   },
+  iepRostering: {
+    title: 'IEP / 504 / MLL Rostering',
+    purpose: 'Preview test-day accommodation subgroups and download editable student cards and detailed rosters from current synced review data.',
+    tasks: ['Select a cycle and test day to review labeled students.', 'Check missing reviews, mappings, languages, and overlapping accommodation needs.', 'Download six-per-page Word cards or an Excel roster for the selected day.', 'Download all days as a ZIP with one Word document per day and a combined workbook.'],
+    gettingStarted: 'Confirm IEP/504 and MLL labels in Exam Scheduling, refresh synced reviews and mappings, then select a test day here.',
+    important: ['Suggested accommodation subgroups are separate from scheduling arrival groups; generation does not change labels, save room assignments, or send messages.', 'Legacy total subgroup limits are 7 for small-group-less-than-5 and 12 for small-group-less-than-10; staff must review suitability, especially overlapping IEP and language needs.', 'Incomplete reviews and no-accommodations students remain included. Unknown data is not treated as No; reviewed MLL language is used without silently substituting initial-form language.', 'Downloads regenerate from current synced data and are disclosure-audited. Keep these education records secure.']
+  },
   users: {
     title: 'User Management',
     purpose: 'Manage staff access to the EHS Admissions workspace.',
