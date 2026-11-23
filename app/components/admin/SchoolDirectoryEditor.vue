@@ -2,7 +2,7 @@
 interface School { id: string, name: string, aliases: string[], active: boolean }
 interface Representative { userId: string, schoolIds: string[], active: boolean }
 interface Authority { schoolId: string, userId: string, applicationId: string, version: number }
-interface Directory { choiceSuggestions: string[], schools: School[], representatives: Representative[], members: { userId: string, name: string, email?: string }[], authorities: Authority[] }
+interface Directory { choiceSuggestions: string[], schools: School[], representatives: Representative[], members: { userId: string, name: string, title?: string, email?: string }[], authorities: Authority[] }
 const toast = useToast()
 const cycleId = ref('')
 const applicationId = ref('')
@@ -22,7 +22,7 @@ const saving = ref(false)
 const suggestedChoice = ref('')
 const schools = computed(() => (directory.value?.schools || []).map(item => ({ label: `${item.name}${item.active ? '' : ' (inactive)'}`, value: item.id })))
 const members = computed(() => {
-  const entries = new Map((directory.value?.members || []).map(item => [item.userId, { label: `${item.name} — ${item.email || item.userId}`, value: item.userId }]))
+  const entries = new Map((directory.value?.members || []).map(item => [item.userId, { label: [item.name || item.userId, item.title, item.email].filter(Boolean).join(' - '), value: item.userId }]))
   for (const rep of directory.value?.representatives || []) if (!entries.has(rep.userId)) entries.set(rep.userId, { label: `${rep.userId} (metadata missing)`, value: rep.userId })
   return [...entries.values()]
 })

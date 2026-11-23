@@ -1,6 +1,34 @@
-import { describe, expect, it } from 'vitest'
-import { effectiveAuthorities, schoolKey, schoolSchema } from './schoolDirectory'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { effectiveAuthorities, loadSchoolDirectory, schoolKey, schoolSchema } from './schoolDirectory'
+import { SchoolModel } from '../models/School'
+import { SchoolRepresentativeModel } from '../models/SchoolRepresentative'
+import { SchoolAuthorityModel } from '../models/SchoolAuthority'
+import { MetadataModel } from '../models/Metadata'
 import { decisionConfigSchema, rewriteDecisionStageIds } from './decisionConfig'
+
+afterEach(() => vi.restoreAllMocks())
+
+describe('school directory team member names', () => {
+  it('prefers name.full and includes title/email with legacy fallbacks', async () => {
+    const empty = { sort: () => ({ lean: async () => [] }) }
+    vi.spyOn(SchoolModel, 'find').mockReturnValue(empty as never)
+    vi.spyOn(SchoolRepresentativeModel, 'find').mockReturnValue(empty as never)
+    vi.spyOn(SchoolAuthorityModel, 'find').mockReturnValue(empty as never)
+    const select = vi.fn(() => ({ lean: async () => [
+      { externalId: 'u1', name: 'Legacy Name', data: { name: { full: ' Jordan Rivera ' }, title: ' Principal ', email: ' jordan@example.test ' } },
+      { externalId: 'u2', name: 'Legacy Name', data: { name: { full: ' ' }, title: null } },
+      { externalId: 'u3', name: '', data: {} }
+    ] }))
+    vi.spyOn(MetadataModel, 'find').mockReturnValue({ select } as never)
+    const directory = await loadSchoolDirectory('cycle')
+    expect(directory.members[0]).toMatchObject({ userId: 'u1', name: 'Jordan Rivera', title: 'Principal', email: 'jordan@example.test' })
+    expect(directory.members[1]).toMatchObject({ userId: 'u2', name: 'Legacy Name' })
+    expect(directory.members[1]?.title).toBeUndefined()
+    expect(directory.members[2]?.name).toBe('u3')
+    expect(select).toHaveBeenCalledWith(expect.stringContaining('data.name.full'))
+    expect(select).toHaveBeenCalledWith(expect.stringContaining('data.title'))
+  })
+})
 
 const authority = (cycleId: string, applicationId: string, userId: string) => ({ cycleId, applicationId, schoolId: 'school', userId, version: 1 })
 describe('school directory configuration', () => {
