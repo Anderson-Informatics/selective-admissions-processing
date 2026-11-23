@@ -1,4 +1,6 @@
 import mongoose, { Schema } from 'mongoose'
+import type { DecisionResult } from '../utils/decisionScoring'
+import type { ReviewCompletionResult, RoutingDecision } from '../utils/routingEvaluator'
 
 export interface ScoreRecord {
   cycleId: string
@@ -30,8 +32,16 @@ export interface ScoreRecord {
   dpscdBonus: number
   marygroveBonus: number
   marygroveCatchment?: string
-  totalAppScore: number
-  totalMarygroveScore: number
+  totalAppScore: number | null
+  totalMarygroveScore: number | null
+  placementPathway?: 'score' | 'decision' | null
+  supportingComponents?: string[]
+  inputsComplete?: boolean
+  missingInputs?: string[]
+  decision?: DecisionResult | null
+  decisionConfigSnapshot?: Record<string, unknown> | null
+  configFingerprint?: string | null
+  routingEvaluation?: { completion: ReviewCompletionResult['reviewCompletion'], recommendation: RoutingDecision } | null
   percentiles?: Record<string, number | null>
   compiledAt?: Date
   compileJobId?: string
@@ -72,6 +82,14 @@ const scoreRecordSchema = new Schema<ScoreRecord>({
   dpscdBonus: { type: Number, default: 0 },
   marygroveBonus: { type: Number, default: 0 },
   marygroveCatchment: String,
+  placementPathway: { type: String, default: null },
+  supportingComponents: [String],
+  inputsComplete: Boolean,
+  missingInputs: [String],
+  decision: Schema.Types.Mixed,
+  decisionConfigSnapshot: Schema.Types.Mixed,
+  configFingerprint: String,
+  routingEvaluation: Schema.Types.Mixed,
   totalAppScore: { type: Number, default: 0 },
   totalMarygroveScore: { type: Number, default: 0 },
   percentiles: { type: Schema.Types.Mixed },

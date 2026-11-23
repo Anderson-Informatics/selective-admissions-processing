@@ -21,6 +21,15 @@ interface PendingInvite {
 
 const toast = useToast()
 const auth = useAuth()
+const activeTab = ref('users')
+const schoolTabOpened = ref(false)
+const tabItems = [
+  { label: 'Users', value: 'users' },
+  { label: 'Schools & Representatives', value: 'schools' }
+]
+watch(activeTab, (tab) => {
+  if (tab === 'schools') schoolTabOpened.value = true
+})
 
 const { data: usersData, refresh: refreshUsers, status } = await useFetch<{ users: AdminUser[] }>('/api/admin/users')
 const { data: invitesData, refresh: refreshInvites } = await useFetch<{ invites: PendingInvite[] }>('/api/admin/users/invites')
@@ -146,200 +155,216 @@ const inviteColumns: TableColumn<PendingInvite>[] = [
       help="users"
     />
 
-    <UCard>
-      <template #header>
-        <h2 class="font-semibold">
-          Invite a user
-        </h2>
-      </template>
+    <UTabs
+      v-model="activeTab"
+      :items="tabItems"
+      :content="false"
+    />
 
-      <form
-        class="flex flex-wrap items-end gap-3"
-        @submit.prevent="sendInvite"
-      >
-        <UFormField
-          label="Email"
-          class="grow min-w-56"
+    <AdminSchoolDirectoryEditor
+      v-if="schoolTabOpened"
+      v-show="activeTab === 'schools'"
+    />
+
+    <div
+      v-show="activeTab === 'users'"
+      class="space-y-8"
+    >
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
+            Invite a site user
+          </h2>
+        </template>
+
+        <form
+          class="flex flex-wrap items-end gap-3"
+          @submit.prevent="sendInvite"
         >
-          <UInput
-            v-model="inviteEmail"
-            type="email"
-            placeholder="user@example.com"
-            required
-          />
-        </UFormField>
-        <UFormField label="Role">
-          <USelect
-            v-model="inviteRole"
-            :items="[
-              { label: 'Central office admin', value: 'central_admin' },
-              { label: 'Site admin', value: 'site_admin' }
-            ]"
-            class="w-52"
-          />
-        </UFormField>
-        <UButton
-          type="submit"
-          icon="i-lucide-plus"
-          label="Create invite link"
-          :loading="inviteLoading"
-        />
-      </form>
-
-      <div
-        v-if="generatedLink"
-        class="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2"
-      >
-        <p class="text-sm">
-          Invitation created. Send this link to the user — it is only shown here:
-        </p>
-        <div class="flex gap-2">
-          <UInput
-            :model-value="generatedLink"
-            readonly
-            class="grow font-mono text-xs"
-          />
+          <UFormField
+            label="Email"
+            class="grow min-w-56"
+          >
+            <UInput
+              v-model="inviteEmail"
+              type="email"
+              placeholder="user@example.com"
+              required
+            />
+          </UFormField>
+          <UFormField label="Role">
+            <USelect
+              v-model="inviteRole"
+              :items="[
+                { label: 'Central office admin', value: 'central_admin' },
+                { label: 'Site admin', value: 'site_admin' }
+              ]"
+              class="w-52"
+            />
+          </UFormField>
           <UButton
-            icon="i-lucide-copy"
-            color="neutral"
-            variant="outline"
-            label="Copy"
-            @click="copyLink(generatedLink)"
+            type="submit"
+            icon="i-lucide-plus"
+            label="Create invite link"
+            :loading="inviteLoading"
           />
-        </div>
-      </div>
-    </UCard>
+        </form>
 
-    <UCard>
-      <template #header>
-        <h2 class="font-semibold">
-          Users
-        </h2>
-      </template>
-
-      <UTable
-        :data="users"
-        :columns="columns"
-        :loading="status === 'pending'"
-      >
-        <template #role-cell="{ row }">
-          <UBadge
-            :label="row.original.role === 'site_admin' ? 'Site admin' : 'Central office admin'"
-            :color="row.original.role === 'site_admin' ? 'primary' : 'neutral'"
-            variant="subtle"
-          />
-        </template>
-
-        <template #status-cell="{ row }">
-          <UBadge
-            :label="row.original.status"
-            :color="row.original.status === 'active' ? 'success' : 'error'"
-            variant="subtle"
-          />
-        </template>
-
-        <template #flags-cell="{ row }">
-          <UBadge
-            v-if="row.original.passwordResetRequestedAt"
-            label="Reset requested"
-            color="warning"
-            variant="subtle"
-          />
-        </template>
-
-        <template #lastLoginAt-cell="{ row }">
-          {{ formatDate(row.original.lastLoginAt) }}
-        </template>
-
-        <template #actions-cell="{ row }">
-          <div class="flex gap-1">
-            <UTooltip text="Generate password reset link">
-              <UButton
-                icon="i-lucide-key-round"
-                color="neutral"
-                variant="ghost"
-                :loading="resetLoading === row.original._id"
-                @click="generateResetLink(row.original)"
-              />
-            </UTooltip>
-            <UTooltip text="Toggle role">
-              <UButton
-                icon="i-lucide-shield"
-                color="neutral"
-                variant="ghost"
-                :disabled="row.original.email === auth.user.value?.email"
-                @click="toggleRole(row.original)"
-              />
-            </UTooltip>
-            <UTooltip :text="row.original.status === 'active' ? 'Disable account' : 'Enable account'">
-              <UButton
-                :icon="row.original.status === 'active' ? 'i-lucide-ban' : 'i-lucide-check'"
-                :color="row.original.status === 'active' ? 'error' : 'success'"
-                variant="ghost"
-                @click="toggleStatus(row.original)"
-              />
-            </UTooltip>
+        <div
+          v-if="generatedLink"
+          class="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2"
+        >
+          <p class="text-sm">
+            Invitation created. Send this link to the user — it is only shown here:
+          </p>
+          <div class="flex gap-2">
+            <UInput
+              :model-value="generatedLink"
+              readonly
+              class="grow font-mono text-xs"
+            />
+            <UButton
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="outline"
+              label="Copy"
+              @click="copyLink(generatedLink)"
+            />
           </div>
-        </template>
-      </UTable>
-
-      <div
-        v-if="resetLink && resetLinkFor"
-        class="mt-4 rounded-md border border-warning/30 bg-warning/5 p-3 space-y-2"
-      >
-        <p class="text-sm">
-          Reset link for <strong>{{ resetLinkFor.email }}</strong> — send it manually:
-        </p>
-        <div class="flex gap-2">
-          <UInput
-            :model-value="resetLink"
-            readonly
-            class="grow font-mono text-xs"
-          />
-          <UButton
-            icon="i-lucide-copy"
-            color="neutral"
-            variant="outline"
-            label="Copy"
-            @click="copyLink(resetLink)"
-          />
         </div>
-      </div>
-    </UCard>
+      </UCard>
 
-    <UCard>
-      <template #header>
-        <h2 class="font-semibold">
-          Pending invitations
-        </h2>
-      </template>
-
-      <UTable
-        :data="invites"
-        :columns="inviteColumns"
-      >
-        <template #role-cell="{ row }">
-          <UBadge
-            :label="row.original.role === 'site_admin' ? 'Site admin' : 'Central office admin'"
-            :color="row.original.role === 'site_admin' ? 'primary' : 'neutral'"
-            variant="subtle"
-          />
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
+            Users
+          </h2>
         </template>
 
-        <template #expiresAt-cell="{ row }">
-          {{ formatDate(row.original.expiresAt) }}
+        <UTable
+          :data="users"
+          :columns="columns"
+          :loading="status === 'pending'"
+        >
+          <template #role-cell="{ row }">
+            <UBadge
+              :label="row.original.role === 'site_admin' ? 'Site admin' : 'Central office admin'"
+              :color="row.original.role === 'site_admin' ? 'primary' : 'neutral'"
+              variant="subtle"
+            />
+          </template>
+
+          <template #status-cell="{ row }">
+            <UBadge
+              :label="row.original.status"
+              :color="row.original.status === 'active' ? 'success' : 'error'"
+              variant="subtle"
+            />
+          </template>
+
+          <template #flags-cell="{ row }">
+            <UBadge
+              v-if="row.original.passwordResetRequestedAt"
+              label="Reset requested"
+              color="warning"
+              variant="subtle"
+            />
+          </template>
+
+          <template #lastLoginAt-cell="{ row }">
+            {{ formatDate(row.original.lastLoginAt) }}
+          </template>
+
+          <template #actions-cell="{ row }">
+            <div class="flex gap-1">
+              <UTooltip text="Generate password reset link">
+                <UButton
+                  icon="i-lucide-key-round"
+                  color="neutral"
+                  variant="ghost"
+                  :loading="resetLoading === row.original._id"
+                  @click="generateResetLink(row.original)"
+                />
+              </UTooltip>
+              <UTooltip text="Toggle role">
+                <UButton
+                  icon="i-lucide-shield"
+                  color="neutral"
+                  variant="ghost"
+                  :disabled="row.original.email === auth.user.value?.email"
+                  @click="toggleRole(row.original)"
+                />
+              </UTooltip>
+              <UTooltip :text="row.original.status === 'active' ? 'Disable account' : 'Enable account'">
+                <UButton
+                  :icon="row.original.status === 'active' ? 'i-lucide-ban' : 'i-lucide-check'"
+                  :color="row.original.status === 'active' ? 'error' : 'success'"
+                  variant="ghost"
+                  @click="toggleStatus(row.original)"
+                />
+              </UTooltip>
+            </div>
+          </template>
+        </UTable>
+
+        <div
+          v-if="resetLink && resetLinkFor"
+          class="mt-4 rounded-md border border-warning/30 bg-warning/5 p-3 space-y-2"
+        >
+          <p class="text-sm">
+            Reset link for <strong>{{ resetLinkFor.email }}</strong> — send it manually:
+          </p>
+          <div class="flex gap-2">
+            <UInput
+              :model-value="resetLink"
+              readonly
+              class="grow font-mono text-xs"
+            />
+            <UButton
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="outline"
+              label="Copy"
+              @click="copyLink(resetLink)"
+            />
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
+            Pending invitations
+          </h2>
         </template>
 
-        <template #actions-cell="{ row }">
-          <UButton
-            icon="i-lucide-trash-2"
-            color="error"
-            variant="ghost"
-            aria-label="Revoke"
-            @click="revokeInvite(row.original)"
-          />
-        </template>
-      </UTable>
-    </UCard>
+        <UTable
+          :data="invites"
+          :columns="inviteColumns"
+        >
+          <template #role-cell="{ row }">
+            <UBadge
+              :label="row.original.role === 'site_admin' ? 'Site admin' : 'Central office admin'"
+              :color="row.original.role === 'site_admin' ? 'primary' : 'neutral'"
+              variant="subtle"
+            />
+          </template>
+
+          <template #expiresAt-cell="{ row }">
+            {{ formatDate(row.original.expiresAt) }}
+          </template>
+
+          <template #actions-cell="{ row }">
+            <UButton
+              icon="i-lucide-trash-2"
+              color="error"
+              variant="ghost"
+              aria-label="Revoke"
+              @click="revokeInvite(row.original)"
+            />
+          </template>
+        </UTable>
+      </UCard>
+    </div>
   </UContainer>
 </template>

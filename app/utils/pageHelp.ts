@@ -131,7 +131,7 @@ export const pageHelp = {
     purpose: 'Check what the score compilation would compute for an application using live data, before running it for real.',
     tasks: ['Choose a cycle and application, then run the preview.', 'Review readiness flags (HSPT, GPA, Essay), resolved GPA details, exam and essay scores, bonuses, both totals, and percentile ranks.', 'Search the results table to spot-check individual applicants.'],
     gettingStarted: 'Enable scoring and map the internal form on the application’s Scoring tab first. Then select the cycle and application here and run the preview.',
-    important: ['The preview is read-only — nothing is written to the database, Submittable, or internal forms.', 'When the numbers look right, run Score compilation on the Jobs page to persist scores and write internal forms.']
+    important: ['The preview is read-only — nothing is written to the database, Submittable, or internal forms.', 'Decision-based applications propose the highest-ranked school accepted by its designated primary reviewer and retain every waitlist. Supporting scores and routing completion are informational, not placement ranking inputs.', 'Proposals are not finalized seats. Refresh extraction/mapping and preview or recompile after reviews, school aliases, authority, or configuration change. Routing outcomes remain separate.', 'When results look right, run Score compilation on the Jobs page to persist the snapshot and sync configured supporting internal fields. Decisions and proposals are not written back.']
   },
   login: {
     title: 'Sign In',
@@ -177,10 +177,10 @@ export const pageHelp = {
   },
   users: {
     title: 'User Management',
-    purpose: 'Manage staff access to the EHS Admissions workspace.',
+    purpose: 'Manage staff access, shared schools, and Submittable school-representative associations.',
     tasks: ['Invite a new staff member by generating an invitation link and sending it to them manually.', 'Review pending invitations and revoke any that should no longer be usable.', 'Generate a password reset link for a user who requested one, and send it to them manually.', 'Disable an account or change a user\'s role when their access needs change.'],
     gettingStarted: 'Use the invite form to create an invitation link for a new user. Invited users are central office admins by default and can access everything except this page.',
-    important: ['Invitation and reset links are shown once — copy them before leaving the page and deliver them through a trusted channel.', 'Only site admins can open this page. Keep at least one active site admin account at all times.']
+    important: ['School representatives are Submittable identities, not site accounts. Affiliations do not grant access. Set a primary reviewer per school and cycle, with application overrides only when needed.', 'Invitation and reset links are shown once — copy them before leaving the page and deliver them through a trusted channel.', 'Only site admins can open this page. Keep at least one active site admin account at all times.']
   }
 } satisfies Record<string, PageHelpContent>
 

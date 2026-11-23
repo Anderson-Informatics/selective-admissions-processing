@@ -5,6 +5,10 @@ import { routingConfigSchema, reviewStageRoleSchema, defaultRoutingConfig, colle
 import { dashboardConfigSchema } from '~~/server/utils/dashboardConfig'
 import { normalizeCycleRounds } from '~~/server/utils/cycleRounds'
 import { recordConfigAudit } from '~~/server/utils/configAudit'
+import { decisionConfigSchema } from '~~/server/utils/decisionConfig'
+import { SchoolModel } from '~~/server/models/School'
+import { FieldMappingModel } from '~~/server/models/FieldMapping'
+import { isValidObjectId } from 'mongoose'
 
 export default defineEventHandler(async (event) => {
   await connectDb()
@@ -21,6 +25,22 @@ export default defineEventHandler(async (event) => {
   const previousStages = application ? await ReviewStageModel.find({ applicationId: id }).lean() : []
   if (!application) {
     throw createError({ statusCode: 404, statusMessage: 'Application not found' })
+  }
+
+  const previousConfig = { application: application.toObject(), stages: previousStages }
+  if (body.decisionScoring !== undefined) {
+    if (body.decisionScoring === null) application.decisionScoring = undefined
+    else {
+      const parsed = decisionConfigSchema.safeParse(body.decisionScoring)
+      if (!parsed.success || parsed.data.schoolIds.some(id => !isValidObjectId(id))) throw createError({ statusCode: 400, statusMessage: parsed.success ? 'Invalid school IDs' : parsed.error.message })
+      if (await SchoolModel.countDocuments({ _id: { $in: parsed.data.schoolIds } }) !== parsed.data.schoolIds.length) throw createError({ statusCode: 400, statusMessage: 'Unknown school in decision configuration' })
+      const mappings = await FieldMappingModel.find({ cycleId: application.cycleId }).lean()
+      for (const source of parsed.data.sources) {
+        const stage = previousStages.find(stage => stage.stageId === source.stageId)
+        if (!stage || (source.kind === 'field' && !mappings.some(mapping => mapping.formId === stage.formId && mapping.canonicalName === source.field))) throw createError({ statusCode: 400, statusMessage: 'Decision source references an unknown stage or unmapped review field' })
+      }
+      application.decisionScoring = parsed.data
+    }
   }
 
   if (body.projectId && body.projectId !== application.projectId) {
@@ -113,7 +133,6 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const previousConfig = { application: application.toObject(), stages: previousStages }
   await application.save()
   if (stages) {
     await ReviewStageModel.deleteMany({ applicationId: id })

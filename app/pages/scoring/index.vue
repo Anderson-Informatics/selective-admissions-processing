@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
+import type { DecisionResult } from '../../../server/utils/decisionScoring'
+import type { ScoreRecord } from '../../../server/models/ScoreRecord'
 
 interface Cycle { _id: string, year: string, name: string, active: boolean }
 interface Application { _id: string, name: string, scoring?: { enabled?: boolean } }
@@ -15,13 +17,21 @@ interface PreviewRecord {
   dpscdBonus: number
   marygroveBonus: number
   marygroveCatchment?: string
-  totalAppScore: number
-  totalMarygroveScore: number
+  totalAppScore: number | null
+  totalMarygroveScore: number | null
+  inputsComplete: boolean
+  missingInputs: string[]
+  decision?: DecisionResult | null
+  routingEvaluation?: ScoreRecord['routingEvaluation']
+  configFingerprint?: string | null
+  compiledAt?: string
   percentiles: Record<string, number | null>
 }
 interface PreviewResult {
   applicationId: string
   applicationName: string
+  placementPathway?: string | null
+  supportingComponents: string[]
   summary: { submissions: number, compiled: number, ready: number, missingExam: number, missingGpa: number, missingEssay: number }
   records: PreviewRecord[]
 }
@@ -33,7 +43,8 @@ const selectedApplicationId = ref('')
 const loading = ref(false)
 const result = ref<PreviewResult | null>(null)
 const search = ref('')
-type SummaryFilter = 'all' | 'ready' | 'missingExam' | 'missingGpa' | 'missingEssay'
+const decisionMode = computed(() => result.value?.placementPathway === 'decision')
+type SummaryFilter = 'all' | 'ready' | 'missingExam' | 'missingGpa' | 'missingEssay' | 'proposed' | 'waitlisted' | 'attention'
 const summaryFilter = ref<SummaryFilter>('all')
 
 function toggleFilter(filter: SummaryFilter) {
@@ -44,7 +55,14 @@ const summaryCards = computed<{ key: SummaryFilter, label: string, value: number
   const summary = result.value?.summary
   return [
     { key: 'all', label: 'Compiled', value: summary?.compiled ?? 0 },
-    { key: 'ready', label: 'Ready', value: summary?.ready ?? 0 },
+    { key: 'ready', label: 'Inputs complete', value: summary?.ready ?? 0 },
+    ...(decisionMode.value
+      ? [
+          { key: 'proposed' as const, label: 'Proposed', value: result.value?.records.filter(record => record.decision?.proposed).length || 0 },
+          { key: 'waitlisted' as const, label: 'Waitlisted', value: result.value?.records.filter(record => record.decision?.waitlists.length).length || 0 },
+          { key: 'attention' as const, label: 'Needs attention', value: result.value?.records.filter(record => record.decision?.needsAttention).length || 0 }
+        ]
+      : []),
     { key: 'missingExam', label: 'Missing exam', value: summary?.missingExam ?? 0 },
     { key: 'missingGpa', label: 'Missing GPA', value: summary?.missingGpa ?? 0 },
     { key: 'missingEssay', label: 'Missing essay', value: summary?.missingEssay ?? 0 }
@@ -86,17 +104,26 @@ const filteredRecords = computed(() => {
   const query = search.value.trim().toLowerCase()
   let records = result.value?.records || []
   switch (summaryFilter.value) {
+    case 'proposed':
+      records = records.filter(record => record.decision?.proposed)
+      break
+    case 'waitlisted':
+      records = records.filter(record => record.decision?.waitlists.length)
+      break
+    case 'attention':
+      records = records.filter(record => record.decision?.needsAttention)
+      break
     case 'ready':
-      records = records.filter(record => record.hsptTaken && record.gpaRecorded && record.essayScored)
+      records = records.filter(record => record.inputsComplete)
       break
     case 'missingExam':
-      records = records.filter(record => !record.hsptTaken)
+      records = records.filter(record => record.missingInputs.includes('exam'))
       break
     case 'missingGpa':
-      records = records.filter(record => !record.gpaRecorded)
+      records = records.filter(record => record.missingInputs.includes('gpa'))
       break
     case 'missingEssay':
-      records = records.filter(record => !record.essayScored)
+      records = records.filter(record => record.missingInputs.includes('essay'))
       break
   }
   if (!query) return records
@@ -138,18 +165,30 @@ function sortableColumn(
   }
 }
 
-const columns: TableColumn<PreviewRecord>[] = [
+watch(decisionMode, (enabled) => {
+  sorting.value = enabled ? [{ id: 'applicantName', desc: false }] : [{ id: 'totalAppScore', desc: true }]
+  summaryFilter.value = 'all'
+})
+const columns = computed<TableColumn<PreviewRecord>[]>(() => [
   sortableColumn('applicantName', 'Applicant', record => record.applicantName, false),
-  sortableColumn('flags', 'Inputs', record => (record.hsptTaken ? 1 : 0) + (record.gpaRecorded ? 1 : 0) + (record.essayScored ? 1 : 0)),
+  sortableColumn('flags', 'Inputs', record => -record.missingInputs.length),
   sortableColumn('gpaScore', 'GPA Score', record => record.gpa?.score ?? undefined),
   sortableColumn('examScore', 'Exam', record => record.exam?.overall ?? undefined),
   sortableColumn('essayScore', 'Essay', record => record.essay?.score ?? undefined),
   sortableColumn('dpscdBonus', 'DPSCD', record => record.dpscdBonus),
   sortableColumn('marygroveBonus', 'MG', record => record.marygroveBonus),
-  sortableColumn('totalAppScore', 'Total App', record => record.totalAppScore),
-  sortableColumn('totalMarygroveScore', 'Total MG', record => record.totalMarygroveScore),
-  sortableColumn('percentileTotal', 'Pctl', record => record.percentiles?.total ?? undefined)
-]
+  ...(decisionMode.value
+    ? [
+        sortableColumn('proposed', 'Proposed choice', record => record.decision?.proposed?.rank),
+        { id: 'decision', header: 'School decisions / proposed placement' },
+        sortableColumn('waitlists', 'Waitlists', record => record.decision?.waitlists.map(item => `${item.rank || 'Unranked'}: ${item.schoolName}${item.aboveProposal ? ' (above proposal)' : ''}`).join('; '), false)
+      ]
+    : [
+        sortableColumn('totalAppScore', 'Total App', record => record.totalAppScore ?? undefined),
+        sortableColumn('totalMarygroveScore', 'Total MG', record => record.totalMarygroveScore ?? undefined),
+        sortableColumn('percentileTotal', 'Pctl', record => record.percentiles?.total ?? undefined)
+      ])
+])
 
 async function runPreview() {
   if (!selectedCycleId.value || !selectedApplicationId.value) return
@@ -253,24 +292,33 @@ function formatNumber(value: unknown): string {
         :columns="columns"
         class="border rounded-lg"
       >
+        <template #decision-cell="{ row }">
+          <ScoringDecisionScoreDetail
+            v-if="row.original.decision"
+            :decision="row.original.decision"
+            :routing="row.original.routingEvaluation"
+            :fingerprint="row.original.configFingerprint"
+            :compiled-at="row.original.compiledAt"
+          />
+        </template>
         <template #flags-cell="{ row }">
           <div class="flex gap-1">
             <UBadge
-              label="HSPT"
+              :label="result.supportingComponents.includes('exam') ? 'HSPT' : 'HSPT N/A'"
               size="sm"
-              :color="flagColor(row.original.hsptTaken)"
+              :color="result.supportingComponents.includes('exam') ? flagColor(row.original.hsptTaken) : 'neutral'"
               variant="subtle"
             />
             <UBadge
-              label="GPA"
+              :label="result.supportingComponents.includes('gpa') ? 'GPA' : 'GPA N/A'"
               size="sm"
-              :color="flagColor(row.original.gpaRecorded)"
+              :color="result.supportingComponents.includes('gpa') ? flagColor(row.original.gpaRecorded) : 'neutral'"
               variant="subtle"
             />
             <UBadge
-              label="Essay"
+              :label="result.supportingComponents.includes('essay') ? 'Essay' : 'Essay N/A'"
               size="sm"
-              :color="flagColor(row.original.essayScored)"
+              :color="result.supportingComponents.includes('essay') ? flagColor(row.original.essayScored) : 'neutral'"
               variant="subtle"
             />
           </div>

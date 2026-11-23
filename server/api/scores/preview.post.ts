@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = normalizeScoringConfig(application.scoring)
-  const output = await compileApplicationScores({ cycleId, applicationId, config })
+  const output = await compileApplicationScores({ cycleId, applicationId, config, application })
   const percentiles = computePercentiles(output.records)
 
   const submissions = await SubmissionModel.find({ cycleId, applicationId })
@@ -30,6 +30,8 @@ export default defineEventHandler(async (event) => {
   return {
     applicationId,
     applicationName: application.name,
+    placementPathway: application.placementPathway ?? null,
+    supportingComponents: config.components,
     summary: output.summary,
     records: output.records.map(item => ({
       ...item.record,

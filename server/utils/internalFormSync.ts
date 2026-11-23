@@ -53,7 +53,7 @@ const CONDITION_EXTRACTORS: Record<string, (ctx: MappingContext) => unknown> = {
   hsptTaken: ctx => ctx.score.hsptTaken,
   gpaRecorded: ctx => ctx.score.gpaRecorded,
   essayScored: ctx => ctx.score.essayScored,
-  ready: ctx => ctx.score.hsptTaken && ctx.score.gpaRecorded && ctx.score.essayScored,
+  ready: ctx => ctx.score.inputsComplete ?? (ctx.score.hsptTaken && ctx.score.gpaRecorded && ctx.score.essayScored),
   gpaStatus: ctx => ctx.submission?.gpaStatus,
   gpaDpscd: ctx => ctx.submission?.gpaDpscd,
   gpaOptIn: ctx => ctx.submission?.gpaOptIn,
@@ -118,6 +118,10 @@ export function expandLiteralTemplate(template: string, ctx: MappingContext): st
     }
     return ''
   })
+}
+
+export function isDecisionAggregateMapping(mapping: InternalFieldMapping): boolean {
+  return mapping.source === 'scoring' && ['totalAppScore', 'totalMarygroveScore', 'percentiles.total', 'percentiles.totalMarygrove'].includes(mapping.field || '')
 }
 
 export function extractMappingValue(mapping: InternalFieldMapping, ctx: MappingContext): unknown {
@@ -285,14 +289,19 @@ export async function syncInternalForms(options: {
 
     try {
       const ctx: MappingContext = {
-        score: record,
+        score: { ...record, inputsComplete: record.inputsComplete ?? options.config.components.every(component => component === 'exam' ? record.hsptTaken : component === 'gpa' ? record.gpaRecorded : component === 'essay' ? record.essayScored : true) },
         submission: submissionById.get(submissionId) as Submission | undefined,
         gpa: gpaById.get(submissionId) as GpaRecord | undefined,
         hspt: hsptById.get(submissionId) as HSPTResult | undefined,
         now: new Date()
       }
       const perField = new Map<string, { value: unknown, info: FormFieldInfo }>()
+      const protectedFields = new Set<string>()
       for (const [formFieldId, { mapping, info }] of updates) {
+        if (record.placementPathway === 'decision' && isDecisionAggregateMapping(mapping)) {
+          protectedFields.add(formFieldId)
+          continue
+        }
         perField.set(formFieldId, { value: extractMappingValue(mapping, ctx), info })
       }
 
@@ -301,8 +310,7 @@ export async function syncInternalForms(options: {
       const entryId = internalEntry?.entryId || internalEntry?.entry?.entryId
 
       if (!entryId) {
-        const fieldData = blankFieldData(form.fields)
-        mergeFieldData(fieldData, perField)
+        const { fieldData } = mergeFieldData(blankFieldData(form.fields.filter(field => !protectedFields.has(field.formFieldId))), perField)
         if (!options.dryRun) await createInternalFormEntry(submissionId, fieldData, options.submittable)
         result.created += 1
         await markStatus('synced')

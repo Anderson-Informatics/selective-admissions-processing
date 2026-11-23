@@ -1,6 +1,7 @@
 import mongoose, { Schema } from 'mongoose'
 import type { DashboardConfig } from '../utils/dashboardConfig'
 import type { CycleRound } from './Cycle'
+import type { DecisionConfig } from '../utils/decisionConfig'
 
 export interface Application {
   cycleId: string
@@ -13,6 +14,7 @@ export interface Application {
   dashboard?: DashboardConfig
   scoring?: Record<string, unknown>
   placementPathway?: 'score' | 'decision' | null
+  decisionScoring?: DecisionConfig
   createdAt?: Date
   updatedAt?: Date
 }
@@ -37,7 +39,8 @@ const applicationSchema = new Schema<Application>({
   },
   dashboard: { type: Schema.Types.Mixed },
   scoring: { type: Schema.Types.Mixed },
-  placementPathway: { type: String, default: null }
+  placementPathway: { type: String, default: null },
+  decisionScoring: { type: Schema.Types.Mixed }
 }, { timestamps: true })
 
 applicationSchema.index({ cycleId: 1, projectId: 1 }, { unique: true })

@@ -5,6 +5,7 @@ import { ReviewStageModel, type ReviewStage } from '../models/ReviewStage'
 import { SubmissionModel, type Submission } from '../models/Submission'
 import { recordConfigAudit } from './configAudit'
 import { rewriteReferencedStageIds } from './routingConfig'
+import { rewriteDecisionStageIds } from './decisionConfig'
 import type { SubmittableProject, SubmittableReviewStage } from './submittable'
 
 export interface StageRemap {
@@ -179,6 +180,10 @@ export async function applyStageReconcile(
       }
     })) as AnyBulkWriteOperation<Submission>[]
     await SubmissionModel.bulkWrite(submissionOps)
+
+    if (application.decisionScoring) {
+      await ApplicationModel.updateOne({ _id: application._id }, { $set: { decisionScoring: rewriteDecisionStageIds(application.decisionScoring, remap) } })
+    }
 
     if (rewriteDashboardStageIds(application, remap)) {
       await ApplicationModel.updateOne({ _id: application._id }, { $set: { dashboard: application.dashboard } })

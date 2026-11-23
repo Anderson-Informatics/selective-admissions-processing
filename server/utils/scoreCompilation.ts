@@ -17,7 +17,14 @@ import {
 import { resolveGpa, type RoutingReview } from './routingEvaluator'
 import { selectDpscdSnapshot } from './dpscdSnapshots'
 import { isWithdrawnSubmission } from './submissionStatus'
-import type { CycleRoundInput } from './cycleRounds'
+import { resolveSubmissionRound, type CycleRoundInput } from './cycleRounds'
+import { createHash } from 'node:crypto'
+import { decisionConfigSchema } from './decisionConfig'
+import { resolveSchoolDecisions } from './decisionScoring'
+import { loadSchoolDirectory } from './schoolDirectory'
+import { buildRoutingContext } from './routingRun'
+import { computeReviewCompletion, routeSubmission } from './routingEvaluator'
+import { normalizeRoutingConfig } from './routingConfig'
 
 // ---------------------------------------------------------------------------
 // Score compilation
@@ -165,6 +172,7 @@ interface CompileInputs {
   cycleId: string
   applicationId: string
   config: ScoringConfig
+  application?: { placementPathway?: string | null, decisionScoring?: unknown, rounds?: CycleRoundInput[] }
   jobId?: string
   now?: Date
 }
@@ -173,6 +181,18 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
   const { cycleId, applicationId, config } = input
   const now = input.now || new Date()
   const has = (component: ScoreComponent) => config.components.includes(component)
+  const decisionMode = input.application?.placementPathway === 'decision'
+  const directory = decisionMode ? await loadSchoolDirectory(cycleId, applicationId) : undefined
+  const decisionConfig = decisionConfigSchema.safeParse(input.application?.decisionScoring)
+  const snapshot: Record<string, unknown> | undefined = directory
+    ? {
+        config: decisionConfig.success ? decisionConfig.data : null,
+        supportingConfig: config,
+        schools: directory.schools.map(({ id, name, aliases, active }) => ({ id, name, aliases, active })),
+        representatives: directory.representatives.map(({ userId, schoolIds, active }) => ({ userId, schoolIds, active })),
+        authorities: directory.effectiveAuthorities.map(({ schoolId, userId, applicationId, version }) => ({ schoolId, userId, applicationId, version }))
+      }
+    : undefined
 
   const allSubmissions = await SubmissionModel.find({ cycleId, applicationId }).lean()
   const submissions = allSubmissions.filter(submission => !isWithdrawnSubmission(submission))
@@ -185,21 +205,25 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     has('exam')
       ? HSPTResultModel.find({ cycleId, linkedSubmissionId: { $in: submissionIds }, status: 'linked' }).lean()
       : Promise.resolve([]),
-    has('gpa')
+    (has('gpa') || decisionMode)
       ? GpaRecordModel.find({ cycleId, submissionId: { $in: submissionIds } }).lean()
       : Promise.resolve([]),
     ReviewModel.find({ cycleId, applicationId, submissionId: { $in: submissionIds } }).lean(),
-    has('essay')
-      ? ReviewStageModel.find({ cycleId, applicationId, name: /essay/i }).select('stageId name').lean()
+    (has('essay') || decisionMode)
+      ? ReviewStageModel.find({ cycleId, applicationId, ...(!decisionMode ? { name: /essay/i } : {}) }).select('stageId name order role routing formId').lean()
       : Promise.resolve([])
   ])
 
   const hsptBySubmission = new Map(hsptResults.map(result => [result.linkedSubmissionId!, result]))
   const gpaBySubmission = new Map(gpaRecords.map(record => [record.submissionId, record]))
   const reviewsBySubmission = new Map<string, RoutingReview[]>()
+  const rawReviewsBySubmission = new Map<string, typeof reviews>()
   const stageNames = new Map<string, string>()
   for (const stage of essayStages) stageNames.set(stage.stageId, stage.name)
   for (const review of reviews) {
+    const raw = rawReviewsBySubmission.get(review.submissionId) || []
+    raw.push(review)
+    rawReviewsBySubmission.set(review.submissionId, raw)
     const list = reviewsBySubmission.get(review.submissionId) || []
     list.push({
       stageId: review.stageId,
@@ -213,13 +237,19 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     reviewsBySubmission.set(review.submissionId, list)
   }
 
-  let rounds: CycleRoundInput[] = []
-  if (gpaRecords.some(record => record.dpscd?.snapshots)) {
+  let rounds: CycleRoundInput[] = input.application?.rounds || []
+  if (!input.application && gpaRecords.some(record => record.dpscd?.snapshots)) {
     const applications = await ApplicationModel.find({ _id: applicationId }).lean()
     rounds = applications[0]?.rounds || []
   }
-  const essayStageIds = new Set(essayStages.map(stage => stage.stageId))
+  const essayStageIds = new Set(essayStages.filter(stage => /essay/i.test(stage.name)).map(stage => stage.stageId))
+  const routingStages = decisionMode ? essayStages.map(stage => ({ stageId: stage.stageId, name: stage.name, order: stage.order, role: stage.role || 'work' as const, routing: normalizeRoutingConfig(stage.routing) })) : []
 
+  if (snapshot) {
+    snapshot.routingStages = routingStages
+    snapshot.rounds = rounds
+  }
+  const configFingerprint = snapshot ? createHash('sha256').update(JSON.stringify(snapshot)).digest('hex') : undefined
   const records: CompiledScore[] = []
   const gpaOperations: AnyBulkWriteOperation<GpaRecord>[] = []
   const summary: CompilationSummary = {
@@ -281,8 +311,20 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
     const gated = config.requireComplete && !ready
     const examScore = hspt?.overall ?? 0
     const base = gated ? 0 : round2(examScore + (gpaScore ?? 0) + (essayScore ?? 0) + dpscdBonus)
-    const totalAppScore = base
-    const totalMarygroveScore = gated ? 0 : round2(base + marygroveBonus)
+    const totalAppScore = decisionMode ? null : base
+    const totalMarygroveScore = decisionMode ? null : gated ? 0 : round2(base + marygroveBonus)
+    const missingInputs = [has('exam') && !hsptTaken ? 'exam' : '', has('gpa') && !gpaRecorded ? 'gpa' : '', has('essay') && !essayScored ? 'essay' : ''].filter(Boolean)
+    const decision = decisionMode && directory && decisionConfig.success ? resolveSchoolDecisions({ applicationId, config: decisionConfig.data, schools: directory.schools, representatives: directory.representatives, authorities: directory.effectiveAuthorities, mappedFields: submission.mappedFields || {}, reviews: rawReviewsBySubmission.get(submission.submissionId) || [], status: submission.status }) : undefined
+    if (decision && missingInputs.length) decision.diagnostics.push(`Supporting inputs incomplete: ${missingInputs.join(', ')}`)
+    if (decision && directory) {
+      for (const authority of directory.effectiveAuthorities) if (!directory.members.some(member => member.userId === authority.userId)) decision.diagnostics.push(`Primary reviewer metadata missing: ${authority.userId}`)
+      for (const source of decisionConfig.success ? decisionConfig.data.sources : []) if (!routingStages.some(stage => stage.stageId === source.stageId)) decision.diagnostics.push(`Decision stage missing: ${source.stageId}`)
+    }
+    const routingContext = decisionMode ? buildRoutingContext(submission, routingStages, submissionReviews, gpaRecord, resolveSubmissionRound(submission, rounds).key) : undefined
+    const routingEvaluation = routingContext ? { completion: computeReviewCompletion(routingStages, routingContext).reviewCompletion, recommendation: routeSubmission(routingStages, routingContext) } : undefined
+    if (decision && routingEvaluation?.completion.some(entry => entry.required && !entry.complete)) decision.diagnostics.push('Published routing has incomplete required stages; see routing details')
+    if (decision && routingEvaluation && (routingEvaluation.recommendation.reason === 'outcome' || routingEvaluation.recommendation.reason === 'final_stage')) decision.diagnostics.push('Routing stage outcomes are separate from authoritative per-school proposals')
+    if (decision) decision.needsAttention = decision.diagnostics.length > 0
 
     summary.compiled += 1
     if (ready) summary.ready += 1
@@ -325,6 +367,14 @@ export async function compileApplicationScores(input: CompileInputs): Promise<Co
         marygroveCatchment: catchment,
         totalAppScore,
         totalMarygroveScore,
+        placementPathway: decisionMode ? 'decision' : input.application?.placementPathway === 'score' ? 'score' : null,
+        supportingComponents: config.components,
+        inputsComplete: ready,
+        missingInputs,
+        decision: decisionMode ? decision || { schools: [], unattributedEvidence: [], choices: [], proposed: null, candidate: null, waitlists: [], diagnostics: ['Decision configuration required or invalid'], needsAttention: true } : null,
+        decisionConfigSnapshot: snapshot || null,
+        configFingerprint: configFingerprint || null,
+        routingEvaluation: routingEvaluation || null,
         compiledAt: now,
         compileJobId: input.jobId,
         internalFormSyncStatus: 'pending'
@@ -417,6 +467,7 @@ export async function runScoreCompilation(options: RunScoreCompilationOptions) {
       cycleId: options.cycleId,
       applicationId,
       config,
+      application,
       jobId: options.jobId
     })
 
@@ -443,7 +494,10 @@ export async function runScoreCompilation(options: RunScoreCompilationOptions) {
       const operations: AnyBulkWriteOperation<ScoreRecord>[] = output.records.map(item => ({
         updateOne: {
           filter: { cycleId: options.cycleId, applicationId, submissionId: item.submissionId },
-          update: { $set: item.record, $setOnInsert: { cycleId: options.cycleId, applicationId, submissionId: item.submissionId } },
+          update: {
+            $set: item.record,
+            ...(!item.record.exam || !item.record.essay ? { $unset: { ...(!item.record.exam ? { exam: 1 } : {}), ...(!item.record.essay ? { essay: 1 } : {}) } } : {})
+          },
           upsert: true
         }
       }))

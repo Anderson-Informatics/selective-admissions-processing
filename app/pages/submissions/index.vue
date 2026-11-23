@@ -245,6 +245,7 @@ const columns = [
           v-model="selectedCycleId"
           :items="(cycles || []).map(c => ({ label: `${c.year} — ${c.name}`, value: c._id }))"
           placeholder="Select a cycle"
+          class="w-full"
         />
       </UFormField>
 
@@ -256,6 +257,7 @@ const columns = [
           v-model="selectedApplicationId"
           :items="applicationItems"
           placeholder="Filter by application"
+          class="w-full"
         />
       </UFormField>
 
@@ -268,6 +270,7 @@ const columns = [
           :items="stageSelectItems"
           :disabled="selectedApplicationId === ALL_APPLICATIONS"
           placeholder="Filter by stage"
+          class="w-full"
         />
       </UFormField>
 
@@ -279,6 +282,7 @@ const columns = [
           v-model="selectedLabelId"
           :items="labelSelectItems"
           placeholder="Filter by label"
+          class="w-full"
         />
       </UFormField>
 

@@ -6,6 +6,7 @@ import { ReviewModel } from '../models/Review'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
 import { compileApplicationScores, computePercentiles, normalizeScoringConfig, runScoreCompilation } from './scoreCompilation'
+import { loadSchoolDirectory } from './schoolDirectory'
 
 vi.mock('../models/Application', () => ({ ApplicationModel: { find: vi.fn() } }))
 vi.mock('../models/Submission', () => ({ SubmissionModel: { find: vi.fn() } }))
@@ -14,6 +15,8 @@ vi.mock('../models/GpaRecord', () => ({ GpaRecordModel: { find: vi.fn(), bulkWri
 vi.mock('../models/Review', () => ({ ReviewModel: { find: vi.fn() } }))
 vi.mock('../models/ReviewStage', () => ({ ReviewStageModel: { find: vi.fn() } }))
 vi.mock('../models/Metadata', () => ({ MetadataModel: { findOne: vi.fn(() => ({ select: () => ({ lean: async () => ({ externalId: 'gpa-bonus-label' }) }) })) } }))
+
+vi.mock('./schoolDirectory', () => ({ loadSchoolDirectory: vi.fn() }))
 
 const lean = (items: unknown[]) => ({ lean: async () => items })
 const selectLean = (items: unknown[]) => ({ select: () => lean(items) })
@@ -42,6 +45,52 @@ describe('normalizeScoringConfig', () => {
     expect(config.gpaBonusPoints).toBe(5)
     expect(config.dpscdBonusPoints).toBe(10)
     expect(config.requireComplete).toBe(true)
+  })
+})
+
+describe('decision compilation', () => {
+  const application = { placementPathway: 'decision', rounds: [], decisionScoring: { preferenceFields: ['FirstChoiceSchool'], schoolIds: ['school'], sources: [{ stageId: 'decision', kind: 'field', field: 'Decision', accept: ['Accept'], decline: ['Decline'], waitlist: ['Waitlist'] }] } }
+  function fixture() {
+    vi.mocked(loadSchoolDirectory).mockResolvedValue({ schools: [{ id: 'school', name: 'School', aliases: [], active: true }], representatives: [{ userId: 'primary', schoolIds: ['school'], active: true }], authorities: [], effectiveAuthorities: [{ schoolId: 'school', userId: 'primary', applicationId: '', version: 1 }], members: [{ userId: 'primary', name: 'Primary' }] } as never)
+    mockData({ submissions: [{ submissionId: 'sub', applicationId: 'app', mappedFields: { FirstChoiceSchool: 'School' } }], reviews: [{ submissionId: 'sub', applicationId: 'app', stageId: 'decision', entryId: 'entry', reviewerId: 'primary', status: 'completed', completedAt: new Date('2026-01-01'), mappedData: { Decision: 'Accept' } }], essayStages: [{ stageId: 'decision', name: 'Decision', order: 1, role: 'work', routing: { enabled: true, statusRules: [], outcomeRules: [] } }] })
+  }
+  it('proposes despite incomplete supporting inputs with null aggregate totals', async () => {
+    fixture()
+    const output = await compileApplicationScores({ cycleId: 'cycle', applicationId: 'app', application, config: normalizeScoringConfig({ components: ['exam'] }) })
+    const record = output.records[0]!.record
+    expect(record).toMatchObject({ inputsComplete: false, missingInputs: ['exam'], totalAppScore: null, totalMarygroveScore: null, decision: { proposed: { schoolId: 'school', rank: 1 } } })
+    expect(record.decision?.diagnostics.join(' ')).toContain('Supporting inputs incomplete')
+    expect(record.routingEvaluation?.recommendation).toMatchObject({ action: 'move', toStageId: 'decision' })
+    expect(record.configFingerprint).toHaveLength(64)
+    expect(computePercentiles(output.records).get('sub')?.total).toBeNull()
+    expect(output.gpaOperations).toEqual([])
+  })
+  it('retains exam scores but never creates a ranking total', async () => {
+    fixture()
+    vi.mocked(HSPTResultModel.find).mockReturnValue(lean([{ linkedSubmissionId: 'sub', overall: 50 }]) as never)
+    const output = await compileApplicationScores({ cycleId: 'cycle', applicationId: 'app', application, config: normalizeScoringConfig({ components: ['exam'] }) })
+    expect(output.records[0]?.record).toMatchObject({ inputsComplete: true, exam: { overall: 50 }, totalAppScore: null })
+  })
+  it('uses identical decision values for persisted compilation and preview, with no dry-run writes', async () => {
+    fixture()
+    const preview = await compileApplicationScores({ cycleId: 'cycle', applicationId: 'app', application, config: normalizeScoringConfig({ enabled: true, components: [] }) })
+    vi.mocked(ApplicationModel.find).mockReturnValue(lean([{ ...application, _id: 'app', name: 'Decision App', scoring: { enabled: true, components: [] } }]) as never)
+    const { ScoreRecordModel } = await import('../models/ScoreRecord')
+    const writes = vi.spyOn(ScoreRecordModel, 'bulkWrite').mockResolvedValue({} as never)
+    await runScoreCompilation({ cycleId: 'cycle', dryRun: true })
+    expect(writes).not.toHaveBeenCalled()
+    await runScoreCompilation({ cycleId: 'cycle' })
+    expect(writes).toHaveBeenCalledWith([expect.objectContaining({ updateOne: expect.objectContaining({ update: expect.objectContaining({ $set: expect.objectContaining({ decision: preview.records[0]?.record.decision, configFingerprint: preview.records[0]?.record.configFingerprint, totalAppScore: null }) }) }) })])
+  })
+  it('reports unconfigured decision applications without legacy totals', async () => {
+    fixture()
+    const output = await compileApplicationScores({ cycleId: 'cycle', applicationId: 'app', application: { placementPathway: 'decision' }, config: fullConfig })
+    expect(output.records[0]?.record).toMatchObject({ totalAppScore: null, decision: { proposed: null, needsAttention: true } })
+  })
+  it('clears decision-specific fields in numerical mode', async () => {
+    mockData({ submissions: [{ submissionId: 'sub' }] })
+    const output = await compileApplicationScores({ cycleId: 'cycle', applicationId: 'app', config: fullConfig })
+    expect(output.records[0]?.record).toMatchObject({ decision: null, routingEvaluation: null, decisionConfigSnapshot: null, configFingerprint: null })
   })
 })
 

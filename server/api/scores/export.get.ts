@@ -20,6 +20,15 @@ export default defineEventHandler(async (event) => {
   const rows = records.map(record => ({
     applicationId: record.applicationId,
     submissionId: record.submissionId,
+    placementPathway: record.placementPathway,
+    inputsComplete: record.inputsComplete,
+    missingInputs: record.missingInputs?.join('; '),
+    proposedSchool: record.decision?.proposed?.schoolName,
+    proposedChoice: record.decision?.proposed?.rank,
+    proposalStatus: record.decision ? 'Proposed only — not final placement' : undefined,
+    waitlists: record.decision?.waitlists.map(item => `${item.rank ?? 'Unranked'}: ${item.schoolName}`).join('; '),
+    decisionWarnings: record.decision?.diagnostics.join('; '),
+    configFingerprint: record.configFingerprint,
     hsptTaken: record.hsptTaken,
     gpaRecorded: record.gpaRecorded,
     essayScored: record.essayScored,
@@ -56,6 +65,18 @@ export default defineEventHandler(async (event) => {
   const worksheet = XLSX.utils.json_to_sheet(rows)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Scores')
+  const decisions = records.flatMap(record => (record.decision?.schools || []).map(school => ({
+    applicationId: record.applicationId, submissionId: record.submissionId, schoolId: school.schoolId, school: school.schoolName, choice: school.rank, decision: school.outcome,
+    primaryUserId: school.primaryUserId, controllingEntries: school.controllingEntryIds.join('; '), proposed: record.decision?.proposed?.schoolId === school.schoolId,
+    waitlistAboveProposal: record.decision?.waitlists.find(item => item.schoolId === school.schoolId)?.aboveProposal,
+    evidenceCount: school.evidence.length, compiledAt: record.compiledAt, configFingerprint: record.configFingerprint, status: 'Proposed only — not final placement'
+  })))
+  if (decisions.length) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(decisions), 'School decisions')
+  const evidence = records.flatMap(record => [
+    ...(record.decision?.schools || []).flatMap(school => school.evidence.map(item => ({ submissionId: record.submissionId, applicationId: record.applicationId, schoolId: school.schoolId, ...item, value: typeof item.value === 'object' ? JSON.stringify(item.value) : item.value, controlling: school.controllingEntryIds.includes(item.entryId) }))),
+    ...(record.decision?.unattributedEvidence || []).map(item => ({ submissionId: record.submissionId, applicationId: record.applicationId, schoolId: '', ...item, value: typeof item.value === 'object' ? JSON.stringify(item.value) : item.value, controlling: false }))
+  ])
+  if (evidence.length) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(evidence), 'Decision evidence')
   const content = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 
   await recordDisclosure({

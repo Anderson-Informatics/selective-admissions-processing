@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
+import type { DecisionConfig } from '../../../server/utils/decisionConfig'
 import RoutingConfigEditor from '../../components/routing/RoutingConfigEditor.vue'
 import ReferenceSelect from '../../components/routing/ReferenceSelect.vue'
 import { copyRoutingConfig, unmappedCopiedReviewFields, type CopyScope, type RoutingConfig } from '../../components/routing/copyRoutingConfig'
@@ -29,7 +30,7 @@ interface ScoringConfig {
   internalForm: { formId: string, fields: Record<string, InternalFieldMapping> }
   gpaStatusLabels: Record<string, string>
 }
-interface Application { _id: string, cycleId: string, name: string, type: string, projectId: string, initialFormId?: string, active: boolean, rounds?: ApplicationRound[], scoring?: Partial<ScoringConfig>, placementPathway?: string | null, stages: ReviewStage[] }
+interface Application { _id: string, cycleId: string, name: string, type: string, projectId: string, initialFormId?: string, active: boolean, rounds?: ApplicationRound[], scoring?: Partial<ScoringConfig>, decisionScoring?: DecisionConfig, placementPathway?: string | null, stages: ReviewStage[] }
 interface Template { key: string, name: string, description?: string, draft?: boolean }
 interface References { stages: SelectItem[], fields: SelectItem[], rounds: SelectItem[], labels: SelectItem[], users: SelectItem[], reviewFields: Array<{ stageId: string, fields: SelectItem[] }> }
 
@@ -72,6 +73,7 @@ const emptyScoring = (): ScoringConfig => ({
   internalForm: { formId: '', fields: {} },
   gpaStatusLabels: {}
 })
+const decisionScoring = ref<DecisionConfig | null>(null)
 const state = reactive({ name: '', type: 'exam', active: true, rounds: [] as ApplicationRound[], stages: [] as ReviewStage[], scoring: emptyScoring(), placementPathway: null as string | null })
 const selectedStage = computed(() => selectedStageIndex.value == null ? undefined : state.stages[selectedStageIndex.value])
 const copySource = computed(() => state.stages.find(stage => stage.stageId === copySourceId.value))
@@ -135,6 +137,7 @@ watchEffect(() => {
   scoring.gpaStatusLabels = { ...(application.value.scoring?.gpaStatusLabels || {}) }
   state.scoring = scoring
   state.placementPathway = application.value.placementPathway ?? 'none'
+  decisionScoring.value = application.value.decisionScoring ? structuredClone(toRaw(application.value.decisionScoring)) : null
   state.stages = (application.value.stages || []).map(stage => ({
     ...stage,
     role: stage.role || 'work',
@@ -423,7 +426,7 @@ async function saveApplicationMetadata() {
     await flushDraftSaves()
     await apiRequest(`/api/applications/${application.value._id}`, {
       method: 'PUT',
-      body: { name: state.name, type: state.type, active: state.active, rounds: state.rounds, projectId: application.value.projectId, initialFormId: application.value.initialFormId, scoring: state.scoring, placementPathway: state.placementPathway === 'none' ? null : state.placementPathway, stages: state.stages }
+      body: { name: state.name, type: state.type, active: state.active, rounds: state.rounds, projectId: application.value.projectId, initialFormId: application.value.initialFormId, scoring: state.scoring, decisionScoring: decisionScoring.value, placementPathway: state.placementPathway === 'none' ? null : state.placementPathway, stages: state.stages }
     })
     toast.add({ title: 'Application settings saved', color: 'success' })
   } catch (error: unknown) {
@@ -641,7 +644,7 @@ async function applyTemplate() {
             />
           </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <UFormField label="Components">
+            <UFormField :label="state.placementPathway === 'decision' ? 'Supporting scores' : 'Components'">
               <USelectMenu
                 v-model="state.scoring.components"
                 :items="componentItems"
@@ -689,7 +692,12 @@ async function applyTemplate() {
           </div>
           <UCheckbox
             v-model="state.scoring.requireComplete"
-            label="Require HSPT + GPA + Essay before computing totals"
+            label="Require selected supporting inputs before computing numerical totals (does not gate decision proposals)"
+          />
+          <ScoringDecisionConfigEditor
+            v-if="state.placementPathway === 'decision' && application"
+            v-model="decisionScoring"
+            :application-id="application._id"
           />
           <div class="border-t pt-4 space-y-3">
             <div>
