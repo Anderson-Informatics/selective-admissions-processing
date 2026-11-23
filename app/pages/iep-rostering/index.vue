@@ -21,6 +21,7 @@ const roster = ref<RosterData | null>(null)
 const loading = ref(false)
 const errorMessage = ref('')
 const search = ref('')
+const selectedGroup = ref('')
 let requestId = 0
 const requestFetch = useRequestFetch()
 async function loadRoster() {
@@ -28,6 +29,7 @@ async function loadRoster() {
   const cycleId = selectedCycleId.value
   const sessionLabelId = selectedSessionId.value
   roster.value = null
+  selectedGroup.value = ''
   errorMessage.value = ''
   if (!cycleId) {
     loading.value = false
@@ -53,7 +55,10 @@ watch(selectedSessionId, () => {
   loadRoster()
 })
 const sessionItems = computed(() => (roster.value?.sessions || []).map(session => ({ label: `${session.name} (${session.count})`, value: session.labelId })))
-const filteredRows = computed(() => (roster.value?.rows || []).filter(row => `${row.fullName} ${row.submissionIdInt || ''} ${row.finalGroup}`.toLowerCase().includes(search.value.toLowerCase())))
+const filteredRows = computed(() => (roster.value?.rows || []).filter(row =>
+  (!selectedGroup.value || row.finalGroup === selectedGroup.value)
+  && `${row.fullName} ${row.submissionIdInt || ''} ${row.finalGroup}`.toLowerCase().includes(search.value.toLowerCase())
+))
 const columns: TableColumn<IepRosterRow>[] = [
   { accessorKey: 'fullName', header: 'Student' },
   { accessorKey: 'submissionIdInt', header: 'Submission #' },
@@ -228,14 +233,17 @@ async function download(format: 'docx' | 'grouped-docx' | 'xlsx' | 'zip', allDay
           These are not Exam Scheduling arrival groups or saved room assignments. Legacy total limits are 7 for “less than 5” and 12 for “less than 10”; overlapping needs require staff review.
         </p>
         <div class="flex flex-wrap gap-2">
-          <UBadge
+          <UButton
             v-for="group in roster.groups"
             :key="group.name"
-            color="neutral"
-            variant="subtle"
+            :color="selectedGroup === group.name ? 'primary' : 'neutral'"
+            :variant="selectedGroup === group.name ? 'solid' : 'subtle'"
+            size="xs"
+            :aria-pressed="selectedGroup === group.name"
+            @click="selectedGroup = selectedGroup === group.name ? '' : group.name"
           >
             {{ group.name }}: {{ group.count }}
-          </UBadge>
+          </UButton>
         </div>
       </UCard>
       <UInput
@@ -244,6 +252,13 @@ async function download(format: 'docx' | 'grouped-docx' | 'xlsx' | 'zip', allDay
         aria-label="Search roster"
         class="w-80"
       />
+      <p
+        role="status"
+        class="text-sm text-muted"
+      >
+        Showing {{ filteredRows.length }} of {{ roster.rows.length }} students<span v-if="selectedGroup"> · {{ selectedGroup }}</span>.
+        Click a subgroup to filter; click it again to show all groups. Downloads include the full roster, regardless of table filters.
+      </p>
       <UTable
         :data="filteredRows"
         :columns="columns"
