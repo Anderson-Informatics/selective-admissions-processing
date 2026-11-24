@@ -26,7 +26,7 @@ export async function loadSchoolDirectory(cycleId: string, applicationId = '') {
     SchoolModel.find().sort({ name: 1 }).lean(),
     SchoolRepresentativeModel.find().sort({ userId: 1 }).lean(),
     SchoolAuthorityModel.find({ cycleId, applicationId: { $in: ['', applicationId] } }).sort({ schoolId: 1, applicationId: 1 }).lean(),
-    MetadataModel.find({ type: 'team' }).select('externalId name data.name.full data.title data.email syncedAt').lean()
+    MetadataModel.find({ type: 'team' }).select('externalId name data.name data.title data.email syncedAt').lean()
   ])
   return {
     schools: schools.map(school => ({ ...school, id: String(school._id) })),
@@ -35,10 +35,14 @@ export async function loadSchoolDirectory(cycleId: string, applicationId = '') {
     effectiveAuthorities: effectiveAuthorities(authorities, cycleId, applicationId),
     members: members.map((member) => {
       const rawName = member.data?.name
-      const fullName = rawName && typeof rawName === 'object' ? (rawName as Record<string, unknown>).full : undefined
+      const nameParts = rawName && typeof rawName === 'object' ? rawName as Record<string, unknown> : {}
+      const part = (key: string) => typeof nameParts[key] === 'string' ? (nameParts[key] as string).trim() || undefined : undefined
+      const fullName = part('full')
       return {
         userId: member.externalId,
-        name: typeof fullName === 'string' && fullName.trim() ? fullName.trim() : member.name || member.externalId,
+        name: fullName || member.name || member.externalId,
+        firstName: part('first'),
+        lastName: part('last'),
         title: typeof member.data?.title === 'string' ? member.data.title.trim() || undefined : undefined,
         email: typeof member.data?.email === 'string' ? member.data.email.trim() || undefined : undefined,
         syncedAt: member.syncedAt

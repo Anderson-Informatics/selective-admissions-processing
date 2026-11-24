@@ -125,7 +125,7 @@ const jobOptions = [
 ]
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
+  return formatDateTime(value)
 }
 
 function statusColor(status: string) {

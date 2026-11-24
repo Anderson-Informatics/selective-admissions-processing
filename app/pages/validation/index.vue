@@ -284,7 +284,7 @@ function statusColor(issue: ValidationIssue) {
       </template>
 
       <template #updatedAt-cell="{ row }">
-        <span class="text-sm text-muted">{{ row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleString() : '—' }}</span>
+        <span class="text-sm text-muted">{{ formatDateTime(row.original.updatedAt) }}</span>
       </template>
 
       <template #actions-cell="{ row }">

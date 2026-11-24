@@ -91,14 +91,6 @@ export function reviewIssues(record: GpaReviewItem) {
   return issues.filter(Boolean)
 }
 
-export function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
-}
-
-export function formatDateOnly(value?: string) {
-  return value ? new Date(value).toLocaleDateString() : '—'
-}
-
 // Keys are full school names normalized to lowercase alphanumeric words.
 // Short names follow the official list at https://www.detroitk12.org/schools.
 const SCHOOL_NAME_SHORTHAND: Record<string, string> = {

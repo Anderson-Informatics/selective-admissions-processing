@@ -20,7 +20,7 @@ defineProps<{ application: ApplicationDashboard }>()
       </div>
       <div class="flex items-center gap-3">
         <UBadge
-          :label="`${application.total.toLocaleString()} submissions`"
+          :label="`${formatNumber(application.total)} submissions`"
           color="neutral"
           variant="soft"
         />
@@ -89,10 +89,10 @@ defineProps<{ application: ApplicationDashboard }>()
                 {{ stage.role }}
               </td>
               <td class="p-3 text-right">
-                {{ stage.required.toLocaleString() }}
+                {{ formatNumber(stage.required) }}
               </td>
               <td class="p-3 text-right">
-                {{ stage.completed.toLocaleString() }}
+                {{ formatNumber(stage.completed) }}
               </td>
               <td class="p-3">
                 <div class="flex items-center gap-2">

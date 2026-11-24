@@ -18,7 +18,7 @@ function formatPercent(percent: number | null) {
         {{ formatPercent(highlight.percent) }}
       </p>
       <p class="text-sm text-muted">
-        {{ highlight.completed.toLocaleString() }} / {{ highlight.total.toLocaleString() }}
+        {{ formatNumber(highlight.completed) }} / {{ formatNumber(highlight.total) }}
       </p>
     </div>
     <UProgress
@@ -38,7 +38,7 @@ function formatPercent(percent: number | null) {
       >
         <span class="truncate text-muted">{{ segment.label }}</span>
         <span class="flex shrink-0 items-center gap-2">
-          <span>{{ segment.completed.toLocaleString() }} / {{ segment.total.toLocaleString() }}</span>
+          <span>{{ formatNumber(segment.completed) }} / {{ formatNumber(segment.total) }}</span>
           <UBadge
             :label="formatPercent(segment.percent)"
             color="neutral"

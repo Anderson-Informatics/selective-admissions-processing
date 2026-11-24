@@ -413,7 +413,7 @@ function formatEnrollment(record: GpaReviewItem) {
 }
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
+  return formatDateTime(value)
 }
 </script>
 

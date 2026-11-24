@@ -1,7 +1,7 @@
 import { decisionValueKey, type DecisionConfig } from './decisionConfig'
 import { isWithdrawnSubmission } from './submissionStatus'
 
-type Outcome = 'accept' | 'decline' | 'waitlist' | 'pending' | 'unresolved'
+type Outcome = 'accept' | 'decline' | 'defer' | 'waitlist' | 'pending' | 'unresolved'
 interface School { id: string, name: string, aliases: string[], active: boolean }
 interface DecisionReview {
   applicationId: string
@@ -84,7 +84,7 @@ export function resolveSchoolDecisions(input: {
   const evidenceFor = (review: DecisionReview, authoritative = false): DecisionEvidence => {
     const source = sources.get(review.stageId)!
     const value = source.kind === 'score' ? review.score : review.mappedData?.[source.field!]
-    const outcome: Outcome = (['accept', 'decline', 'waitlist'] as const).find(outcome => source[outcome].some(item => decisionValueKey(item) === decisionValueKey(value))) || 'unresolved'
+    const outcome: Outcome = (['accept', 'decline', 'defer', 'waitlist'] as const).find(outcome => source[outcome].some(item => decisionValueKey(item) === decisionValueKey(value))) || 'unresolved'
     return { entryId: review.entryId, reviewerId: review.reviewerId, stageId: review.stageId, value: value ?? null, outcome, completedAt: review.completedAt, createdAt: review.createdAt, authoritative }
   }
   const attributedUsers = new Set([

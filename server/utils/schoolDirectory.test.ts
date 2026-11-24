@@ -15,17 +15,17 @@ describe('school directory team member names', () => {
     vi.spyOn(SchoolRepresentativeModel, 'find').mockReturnValue(empty as never)
     vi.spyOn(SchoolAuthorityModel, 'find').mockReturnValue(empty as never)
     const select = vi.fn(() => ({ lean: async () => [
-      { externalId: 'u1', name: 'Legacy Name', data: { name: { full: ' Jordan Rivera ' }, title: ' Principal ', email: ' jordan@example.test ' } },
+      { externalId: 'u1', name: 'Legacy Name', data: { name: { full: ' Jordan Rivera ', first: ' Jordan ', last: ' Rivera ' }, title: ' Principal ', email: ' jordan@example.test ' } },
       { externalId: 'u2', name: 'Legacy Name', data: { name: { full: ' ' }, title: null } },
       { externalId: 'u3', name: '', data: {} }
     ] }))
     vi.spyOn(MetadataModel, 'find').mockReturnValue({ select } as never)
     const directory = await loadSchoolDirectory('cycle')
-    expect(directory.members[0]).toMatchObject({ userId: 'u1', name: 'Jordan Rivera', title: 'Principal', email: 'jordan@example.test' })
+    expect(directory.members[0]).toMatchObject({ userId: 'u1', name: 'Jordan Rivera', firstName: 'Jordan', lastName: 'Rivera', title: 'Principal', email: 'jordan@example.test' })
     expect(directory.members[1]).toMatchObject({ userId: 'u2', name: 'Legacy Name' })
     expect(directory.members[1]?.title).toBeUndefined()
     expect(directory.members[2]?.name).toBe('u3')
-    expect(select).toHaveBeenCalledWith(expect.stringContaining('data.name.full'))
+    expect(select).toHaveBeenCalledWith(expect.stringContaining('data.name'))
     expect(select).toHaveBeenCalledWith(expect.stringContaining('data.title'))
   })
 })

@@ -37,7 +37,7 @@ function remind(ids: string[]) {
   composerOpen.value = true
 }
 function date(value?: string) {
-  return value ? new Date(value).toLocaleString() : 'Unknown'
+  return formatDateTime(value, 'Unknown')
 }
 function days(value?: string) {
   return value ? `${Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000))} days` : 'Unknown'
@@ -120,7 +120,7 @@ const columns = [
         {{ date(row.original.editing.openedForEditingAt) }}
       </template>
       <template #age-cell="{ row }">
-        {{ days(row.original.editing.openedForEditingAt) }}
+        <ClientOnly>{{ days(row.original.editing.openedForEditingAt) }}</ClientOnly>
       </template>
       <template #checked-cell="{ row }">
         {{ date(row.original.editing.editingCheckedAt) }}

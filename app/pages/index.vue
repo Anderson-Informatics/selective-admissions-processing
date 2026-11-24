@@ -84,7 +84,7 @@ function formatJobType(type: string) {
 }
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
+  return formatDateTime(value)
 }
 
 function statusColor(jobStatus: string) {
@@ -144,10 +144,10 @@ function statusColor(jobStatus: string) {
             {{ application.name }}
           </p>
           <p class="mt-2 text-3xl font-semibold">
-            {{ application.total.toLocaleString() }}
+            {{ formatNumber(application.total) }}
           </p>
           <p class="mt-2 text-sm text-muted">
-            {{ application.mapped.toLocaleString() }} mapped · {{ application.completed.toLocaleString() }} completed
+            {{ formatNumber(application.mapped) }} mapped · {{ formatNumber(application.completed) }} completed
           </p>
         </UCard>
 
@@ -156,10 +156,10 @@ function statusColor(jobStatus: string) {
             Total submissions
           </p>
           <p class="mt-2 text-3xl font-semibold">
-            {{ dashboard.totals.submissions.toLocaleString() }}
+            {{ formatNumber(dashboard.totals.submissions) }}
           </p>
           <p class="mt-2 text-sm text-muted">
-            {{ mappedPercent }}% mapped · {{ dashboard.totals.applications.toLocaleString() }} active applications
+            {{ mappedPercent }}% mapped · {{ formatNumber(dashboard.totals.applications) }} active applications
           </p>
         </UCard>
 
@@ -168,7 +168,7 @@ function statusColor(jobStatus: string) {
             Active jobs
           </p>
           <p class="mt-2 text-3xl font-semibold">
-            {{ dashboard.totals.activeJobs.toLocaleString() }}
+            {{ formatNumber(dashboard.totals.activeJobs) }}
           </p>
           <UButton
             to="/jobs"
@@ -184,7 +184,7 @@ function statusColor(jobStatus: string) {
             Open validation issues
           </p>
           <p class="mt-2 text-3xl font-semibold">
-            {{ dashboard.totals.openIssues.toLocaleString() }}
+            {{ formatNumber(dashboard.totals.openIssues) }}
           </p>
           <UButton
             to="/validation"
@@ -224,7 +224,7 @@ function statusColor(jobStatus: string) {
               >
                 <span class="truncate text-sm">{{ item.name }}</span>
                 <UBadge
-                  :label="item.total.toLocaleString()"
+                  :label="formatNumber(item.total)"
                   color="neutral"
                   variant="soft"
                 />
@@ -255,7 +255,7 @@ function statusColor(jobStatus: string) {
               >
                 <span class="truncate text-sm capitalize">{{ item.name }}</span>
                 <UBadge
-                  :label="item.total.toLocaleString()"
+                  :label="formatNumber(item.total)"
                   color="neutral"
                   variant="soft"
                 />
@@ -280,7 +280,7 @@ function statusColor(jobStatus: string) {
                 {{ reviewCompletionPercent }}%
               </p>
               <p class="text-sm text-muted">
-                {{ dashboard.totals.completedReviews.toLocaleString() }} / {{ dashboard.totals.totalReviews.toLocaleString() }} complete
+                {{ formatNumber(dashboard.totals.completedReviews) }} / {{ formatNumber(dashboard.totals.totalReviews) }} complete
               </p>
             </div>
             <UProgress
@@ -329,10 +329,10 @@ function statusColor(jobStatus: string) {
                     {{ item.name }}
                   </td>
                   <td class="p-3 text-right">
-                    {{ item.total.toLocaleString() }}
+                    {{ formatNumber(item.total) }}
                   </td>
                   <td class="p-3 text-right">
-                    {{ item.completed.toLocaleString() }}
+                    {{ formatNumber(item.completed) }}
                   </td>
                   <td class="p-3 text-right">
                     {{ item.percent }}%

@@ -127,7 +127,7 @@ function toggleStatus(user: AdminUser) {
 }
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
+  return formatDateTime(value)
 }
 
 const columns: TableColumn<AdminUser>[] = [

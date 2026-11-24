@@ -6,7 +6,7 @@ const model = defineModel<DecisionConfig | null>({ required: true })
 interface References { schools: { id: string, name: string, active: boolean }[], authorities: { schoolId: string, userId: string, name: string, applicationId: string, version: number, valid: boolean }[], stages: { stageId: string, name: string, fields: string[] }[] }
 const { data: references } = await useFetch<References>(`/api/applications/${props.applicationId}/decision-references`)
 const errors = ref<Record<string, string>>({})
-function setValues(index: number, outcome: 'accept' | 'decline' | 'waitlist', text: string) {
+function setValues(index: number, outcome: 'accept' | 'decline' | 'defer' | 'waitlist', text: string) {
   const source = model.value?.sources[index]
   if (!source) return
   const entries = text.split('\n').map(value => value.trim()).filter(Boolean)
@@ -65,28 +65,38 @@ function setValues(index: number, outcome: 'accept' | 'decline' | 'waitlist', te
         class="border rounded p-3 space-y-3"
       >
         <div class="flex gap-3 flex-wrap">
-          <UFormField label="Decision stage">
+          <UFormField
+            label="Decision stage"
+            class="grow min-w-72"
+          >
             <USelect
               v-model="source.stageId"
               :items="(references?.stages || []).map(stage => ({ label: stage.name, value: stage.stageId }))"
               value-key="value"
+              class="w-full"
             />
           </UFormField>
-          <UFormField label="Decision source">
+          <UFormField
+            label="Decision source"
+            class="grow min-w-56"
+          >
             <USelect
               v-model="source.kind"
               :items="[{ label: 'Mapped review field', value: 'field' }, { label: 'Review score', value: 'score' }]"
               value-key="value"
-              @update:model-value="source.accept = []; source.decline = []; source.waitlist = []"
+              class="w-full"
+              @update:model-value="source.accept = []; source.decline = []; source.defer = []; source.waitlist = []"
             />
           </UFormField>
           <UFormField
             v-if="source.kind === 'field'"
             label="Mapped field"
+            class="grow min-w-56"
           >
             <USelect
               v-model="source.field"
               :items="references?.stages.find(stage => stage.stageId === source.stageId)?.fields || []"
+              class="w-full"
             />
           </UFormField>
           <UButton
@@ -96,9 +106,9 @@ function setValues(index: number, outcome: 'accept' | 'decline' | 'waitlist', te
             @click="model.sources.splice(index, 1)"
           />
         </div>
-        <div class="grid sm:grid-cols-3 gap-3">
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <UFormField
-            v-for="outcome in (['accept', 'decline', 'waitlist'] as const)"
+            v-for="outcome in (['accept', 'decline', 'defer', 'waitlist'] as const)"
             :key="outcome"
             :label="`${outcome} values (one per line)`"
             :error="errors[`${index}:${outcome}`]"
@@ -114,8 +124,11 @@ function setValues(index: number, outcome: 'accept' | 'decline' | 'waitlist', te
       <UButton
         label="Add decision source"
         variant="outline"
-        @click="model.sources.push({ stageId: '', kind: 'field', field: '', accept: [], decline: [], waitlist: [] })"
+        @click="model.sources.push({ stageId: '', kind: 'field', field: '', accept: [], decline: [], defer: [], waitlist: [] })"
       />
+      <p class="text-sm text-muted">
+        An outcome with no values is disabled.
+      </p>
       <p class="text-sm text-muted">
         Changes are saved with application settings. Missing or invalid mappings produce diagnostics, never inferred decisions. Preview again after configuration changes.
       </p>

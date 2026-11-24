@@ -230,12 +230,14 @@ onUnmounted(() => clearInterval(timer))
         <div>
           <p>{{ index + 1 }}. {{ run.name }} — {{ run.status }}</p><p class="text-sm text-muted">
             Due {{ date(run.dueAt) }} · {{ label(run.steps[run.stepIndex] || '') }} · {{ run.message }}
-          </p><p
-            v-if="Date.now() - new Date(run.dueAt).getTime() > 86400000"
-            class="text-warning"
-          >
-            Backlog: waiting more than a day
-          </p>
+          </p><ClientOnly>
+            <p
+              v-if="Date.now() - new Date(run.dueAt).getTime() > 86400000"
+              class="text-warning"
+            >
+              Backlog: waiting more than a day
+            </p>
+          </ClientOnly>
         </div>
         <UButton
           label="Details"

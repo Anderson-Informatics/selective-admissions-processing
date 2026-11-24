@@ -13,12 +13,13 @@ export const decisionConfigSchema = z.object({
     field: z.string().optional(),
     accept: values,
     decline: values,
+    defer: values,
     waitlist: values
   }).superRefine((source, ctx) => {
     if (source.kind === 'field' && !source.field?.trim()) ctx.addIssue({ code: 'custom', message: 'Select a mapped decision field' })
-    const keys = [...source.accept, ...source.decline, ...source.waitlist].map(decisionValueKey)
+    const keys = [...source.accept, ...source.decline, ...source.defer, ...source.waitlist].map(decisionValueKey)
     if (!keys.length || keys.some(key => !key) || !unique(keys)) ctx.addIssue({ code: 'custom', message: 'Outcome mappings must be nonempty and distinct' })
-    if (source.kind === 'score' && [...source.accept, ...source.decline, ...source.waitlist].some(value => typeof value !== 'number')) ctx.addIssue({ code: 'custom', message: 'Score mappings must be numbers' })
+    if (source.kind === 'score' && [...source.accept, ...source.decline, ...source.defer, ...source.waitlist].some(value => typeof value !== 'number')) ctx.addIssue({ code: 'custom', message: 'Score mappings must be numbers' })
   })).min(1)
 }).superRefine((config, ctx) => {
   if (!unique(config.sources.map(source => source.stageId))) ctx.addIssue({ code: 'custom', message: 'Configure each decision stage only once' })

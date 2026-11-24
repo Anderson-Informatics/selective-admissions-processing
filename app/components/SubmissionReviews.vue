@@ -79,7 +79,7 @@ const reviewFieldEntries = (review: Review) =>
           <span
             v-if="review.completedAt"
             class="text-muted"
-          >Completed: {{ new Date(review.completedAt).toLocaleString() }}</span>
+          >Completed: {{ formatDateTime(review.completedAt) }}</span>
         </div>
 
         <div

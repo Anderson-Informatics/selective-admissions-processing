@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatDate, formatDateOnly, formatOptInEnrollment, gpaStatusColor, reviewIssues, shortSchoolName, sourceLabel, type GpaReviewItem } from '~/utils/gpaReview'
+import { formatDateTime as formatDate, formatDateOnly } from '~/utils/format'
+import { formatOptInEnrollment, gpaStatusColor, reviewIssues, shortSchoolName, sourceLabel, type GpaReviewItem } from '~/utils/gpaReview'
 
 const props = defineProps<{
   record: GpaReviewItem

@@ -705,7 +705,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
               v-for="file in uploadFiles"
               :key="`${file.name}-${file.size}`"
             >
-              {{ file.name }} ({{ Math.ceil(file.size / 1024).toLocaleString() }} KB)
+              {{ file.name }} ({{ formatNumber(Math.ceil(file.size / 1024)) }} KB)
             </li>
           </ul>
         </div>
@@ -743,7 +743,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                 Rows processed
               </dt>
               <dd class="text-lg font-semibold">
-                {{ uploadPreview.processed.toLocaleString() }}
+                {{ formatNumber(uploadPreview.processed) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
@@ -751,7 +751,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                 Valid rows
               </dt>
               <dd class="text-lg font-semibold">
-                {{ (uploadPreview.valid || 0).toLocaleString() }}
+                {{ formatNumber((uploadPreview.valid || 0)) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
@@ -759,7 +759,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                 Invalid rows
               </dt>
               <dd class="text-lg font-semibold">
-                {{ (uploadPreview.invalid || 0).toLocaleString() }}
+                {{ formatNumber((uploadPreview.invalid || 0)) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
@@ -784,7 +784,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                   Linked
                 </dt>
                 <dd class="text-lg font-semibold">
-                  {{ (uploadPreview.matching.linked || 0).toLocaleString() }}
+                  {{ formatNumber((uploadPreview.matching.linked || 0)) }}
                 </dd>
               </div>
               <div class="rounded-md bg-elevated p-3">
@@ -792,7 +792,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                   Needs review
                 </dt>
                 <dd class="text-lg font-semibold">
-                  {{ (uploadPreview.matching.needsReview || 0).toLocaleString() }}
+                  {{ formatNumber((uploadPreview.matching.needsReview || 0)) }}
                 </dd>
               </div>
               <div class="rounded-md bg-elevated p-3">
@@ -800,7 +800,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                   Unlinked
                 </dt>
                 <dd class="text-lg font-semibold">
-                  {{ (uploadPreview.matching.unlinked || 0).toLocaleString() }}
+                  {{ formatNumber((uploadPreview.matching.unlinked || 0)) }}
                 </dd>
               </div>
             </dl>
@@ -820,7 +820,7 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
                     {{ matchType }}
                   </dt>
                   <dd class="font-medium text-right">
-                    {{ count.toLocaleString() }}
+                    {{ formatNumber(count) }}
                   </dd>
                 </template>
               </dl>
@@ -856,42 +856,42 @@ const columns = computed<TableColumn<HSPTResult>[]>(() => selectedStatus.value =
               <dt class="text-muted">
                 Processed
               </dt><dd class="text-lg font-semibold">
-                {{ uploadResult.processed.toLocaleString() }}
+                {{ formatNumber(uploadResult.processed) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
               <dt class="text-muted">
                 Inserted
               </dt><dd class="text-lg font-semibold">
-                {{ (uploadResult.inserted || 0).toLocaleString() }}
+                {{ formatNumber((uploadResult.inserted || 0)) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
               <dt class="text-muted">
                 Updated
               </dt><dd class="text-lg font-semibold">
-                {{ (uploadResult.updated || 0).toLocaleString() }}
+                {{ formatNumber((uploadResult.updated || 0)) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
               <dt class="text-muted">
                 Exact matches
               </dt><dd class="text-lg font-semibold">
-                {{ (uploadResult.matching?.exact || 0).toLocaleString() }}
+                {{ formatNumber((uploadResult.matching?.exact || 0)) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
               <dt class="text-muted">
                 Needs review
               </dt><dd class="text-lg font-semibold">
-                {{ (uploadResult.matching?.fuzzy || 0).toLocaleString() }}
+                {{ formatNumber((uploadResult.matching?.fuzzy || 0)) }}
               </dd>
             </div>
             <div class="rounded-md bg-elevated p-3">
               <dt class="text-muted">
                 Unmatched
               </dt><dd class="text-lg font-semibold">
-                {{ (uploadResult.matching?.unmatched || 0).toLocaleString() }}
+                {{ formatNumber((uploadResult.matching?.unmatched || 0)) }}
               </dd>
             </div>
           </dl>

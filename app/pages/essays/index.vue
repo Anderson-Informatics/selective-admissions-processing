@@ -182,7 +182,7 @@ function fmt(value: number | null | undefined, digits = 2) {
 }
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
+  return formatDateTime(value)
 }
 
 const UButton = resolveComponent('UButton')

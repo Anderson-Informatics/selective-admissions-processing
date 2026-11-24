@@ -363,7 +363,7 @@ const columns = [
         </template>
 
         <template #completed-cell="{ row }">
-          {{ row.original.completedAt ? new Date(row.original.completedAt).toLocaleDateString() : '-' }}
+          {{ formatDateOnly(row.original.completedAt, '-') }}
         </template>
 
         <template #entries-cell="{ row }">
@@ -430,7 +430,7 @@ const columns = [
             </div>
             <div>
               <span class="text-muted">Completed:</span>
-              {{ selectedSubmission.completedAt ? new Date(selectedSubmission.completedAt).toLocaleString() : '-' }}
+              {{ formatDateTime(selectedSubmission.completedAt, '-') }}
             </div>
             <div>
               <span class="text-muted">Entries:</span>

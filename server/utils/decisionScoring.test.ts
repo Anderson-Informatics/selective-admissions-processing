@@ -66,5 +66,12 @@ describe('school decisions', () => {
     expect(run([review('a', 'Decline', { score: 10 })], { config: scoreConfig }).proposed?.schoolId).toBe('a')
     expect(run([review('a', 'Accept')], { config: scoreConfig }).proposed).toBeNull()
   })
+  it('records a defer outcome without proposing or waitlisting', () => {
+    const deferConfig = decisionConfigSchema.parse({ ...config, sources: [{ stageId: 'decision', kind: 'field', field: 'Decision', accept: ['Accept'], defer: ['Defer'] }] })
+    const result = run([review('a', 'Defer'), review('c', 'Accept')], { config: deferConfig })
+    expect(result.schools.find(school => school.schoolId === 'a')?.outcome).toBe('defer')
+    expect(result.proposed?.schoolId).toBe('c')
+    expect(result.waitlists).toEqual([])
+  })
   it('excludes withdrawn submissions', () => expect(run([review('a', 'Accept')], { status: 'Withdrawn' }).schools).toEqual([]))
 })

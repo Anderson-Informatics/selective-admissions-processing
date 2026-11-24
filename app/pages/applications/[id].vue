@@ -283,8 +283,9 @@ const GPA_STATUS_ITEMS = [
   { label: 'Opt-In Partial', value: 'Opt-In Partial' },
   { label: 'Incomplete', value: 'Incomplete' }
 ]
+const NO_LABEL = '__none__'
 const gpaStatusLabelItems = computed<SelectItem[]>(() => [
-  { label: '— None —', value: '' },
+  { label: '— None —', value: NO_LABEL },
   ...(references.value?.labels || [])
 ])
 const duplicateGpaStatusLabels = computed(() => {
@@ -722,10 +723,10 @@ async function applyTemplate() {
                 :label="gpaStatus.label"
               >
                 <ReferenceSelect
-                  :model-value="state.scoring.gpaStatusLabels[gpaStatus.value] || ''"
+                  :model-value="state.scoring.gpaStatusLabels[gpaStatus.value] || NO_LABEL"
                   :items="gpaStatusLabelItems"
                   placeholder="No label"
-                  @update:model-value="setGpaStatusLabel(gpaStatus.value, String($event || ''))"
+                  @update:model-value="setGpaStatusLabel(gpaStatus.value, $event === NO_LABEL ? '' : String($event || ''))"
                 />
               </UFormField>
             </div>

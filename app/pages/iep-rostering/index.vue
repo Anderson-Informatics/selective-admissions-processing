@@ -295,7 +295,7 @@ async function download(format: 'docx' | 'grouped-docx' | 'xlsx' | 'zip', allDay
         </template>
       </UTable>
       <p class="text-xs text-muted">
-        Generated {{ new Date(roster.generatedAt).toLocaleString() }}. Word cards are alphabetized, six per page, with names and notices only. Grouped rosters list students by subgroup with blank Proctor cells for staff to fill in. ZIPs include both Word formats and the Excel roster. Sensitive downloads are disclosure-audited.
+        Generated {{ formatDateTime(roster.generatedAt) }}. Word cards are alphabetized, six per page, with names and notices only. Grouped rosters list students by subgroup with blank Proctor cells for staff to fill in. ZIPs include both Word formats and the Excel roster. Sensitive downloads are disclosure-audited.
       </p>
     </template>
   </UContainer>
