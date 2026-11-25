@@ -81,7 +81,7 @@ export interface ReviewCompletionResult {
 
 export interface RoutingDecision {
   action: 'stay' | 'move'
-  reason: 'already_current' | 'final_stage' | 'outcome' | 'next_required' | 'no_required_stage' | 'invalid_target' | 'withdrawn'
+  reason: 'already_current' | 'final_stage' | 'outcome' | 'next_required' | 'no_required_stage' | 'invalid_target' | 'withdrawn' | 'stage_incomplete'
   fromStageId?: string
   toStageId?: string
   backward: boolean
@@ -299,7 +299,6 @@ export function evaluateConditionGroup(group: unknown, context: RoutingContext):
 }
 
 function getStatus(stage: RoutingStage, context: RoutingContext): { status: string, complete: boolean } {
-  if (stage.role === 'initial' && context.submission.isMapped) return { status: 'Mapped', complete: true }
   const rules = (stage.routing.statusRules || []) as StatusRule[]
   for (const rule of rules) {
     if (!rule.when || evaluateConditionGroup(rule.when, context)) return { status: rule.status, complete: stage.role === 'final' ? false : rule.complete }
@@ -366,6 +365,11 @@ export function routeSubmission(stages: RoutingStage[], context: RoutingContext)
   }
 
   if (current?.role === 'final') return { action: 'stay', reason: 'final_stage', fromStageId: current.stageId, backward: false, diagnostics: completion.diagnostics }
+
+  const currentEntry = completion.reviewCompletion.find(entry => entry.stageId === current?.stageId)
+  if (current?.role === 'initial' && currentEntry && !currentEntry.complete) {
+    return { action: 'stay', reason: 'stage_incomplete', fromStageId: current.stageId, backward: false, diagnostics: completion.diagnostics }
+  }
 
   if (current?.routing.enabled) {
     const outcome = (current.routing.outcomeRules || []) as OutcomeRule[]

@@ -221,20 +221,22 @@
     <h2>How is New Application completed?</h2>
 
     <p>
-      New Application is complete once the initial form has been extracted and
-      mapped. The current implementation uses <code>Submission.isMapped</code> as
-      the completion signal.
+      The initial stage behaves like any other stage: its status rules decide
+      its status and completeness. The bundled template marks it
+      <code>Mapped</code> — complete — once <code>Submission.isMapped</code> is
+      true via a <code>mappedInitialForm</code> status rule, with an
+      <code>Awaiting Initial Mapping</code> default otherwise. An application
+      that attaches a review form to its initial stage can instead gate
+      completion on that review (for example, a <code>reviewCount</code> or
+      <code>reviewField</code> rule on its own stage).
     </p>
 
-    <p>The intended statuses are:</p>
-    <ul>
-      <li><code>Mapped</code> — complete;</li>
-      <li><code>Awaiting Initial Mapping</code> — incomplete.</li>
-    </ul>
-
     <p>
-      Once New Application is mapped, routing immediately evaluates the next
-      required incomplete stage. New Application has no entry actions or outcome rules.
+      While a submission sits in an incomplete initial stage it cannot route
+      out: next-stage selection is suppressed and the stage's own outcome rules
+      do not run (the decision reason is <code>stage_incomplete</code>). Once the
+      initial stage's status rules mark it complete, routing evaluates the next
+      required incomplete stage, or a matching outcome rule if one is configured.
     </p>
   </section>
 

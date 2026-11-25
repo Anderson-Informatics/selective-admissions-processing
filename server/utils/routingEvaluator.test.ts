@@ -139,19 +139,54 @@ describe('review completion evaluator', () => {
     expect(result.reviewCompletion).toEqual([expect.objectContaining({ stageId: 'essay', status: 'Needs Two Reviews', complete: false })])
   })
 
-  it('marks a mapped initial stage complete', () => {
-    const result = computeReviewCompletion([
-      stage('new', 0, 'initial'),
-      stage('essay', 10, 'work')
-    ], context())
+  it('marks a mapped initial stage complete through its status rules', () => {
+    const initial = stage('new', 0, 'initial', {
+      statusRules: [
+        { name: 'mapped', when: { all: [{ kind: 'mappedInitialForm', op: 'eq', value: true }] }, status: 'Mapped', complete: true },
+        { name: 'default', status: 'Awaiting Initial Mapping', complete: false }
+      ]
+    })
+    const mapped = computeReviewCompletion([initial, stage('essay', 10, 'work')], context())
+    const unmapped = computeReviewCompletion([initial], context({
+      submission: { ...context().submission, isMapped: false }
+    }))
 
-    expect(result.reviewCompletion[0]).toMatchObject({ stageId: 'new', required: true, status: 'Mapped', complete: true })
+    expect(mapped.reviewCompletion[0]).toMatchObject({ stageId: 'new', required: true, status: 'Mapped', complete: true })
+    expect(unmapped.reviewCompletion[0]).toMatchObject({ stageId: 'new', required: true, status: 'Awaiting Initial Mapping', complete: false })
+  })
+
+  it('holds a submission in an incomplete initial stage until its status rules complete it', () => {
+    const initial = stage('new', 0, 'initial', {
+      statusRules: [
+        { name: 'reviewed', when: { all: [{ kind: 'reviewCount', stageId: 'new', op: 'gte', value: 1 }] }, status: 'Reviewed', complete: true },
+        { name: 'default', status: 'Awaiting Review', complete: false }
+      ]
+    })
+    const stages = [initial, stage('essay', 10, 'work', { requiredWhen: { all: [] } })]
+
+    const held = routeSubmission(stages, context())
+    expect(held).toMatchObject({ action: 'stay', reason: 'stage_incomplete', fromStageId: 'new' })
+
+    const released = routeSubmission(stages, context({
+      reviews: [{ stageId: 'new', status: 'complete', completedAt: '2026-01-01' }]
+    }))
+    expect(released).toMatchObject({ action: 'move', reason: 'next_required', toStageId: 'essay' })
+  })
+
+  it('does not run initial-stage outcome rules while the stage is incomplete', () => {
+    const initial = stage('new', 0, 'initial', {
+      statusRules: [{ name: 'default', status: 'Awaiting Review', complete: false }],
+      outcomeRules: [{ name: 'skip', enabled: true, when: { operator: 'and', conditions: [] }, moveToStageId: 'essay' }]
+    })
+    const stages = [initial, stage('essay', 10, 'work')]
+
+    expect(routeSubmission(stages, context())).toMatchObject({ action: 'stay', reason: 'stage_incomplete' })
   })
 
   it('selects the earliest of multiple required incomplete stages without warning', () => {
     const stages = [
       stage('essay', 10, 'work'),
-      stage('new', 0, 'initial'),
+      stage('new', 0, 'initial', { statusRules: [{ name: 'mapped', status: 'Mapped', complete: true }] }),
       stage('gpa', 5, 'work')
     ]
     const completion = computeReviewCompletion(stages, context())
@@ -168,7 +203,7 @@ describe('review completion evaluator', () => {
     ])
     const submission = { ...context().submission, mappedFields: { IEPorNPSPor504: 'IEP or NPSP', DPSCD: 'No' }, completedAt: new Date('2026-10-21') }
     const decision = routeSubmission([
-      stage('new', 0, 'initial'),
+      stage('new', 0, 'initial', { statusRules: [{ name: 'mapped', status: 'Mapped', complete: true }] }),
       stage('iep-completion', 1, 'work', { requiredWhen: { operator: 'and', conditions: [
         { kind: 'field', name: 'IEPorNPSPor504', op: 'eq', value: 'IEP or NPSP' },
         { kind: 'cycleRound', op: 'eq', value: 'round-1' },
@@ -387,12 +422,15 @@ describe('review completion evaluator', () => {
 
   it('still reports an outcome rule targeting a missing stage', () => {
     const result = routeSubmission([
-      stage('new', 0, 'initial', { outcomeRules: [{
-        name: 'missing destination',
-        enabled: true,
-        when: { operator: 'and', conditions: [] },
-        moveToStageId: 'missing'
-      }] }),
+      stage('new', 0, 'initial', {
+        statusRules: [{ name: 'mapped', status: 'Mapped', complete: true }],
+        outcomeRules: [{
+          name: 'missing destination',
+          enabled: true,
+          when: { operator: 'and', conditions: [] },
+          moveToStageId: 'missing'
+        }]
+      }),
       stage('essay', 10, 'work')
     ], context())
 
