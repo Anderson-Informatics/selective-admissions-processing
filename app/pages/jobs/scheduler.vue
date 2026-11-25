@@ -2,9 +2,9 @@
 import { scheduledJobs, prerequisites, orderError, selectScheduledJob, type ScheduleInput, type ScheduledJobType } from '~~/shared/jobSchedule'
 
 interface Schedule extends ScheduleInput { _id: string, nextAt?: string }
-interface Run { _id: string, scheduleId: string, name: string, status: string, dueAt: string, stepIndex: number, steps: ScheduledJobType[], message?: string }
+interface Run { _id: string, scheduleId: string, name: string, status: string, dueAt: string, stepIndex: number, steps: ScheduledJobType[], message?: string, startedAt?: string, completedAt?: string }
 interface Hold { cycleId: string, hold: string }
-interface RunJob { _id: string, type: string, status: string, error?: string, progress?: { message?: string }, result?: unknown }
+interface RunJob { _id: string, type: string, status: string, error?: string, progress?: { message?: string }, result?: unknown, startedAt?: string, completedAt?: string }
 const toast = useToast()
 const { data, refresh, error: loadError, status: loadStatus } = await useFetch<{ schedules: Schedule[], holds: Hold[] }>('/api/job-schedules')
 const page = ref(1)
@@ -68,7 +68,9 @@ async function save() {
 }
 async function showRun(id: string) {
   try {
-    detail.value = await $fetch(`/api/job-schedules/runs/${id}`)
+    const next = await $fetch<{ run: Run, jobs: RunJob[] }>(`/api/job-schedules/runs/${id}`)
+    // Skip reassigning while polling when nothing changed, so the modal doesn't re-render.
+    if (JSON.stringify(next) !== JSON.stringify(detail.value)) detail.value = next
     detailOpen.value = true
   } catch (cause) { toast.add({ title: message(cause), color: 'error' }) }
 }
@@ -107,13 +109,13 @@ onUnmounted(() => clearInterval(timer))
 <template>
   <UContainer class="py-8 space-y-6">
     <UAlert
-      v-if="loadError || historyError"
+      v-if="(loadError && !data) || (historyError && !history)"
       color="error"
       title="Unable to load scheduler data"
       description="Check your connection and refresh the page. Unsaved edits have not been submitted."
     />
     <p
-      v-if="loadStatus === 'pending'"
+      v-if="loadStatus === 'pending' && !data"
       class="text-muted"
     >
       Loading scheduled chains...
@@ -263,7 +265,9 @@ onUnmounted(() => clearInterval(timer))
       >
         <div>
           <p>{{ run.name }} — {{ run.status }}</p><p class="text-sm text-muted">
-            {{ date(run.dueAt) }} · {{ run.message }}
+            {{ date(run.dueAt) }}<template v-if="run.completedAt">
+              · {{ formatDuration(run.startedAt, run.completedAt) }}
+            </template> · {{ run.message }}
           </p>
         </div>
         <UButton
@@ -449,7 +453,7 @@ onUnmounted(() => clearInterval(timer))
           v-if="detail"
           class="space-y-4"
         >
-          <p>{{ detail.run.name }} — {{ detail.run.status }} · {{ detail.run.message }}</p>
+          <p>{{ detail.run.name }} — {{ detail.run.status }} · {{ formatDuration(detail.run.startedAt, detail.run.completedAt) }} · {{ detail.run.message }}</p>
           <ol class="list-decimal pl-6">
             <li
               v-for="step in detail.run.steps"
@@ -463,7 +467,7 @@ onUnmounted(() => clearInterval(timer))
             :key="job._id"
             class="border-t pt-3 space-y-2"
           >
-            <p>{{ label(job.type) }} — {{ job.status }} · {{ job.progress?.message || job.error }}</p>
+            <p>{{ label(job.type) }} — {{ job.status }} · {{ formatDuration(job.startedAt, job.completedAt) }} · {{ job.progress?.message || job.error }}</p>
             <UButton
               :to="`/jobs?jobId=${job._id}`"
               label="View job"

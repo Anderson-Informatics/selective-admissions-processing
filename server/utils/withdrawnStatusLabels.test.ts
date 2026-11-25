@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationModel } from '../models/Application'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel } from '../models/Submission'
-import { fetchSubmissionsForProject, removeSubmissionLabel } from './submittable'
+import { fetchSubmission, removeSubmissionLabel } from './submittable'
 import { clearWithdrawnStatusLabels } from './withdrawnStatusLabels'
 
 vi.mock('../models/Application', () => ({ ApplicationModel: { find: vi.fn() } }))
 vi.mock('../models/ReviewStage', () => ({ ReviewStageModel: { find: vi.fn() } }))
 vi.mock('../models/Submission', () => ({ SubmissionModel: { find: vi.fn(), bulkWrite: vi.fn() } }))
-vi.mock('./submittable', () => ({ fetchSubmissionsForProject: vi.fn(), removeSubmissionLabel: vi.fn() }))
+vi.mock('./submittable', () => ({ fetchSubmission: vi.fn(), removeSubmissionLabel: vi.fn() }))
 
 const lean = (items: unknown[]) => ({ lean: async () => items })
 const selectLean = (items: unknown[]) => ({ select: () => lean(items) })
@@ -17,12 +17,13 @@ function mockData({ applications = [], stages = [], submissions = [], remote = [
   applications?: unknown[]
   stages?: unknown[]
   submissions?: unknown[]
-  remote?: unknown[]
+  remote?: { submissionId: string, labels: string[] }[]
 }) {
   vi.mocked(ApplicationModel.find).mockReturnValue(selectLean(applications) as never)
   vi.mocked(ReviewStageModel.find).mockReturnValue(selectLean(stages) as never)
   vi.mocked(SubmissionModel.find).mockReturnValue(selectLean(submissions) as never)
-  vi.mocked(fetchSubmissionsForProject).mockResolvedValue(remote as never)
+  vi.mocked(fetchSubmission).mockImplementation(async (submissionId: string) =>
+    remote.find(item => item.submissionId === submissionId) as never)
 }
 
 describe('clearWithdrawnStatusLabels', () => {
@@ -66,18 +67,54 @@ describe('clearWithdrawnStatusLabels', () => {
     expect(SubmissionModel.bulkWrite).not.toHaveBeenCalled()
   })
 
-  it('does not trust stale local labels or remove remotely when project labels cannot be loaded', async () => {
+  it('does not trust stale local labels or remove remotely when labels cannot be loaded', async () => {
     mockData({
       applications: [{ _id: 'app-1', projectId: 'project-1', scoring: { gpaStatusLabels: { Complete: 'gpa-complete' } } }],
       stages: [],
       submissions: [{ submissionId: 'sub-1', applicationId: 'app-1', projectId: 'project-1', status: 'Withdrawn', labelIds: ['gpa-complete'] }]
     })
-    vi.mocked(fetchSubmissionsForProject).mockRejectedValue(new Error('Submittable unavailable'))
+    vi.mocked(fetchSubmission).mockRejectedValue(new Error('Submittable unavailable'))
 
     const result = await clearWithdrawnStatusLabels({ cycleId: 'cycle-1' })
 
     expect(result.failures).toEqual([expect.objectContaining({ submissionId: 'sub-1', error: 'Submittable unavailable' })])
     expect(removeSubmissionLabel).not.toHaveBeenCalled()
     expect(SubmissionModel.bulkWrite).not.toHaveBeenCalled()
+  })
+
+  it('fetches labels once per withdrawn submission regardless of project grouping', async () => {
+    mockData({
+      applications: [{ _id: 'app-1', projectId: 'project-1', scoring: { gpaStatusLabels: { Complete: 'gpa-complete' } } }],
+      stages: [],
+      submissions: [
+        { submissionId: 'sub-1', applicationId: 'app-1', status: 'Withdrawn', labelIds: [] },
+        { submissionId: 'sub-2', applicationId: 'app-1', status: 'Withdrawn', labelIds: [] },
+        { submissionId: 'sub-3', applicationId: 'app-1', status: 'Withdrawn', labelIds: [] }
+      ],
+      remote: [
+        { submissionId: 'sub-1', labels: [] },
+        { submissionId: 'sub-2', labels: [] },
+        { submissionId: 'sub-3', labels: [] }
+      ]
+    })
+
+    await clearWithdrawnStatusLabels({ cycleId: 'cycle-1' })
+
+    expect(fetchSubmission).toHaveBeenCalledTimes(3)
+    expect(vi.mocked(fetchSubmission).mock.calls.map(call => call[0]).sort()).toEqual(['sub-1', 'sub-2', 'sub-3'])
+  })
+
+  it('skips remote label loading when no managed labels are configured', async () => {
+    mockData({
+      applications: [{ _id: 'app-1', projectId: 'project-1' }],
+      stages: [],
+      submissions: [{ submissionId: 'sub-1', applicationId: 'app-1', status: 'Withdrawn', labelIds: ['any-label'] }]
+    })
+
+    const result = await clearWithdrawnStatusLabels({ cycleId: 'cycle-1' })
+
+    expect(result.managedLabels).toBe(0)
+    expect(fetchSubmission).not.toHaveBeenCalled()
+    expect(removeSubmissionLabel).not.toHaveBeenCalled()
   })
 })

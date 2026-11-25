@@ -220,6 +220,7 @@ const columns: TableColumn<Job>[] = [
   { id: 'progress', header: 'Progress', enableSorting: false },
   { id: 'result', header: 'Result', enableSorting: false },
   { id: 'timing', accessorKey: 'startedAt', header: 'Started' },
+  { id: 'duration', header: 'Duration', enableSorting: false },
   { id: 'actions', header: 'Actions', enableSorting: false }
 ]
 
@@ -405,6 +406,12 @@ watch(() => route.query.jobId, async (id) => {
 
       <template #timing-cell="{ row }">
         <span class="text-sm text-muted">{{ formatDate(row.original.startedAt) }}</span>
+      </template>
+
+      <template #duration-cell="{ row }">
+        <ClientOnly>
+          <span class="text-sm text-muted">{{ formatDuration(row.original.startedAt, row.original.completedAt) }}</span>
+        </ClientOnly>
       </template>
 
       <template #actions-cell="{ row }">

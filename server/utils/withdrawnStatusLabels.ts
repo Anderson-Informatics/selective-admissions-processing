@@ -3,7 +3,7 @@ import { ApplicationModel } from '../models/Application'
 import type { JobProgress } from '../models/Job'
 import { ReviewStageModel } from '../models/ReviewStage'
 import { SubmissionModel, type Submission } from '../models/Submission'
-import { fetchSubmissionsForProject, removeSubmissionLabel, type SubmittableClientConfig } from './submittable'
+import { fetchSubmission, removeSubmissionLabel, type SubmittableClientConfig } from './submittable'
 
 export interface WithdrawnStatusLabelCleanupOptions {
   cycleId: string
@@ -59,7 +59,7 @@ export async function clearWithdrawnStatusLabels(options: WithdrawnStatusLabelCl
       cycleId: options.cycleId,
       applicationId: { $in: applicationIds },
       status: /^withdrawn$/i
-    }).select('submissionId applicationId projectId labelIds').lean()
+    }).select('submissionId applicationId labelIds').lean()
   ])
   result.submissions = submissions.length
   if (!submissions.length) return result
@@ -77,24 +77,20 @@ export async function clearWithdrawnStatusLabels(options: WithdrawnStatusLabelCl
     for (const labelId of configuredGpaLabels(application.scoring)) labels?.add(labelId)
   }
   result.managedLabels = [...new Set([...managedByApplication.values()].flatMap(labels => [...labels]))].length
+  if (!result.managedLabels) return result
 
-  const remoteByProject = new Map<string, Map<string, string[]>>()
-  const failedProjects = new Set<string>()
-  const projectIds = [...new Set(submissions.map(submission => submission.projectId).filter(Boolean))]
-  await options.setProgress?.({ phase: 'loading_withdrawn_labels', processed: 0, total: projectIds.length, message: 'Loading withdrawn submission labels' })
-  for (const [index, projectId] of projectIds.entries()) {
-    const remote = new Map<string, string[]>()
+  const remoteLabels = new Map<string, string[]>()
+  const failedSubmissions = new Set<string>()
+  await options.setProgress?.({ phase: 'loading_withdrawn_labels', processed: 0, total: submissions.length, message: 'Loading withdrawn submission labels' })
+  for (const [index, submission] of submissions.entries()) {
     try {
-      const remoteSubmissions = await fetchSubmissionsForProject(projectId, options.submittable)
-      for (const submission of remoteSubmissions) remote.set(submission.submissionId, submission.labels || [])
+      const remote = await fetchSubmission(submission.submissionId, options.submittable)
+      remoteLabels.set(submission.submissionId, remote.labels || [])
     } catch (error) {
-      failedProjects.add(projectId)
-      for (const submission of submissions.filter(item => item.projectId === projectId)) {
-        result.failures.push({ submissionId: submission.submissionId, labelId: '', error: errorMessage(error) })
-      }
+      failedSubmissions.add(submission.submissionId)
+      result.failures.push({ submissionId: submission.submissionId, labelId: '', error: errorMessage(error) })
     }
-    remoteByProject.set(projectId, remote)
-    await options.setProgress?.({ phase: 'loading_withdrawn_labels', processed: index + 1, total: projectIds.length })
+    await options.setProgress?.({ phase: 'loading_withdrawn_labels', processed: index + 1, total: submissions.length })
   }
 
   const updates: AnyBulkWriteOperation<Submission>[] = []
@@ -102,14 +98,11 @@ export async function clearWithdrawnStatusLabels(options: WithdrawnStatusLabelCl
   await options.setProgress?.({ phase: 'clearing_withdrawn_labels', processed: 0, total: submissions.length, message: 'Clearing withdrawn status labels' })
   for (const submission of submissions) {
     const managed = managedByApplication.get(String(submission.applicationId)) || new Set<string>()
-    const remoteLabels = failedProjects.has(submission.projectId)
-      ? undefined
-      : remoteByProject.get(submission.projectId)?.get(submission.submissionId)
-    if (failedProjects.has(submission.projectId)) {
+    if (failedSubmissions.has(submission.submissionId)) {
       processed += 1
       continue
     }
-    const current = remoteLabels ?? submission.labelIds ?? []
+    const current = remoteLabels.get(submission.submissionId) ?? submission.labelIds ?? []
     const currentManaged = current.filter(labelId => managed.has(labelId))
     if (!currentManaged.length) {
       result.unchanged += 1
